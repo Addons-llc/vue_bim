@@ -16,6 +16,7 @@ const props = defineProps({
     default: false,
   },
 })
+const emit = defineEmits(['select'])
 
 const cartItem = computed(() => cartProducts.value.find((item) => item.id === props.product.id))
 const cartQuantity = computed(() => cartItem.value?.quantity || 0)
@@ -30,7 +31,16 @@ function decreaseCartQuantity() {
 </script>
 
 <template>
-  <article class="product-card" :class="{ 'is-compact': compact }">
+  <article
+    class="product-card"
+    :class="{ 'is-compact': compact }"
+    tabindex="0"
+    role="button"
+    :aria-label="`View ${product.name} details`"
+    @click="emit('select', product)"
+    @keydown.enter="emit('select', product)"
+    @keydown.space.prevent="emit('select', product)"
+  >
     <div class="product-image">
       <img :src="product.image" :alt="product.name" />
       <span class="product-badge">{{ product.deliveryTime }}</span>
@@ -53,7 +63,7 @@ function decreaseCartQuantity() {
           <button
             type="button"
             :aria-label="`Decrease ${product.name} quantity`"
-            @click="decreaseCartQuantity"
+            @click.stop="decreaseCartQuantity"
           >
             -
           </button>
@@ -61,7 +71,7 @@ function decreaseCartQuantity() {
           <button
             type="button"
             :aria-label="`Increase ${product.name} quantity`"
-            @click="handleAddToCart"
+            @click.stop="handleAddToCart"
           >
             +
           </button>
@@ -71,7 +81,7 @@ function decreaseCartQuantity() {
           class="add-cart-button"
           type="button"
           :aria-label="`Add ${product.name} to cart`"
-          @click="handleAddToCart"
+          @click.stop="handleAddToCart"
         >
           <svg
             class="add-cart-icon"

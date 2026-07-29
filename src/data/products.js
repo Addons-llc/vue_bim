@@ -160,6 +160,113 @@ export const vegetableProducts = [
   },
 ]
 
+const dairyProductDetailMap = {
+  'dairy-milk': {
+    images: [
+      'https://images.unsplash.com/photo-1563636619-e9143da7973b?auto=format&fit=crop&w=900&q=80',
+      'https://images.unsplash.com/photo-1550583724-b2692b85b150?auto=format&fit=crop&w=900&q=80',
+      'https://images.unsplash.com/photo-1528750997573-59b89d56f4f7?auto=format&fit=crop&w=900&q=80',
+    ],
+    details: [
+      { label: 'Pack size', value: '1 ltr' },
+      { label: 'Type', value: 'Full cream milk' },
+      { label: 'Storage', value: 'Keep refrigerated' },
+      { label: 'Best for', value: 'Tea, coffee, cereal, and daily use' },
+    ],
+  },
+  'dairy-curd': {
+    images: [
+      'https://images.unsplash.com/photo-1488477181946-6428a0291777?auto=format&fit=crop&w=900&q=80',
+      'https://images.unsplash.com/photo-1488477304112-4944851de03d?auto=format&fit=crop&w=900&q=80',
+      'https://images.unsplash.com/photo-1571212515416-fef01fc43637?auto=format&fit=crop&w=900&q=80',
+    ],
+    details: [
+      { label: 'Pack size', value: '200 g' },
+      { label: 'Texture', value: 'Fresh, smooth, and creamy' },
+      { label: 'Storage', value: 'Keep refrigerated' },
+      { label: 'Best for', value: 'Meals, marinades, and dips' },
+    ],
+  },
+  'dairy-butter': {
+    images: [
+      'https://images.unsplash.com/photo-1589985270826-4b7bb135bc9d?auto=format&fit=crop&w=900&q=80',
+      'https://images.unsplash.com/photo-1587132137056-bfbf0166836e?auto=format&fit=crop&w=900&q=80',
+      'https://images.unsplash.com/photo-1603596310923-dbb12732f9c0?auto=format&fit=crop&w=900&q=80',
+    ],
+    details: [
+      { label: 'Pack size', value: '100 g' },
+      { label: 'Type', value: 'Salted butter' },
+      { label: 'Storage', value: 'Keep chilled after opening' },
+      { label: 'Best for', value: 'Toast, baking, and cooking' },
+    ],
+  },
+  'dairy-eggs': {
+    images: [
+      'https://images.unsplash.com/photo-1506976785307-8732e854ad03?auto=format&fit=crop&w=900&q=80',
+      'https://images.unsplash.com/photo-1582722872445-44dc5f7e3c8f?auto=format&fit=crop&w=900&q=80',
+      'https://images.unsplash.com/photo-1598965402089-897ce52e8355?auto=format&fit=crop&w=900&q=80',
+    ],
+    details: [
+      { label: 'Pack size', value: '6 pcs' },
+      { label: 'Type', value: 'White eggs' },
+      { label: 'Storage', value: 'Keep refrigerated' },
+      { label: 'Best for', value: 'Breakfast, baking, and everyday cooking' },
+    ],
+  },
+  'dairy-bread': {
+    images: [
+      'https://images.unsplash.com/photo-1509440159596-0249088772ff?auto=format&fit=crop&w=900&q=80',
+      'https://images.unsplash.com/photo-1549931319-a545dcf3bc73?auto=format&fit=crop&w=900&q=80',
+      'https://images.unsplash.com/photo-1533782654613-826a072dd6f3?auto=format&fit=crop&w=900&q=80',
+    ],
+    details: [
+      { label: 'Pack size', value: '300 g' },
+      { label: 'Type', value: 'Soft white bread' },
+      { label: 'Storage', value: 'Store in a cool, dry place' },
+      { label: 'Best for', value: 'Toast, sandwiches, and snacks' },
+    ],
+  },
+  'dairy-cheese': {
+    images: [
+      'https://images.unsplash.com/photo-1452195100486-9cc805987862?auto=format&fit=crop&w=900&q=80',
+      'https://images.unsplash.com/photo-1486297678162-eb2a19b0a32d?auto=format&fit=crop&w=900&q=80',
+      'https://images.unsplash.com/photo-1552767059-ce182ead6c1b?auto=format&fit=crop&w=900&q=80',
+    ],
+    details: [
+      { label: 'Pack size', value: '200 g' },
+      { label: 'Type', value: 'Cheese slices' },
+      { label: 'Storage', value: 'Keep refrigerated' },
+      { label: 'Best for', value: 'Burgers, sandwiches, and wraps' },
+    ],
+  },
+  'dairy-paneer': {
+    images: [
+      'https://images.unsplash.com/photo-1631452180519-c014fe946bc7?auto=format&fit=crop&w=900&q=80',
+      'https://images.unsplash.com/photo-1596797038530-2c107229654b?auto=format&fit=crop&w=900&q=80',
+      'https://images.unsplash.com/photo-1567188040759-fb8a883dc6d8?auto=format&fit=crop&w=900&q=80',
+    ],
+    details: [
+      { label: 'Pack size', value: '200 g' },
+      { label: 'Type', value: 'Fresh paneer' },
+      { label: 'Storage', value: 'Keep refrigerated' },
+      { label: 'Best for', value: 'Curries, grills, and snacks' },
+    ],
+  },
+  'dairy-yogurt': {
+    images: [
+      'https://images.unsplash.com/photo-1488477304112-4944851de03d?auto=format&fit=crop&w=900&q=80',
+      'https://images.unsplash.com/photo-1488477181946-6428a0291777?auto=format&fit=crop&w=900&q=80',
+      'https://images.unsplash.com/photo-1498837167922-ddd27525d352?auto=format&fit=crop&w=900&q=80',
+    ],
+    details: [
+      { label: 'Pack size', value: '400 g' },
+      { label: 'Type', value: 'Greek yogurt' },
+      { label: 'Storage', value: 'Keep refrigerated' },
+      { label: 'Best for', value: 'Breakfast bowls, smoothies, and dips' },
+    ],
+  },
+}
+
 export const dairyProducts = [
   {
     id: 'dairy-milk',
@@ -265,7 +372,10 @@ export const dairyProducts = [
       'https://images.unsplash.com/photo-1488477304112-4944851de03d?auto=format&fit=crop&w=400&q=80',
     imageLabel: 'Yogurt',
   },
-]
+].map((product) => ({
+  ...product,
+  ...(dairyProductDetailMap[product.id] || {}),
+}))
 
 export const fruitProducts = [
   {

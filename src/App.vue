@@ -62,10 +62,10 @@ onBeforeUnmount(() => {
     @logout="navigateToLogin"
     @search="updateProductSearch"
   >
+    <HomePage :search-text="productSearchText" />
     <CartPage
       v-if="currentRoute === 'cart'"
       @continue-shopping="navigateToHome"
     />
-    <HomePage v-else :search-text="productSearchText" />
   </DefaultLayout>
 </template>

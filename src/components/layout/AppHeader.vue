@@ -12,7 +12,6 @@ const locationError = ref('')
 const locationSearchText = ref('')
 const locationSuggestions = ref([])
 const searchText = ref('')
-const isWishlistActive = ref(false)
 const appBase = import.meta.env.BASE_URL
 
 let autocompleteService
@@ -136,10 +135,6 @@ function submitTypedLocation() {
     selectedLocation.value = location
     closeLocationDialog()
   }
-}
-
-function toggleWishlist() {
-  isWishlistActive.value = !isWishlistActive.value
 }
 
 function handleSearch() {
@@ -274,16 +269,12 @@ function openCart() {
 
       <nav class="header-actions" aria-label="Account and shopping">
         <button
-          class="header-action-button"
-          :class="{ 'is-active': isWishlistActive }"
+          class="header-action-button cart-link"
           type="button"
-          @click="toggleWishlist"
+          :disabled="!cartItemCount"
+          :aria-disabled="!cartItemCount"
+          @click="openCart"
         >
-          <span class="action-icon" aria-hidden="true">♡</span>
-          <span>Wishlist</span>
-        </button>
-
-        <button class="header-action-button cart-link" type="button" @click="openCart">
           <svg
             class="action-svg"
             aria-hidden="true"

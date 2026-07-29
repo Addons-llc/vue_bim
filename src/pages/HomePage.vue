@@ -3,6 +3,11 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { getProducts } from '../api/productApi'
 import ProductCard from '../components/product/ProductCard.vue'
 import {
+  addProductToCart,
+  cartProducts,
+  updateCartProductQuantity,
+} from '../data/cartStore'
+import {
   categories,
   dairyProducts,
   featuredProducts,
@@ -23,8 +28,68 @@ const products = ref(featuredProducts)
 const isLoadingProducts = ref(false)
 const productError = ref('')
 const activeCategory = ref('')
+const selectedProduct = ref(null)
+const activeDetailImageIndex = ref(0)
 
 const isFilteredProducts = computed(() => Boolean(activeCategory.value || props.searchText.trim()))
+const selectedProductCartItem = computed(() =>
+  selectedProduct.value
+    ? cartProducts.value.find((item) => item.id === selectedProduct.value.id)
+    : null,
+)
+const selectedProductQuantity = computed(() => selectedProductCartItem.value?.quantity || 0)
+function buildProductImageVariants(image) {
+  if (!image) {
+    return []
+  }
+
+  const imageVariants = new Set([image])
+
+  try {
+    const imageUrl = new URL(image)
+
+    ;[
+      { width: '900', crop: 'center' },
+      { width: '900', crop: 'edges' },
+    ].forEach((variant) => {
+      const variantUrl = new URL(imageUrl)
+      variantUrl.searchParams.set('w', variant.width)
+      variantUrl.searchParams.set('crop', variant.crop)
+      imageVariants.add(variantUrl.toString())
+    })
+  } catch {
+    imageVariants.add(image)
+  }
+
+  return Array.from(imageVariants)
+}
+
+const selectedProductImages = computed(() => {
+  if (!selectedProduct.value) {
+    return []
+  }
+
+  const images = selectedProduct.value.images?.length
+    ? selectedProduct.value.images
+    : buildProductImageVariants(selectedProduct.value.image)
+
+  return images.filter(Boolean)
+})
+const selectedProductDetails = computed(() => {
+  if (!selectedProduct.value) {
+    return []
+  }
+
+  if (selectedProduct.value.details?.length) {
+    return selectedProduct.value.details
+  }
+
+  return [
+    { label: 'Pack size', value: selectedProduct.value.description },
+    { label: 'Category', value: selectedProduct.value.category },
+    { label: 'Delivery', value: selectedProduct.value.deliveryTime },
+  ].filter((detail) => detail.value)
+})
 const hardcodedProductSections = [
   {
     id: 'Dairy, Bread & Eggs',
@@ -223,6 +288,46 @@ function selectProductSection(section) {
   products.value = section.products
 }
 
+function openProductDetails(product) {
+  selectedProduct.value = product
+  activeDetailImageIndex.value = 0
+}
+
+function closeProductDetails() {
+  selectedProduct.value = null
+  activeDetailImageIndex.value = 0
+}
+
+function selectProductDetailImage(index) {
+  activeDetailImageIndex.value = index
+}
+
+function moveProductDetailImage(direction) {
+  const imageCount = selectedProductImages.value.length
+
+  if (!imageCount) {
+    return
+  }
+
+  activeDetailImageIndex.value = (activeDetailImageIndex.value + direction + imageCount) % imageCount
+}
+
+function addSelectedProductToCart() {
+  if (!selectedProduct.value) {
+    return
+  }
+
+  addProductToCart(selectedProduct.value)
+}
+
+function decreaseSelectedProductQuantity() {
+  if (!selectedProduct.value) {
+    return
+  }
+
+  updateCartProductQuantity(selectedProduct.value.id, selectedProductQuantity.value - 1)
+}
+
 function scrollProductRail(sectionId, direction = 1) {
   const rail = document.querySelector(`[data-product-rail="${sectionId}"]`)
 
@@ -355,6 +460,7 @@ watch(
               :key="product.id"
               :product="product"
               compact
+              @select="openProductDetails"
             />
           </div>
 
@@ -371,4 +477,132 @@ watch(
       </section>
     </div>
   </section>
+
+  <div
+    v-if="selectedProduct"
+    class="product-detail-backdrop"
+    role="presentation"
+    @click="closeProductDetails"
+  >
+    <article
+      class="product-detail-panel"
+      role="dialog"
+      aria-modal="true"
+      :aria-labelledby="`product-detail-title-${selectedProduct.id}`"
+      @click.stop
+    >
+      <button
+        class="product-detail-close"
+        type="button"
+        aria-label="Close product details"
+        @click="closeProductDetails"
+      >
+        &times;
+      </button>
+
+      <div class="product-detail-media">
+        <div class="product-detail-main-frame">
+          <img
+            class="product-detail-main-image"
+            :src="selectedProductImages[activeDetailImageIndex]"
+            :alt="selectedProduct.name"
+          />
+          <template v-if="selectedProductImages.length > 1">
+            <button
+              class="product-detail-image-button is-left"
+              type="button"
+              :aria-label="`Show previous ${selectedProduct.name} image`"
+              @click="moveProductDetailImage(-1)"
+            >
+              ‹
+            </button>
+            <button
+              class="product-detail-image-button is-right"
+              type="button"
+              :aria-label="`Show next ${selectedProduct.name} image`"
+              @click="moveProductDetailImage(1)"
+            >
+              ›
+            </button>
+            <span class="product-detail-image-count">
+              {{ activeDetailImageIndex + 1 }} / {{ selectedProductImages.length }}
+            </span>
+          </template>
+        </div>
+        <div v-if="selectedProductImages.length > 1" class="product-detail-thumbnails">
+          <button
+            v-for="(image, index) in selectedProductImages"
+            :key="image"
+            class="product-detail-thumbnail"
+            :class="{ 'is-active': activeDetailImageIndex === index }"
+            type="button"
+            :aria-label="`Show ${selectedProduct.name} image ${index + 1}`"
+            @click="selectProductDetailImage(index)"
+          >
+            <img :src="image" :alt="`${selectedProduct.name} preview ${index + 1}`" />
+          </button>
+        </div>
+      </div>
+
+      <div class="product-detail-content">
+        <p class="product-detail-category">{{ selectedProduct.category }}</p>
+        <h2 :id="`product-detail-title-${selectedProduct.id}`">{{ selectedProduct.name }}</h2>
+        <p class="product-detail-description">{{ selectedProduct.description }}</p>
+
+        <div class="product-detail-meta">
+          <span>★ {{ selectedProduct.rating }}</span>
+          <span>{{ selectedProduct.deliveryTime }}</span>
+          <span>{{ selectedProduct.category }}</span>
+        </div>
+
+        <dl v-if="selectedProductDetails.length" class="product-detail-list">
+          <div
+            v-for="detail in selectedProductDetails"
+            :key="detail.label"
+            class="product-detail-row"
+          >
+            <dt>{{ detail.label }}</dt>
+            <dd>{{ detail.value }}</dd>
+          </div>
+        </dl>
+
+        <div class="product-detail-footer">
+          <span class="product-detail-price">
+            AED {{ selectedProduct.price }}
+            <span v-if="selectedProduct.oldPrice">AED {{ selectedProduct.oldPrice }}</span>
+          </span>
+
+          <div
+            v-if="selectedProductQuantity"
+            class="product-quantity-control"
+            :aria-label="`${selectedProduct.name} quantity`"
+          >
+            <button
+              type="button"
+              :aria-label="`Decrease ${selectedProduct.name} quantity`"
+              @click="decreaseSelectedProductQuantity"
+            >
+              -
+            </button>
+            <span>{{ selectedProductQuantity }}</span>
+            <button
+              type="button"
+              :aria-label="`Increase ${selectedProduct.name} quantity`"
+              @click="addSelectedProductToCart"
+            >
+              +
+            </button>
+          </div>
+          <button
+            v-else
+            class="product-detail-add-button"
+            type="button"
+            @click="addSelectedProductToCart"
+          >
+            Add to cart
+          </button>
+        </div>
+      </div>
+    </article>
+  </div>
 </template>
