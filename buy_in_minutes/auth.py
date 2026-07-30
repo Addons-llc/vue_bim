@@ -12,6 +12,7 @@ from twilio.rest import Client
 DEFAULT_COUNTRY_CODE = "+971"
 PHONE_PATTERN = re.compile(r"^\+\d{8,15}$")
 OTP_PATTERN = re.compile(r"^\d{4,10}$")
+SETTINGS_DOCTYPE = "BIM Twilio Verify Settings"
 
 
 def _error(message, status_code=400):
@@ -24,10 +25,31 @@ def _get_conf_value(key):
 	return value.strip() if isinstance(value, str) else value
 
 
+def _get_settings():
+	if frappe.db.exists("DocType", SETTINGS_DOCTYPE):
+		settings = frappe.get_single(SETTINGS_DOCTYPE)
+		auth_token = settings.get_password("auth_token") if settings.auth_token else None
+		if settings.enabled and settings.account_sid and auth_token and settings.verify_service_sid:
+			return {
+				"account_sid": settings.account_sid,
+				"auth_token": auth_token,
+				"verify_service_sid": settings.verify_service_sid,
+				"default_country_code": settings.default_country_code or DEFAULT_COUNTRY_CODE,
+			}
+
+	return {
+		"account_sid": _get_conf_value("twilio_account_sid"),
+		"auth_token": _get_conf_value("twilio_auth_token"),
+		"verify_service_sid": _get_conf_value("twilio_verify_service_sid"),
+		"default_country_code": _get_conf_value("phone_login_default_country_code") or DEFAULT_COUNTRY_CODE,
+	}
+
+
 def _get_twilio_client():
-	account_sid = _get_conf_value("twilio_account_sid")
-	auth_token = _get_conf_value("twilio_auth_token")
-	service_sid = _get_conf_value("twilio_verify_service_sid")
+	settings = _get_settings()
+	account_sid = settings.get("account_sid")
+	auth_token = settings.get("auth_token")
+	service_sid = settings.get("verify_service_sid")
 
 	if not account_sid or not auth_token or not service_sid:
 		frappe.throw(_("Twilio phone login is not configured."))
@@ -44,7 +66,7 @@ def _normalize_phone(phone_number):
 	if phone_number.startswith("00"):
 		phone_number = f"+{phone_number[2:]}"
 	elif not phone_number.startswith("+"):
-		country_code = _get_conf_value("phone_login_default_country_code") or DEFAULT_COUNTRY_CODE
+		country_code = _get_settings().get("default_country_code") or DEFAULT_COUNTRY_CODE
 		if not country_code.startswith("+"):
 			country_code = f"+{country_code}"
 		phone_number = f"{country_code}{phone_number.lstrip('0')}"

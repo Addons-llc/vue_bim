@@ -1,0 +1,74 @@
+{
+  "actions": [],
+  "allow_rename": 0,
+  "creation": "2026-07-30 00:00:00.000000",
+  "doctype": "DocType",
+  "editable_grid": 1,
+  "engine": "InnoDB",
+  "field_order": [
+    "enabled",
+    "default_country_code",
+    "account_sid",
+    "auth_token",
+    "verify_service_sid"
+  ],
+  "fields": [
+    {
+      "default": "1",
+      "fieldname": "enabled",
+      "fieldtype": "Check",
+      "label": "Enabled"
+    },
+    {
+      "default": "+971",
+      "fieldname": "default_country_code",
+      "fieldtype": "Data",
+      "label": "Default Country Code",
+      "reqd": 1
+    },
+    {
+      "fieldname": "account_sid",
+      "fieldtype": "Data",
+      "label": "Account SID",
+      "reqd": 1
+    },
+    {
+      "fieldname": "auth_token",
+      "fieldtype": "Password",
+      "label": "Auth Token",
+      "reqd": 1
+    },
+    {
+      "fieldname": "verify_service_sid",
+      "fieldtype": "Data",
+      "label": "Verify Service SID",
+      "reqd": 1
+    }
+  ],
+  "grid_page_length": 50,
+  "index_web_pages_for_search": 0,
+  "issingle": 1,
+  "links": [],
+  "modified": "2026-07-30 00:00:00.000000",
+  "modified_by": "Administrator",
+  "module": "Buy In Minutes",
+  "name": "BIM Twilio Verify Settings",
+  "owner": "Administrator",
+  "permissions": [
+    {
+      "create": 1,
+      "delete": 1,
+      "email": 1,
+      "export": 1,
+      "print": 1,
+      "read": 1,
+      "report": 1,
+      "role": "System Manager",
+      "share": 1,
+      "write": 1
+    }
+  ],
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "states": []
+}
