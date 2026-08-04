@@ -242,21 +242,6 @@ def _get_existing_website_user_by_phone(phone_number):
 			frappe.throw(_("User disabled or missing"), frappe.AuthenticationError)
 		return user
 
-	digits = re.sub(r"\D", "", phone_number)
-	email = f"{digits}@{PHONE_USER_EMAIL_DOMAIN}"
-	if frappe.db.exists("User", email):
-		user = frappe.get_doc("User", email)
-		if not user.enabled:
-			frappe.throw(_("User disabled or missing"), frappe.AuthenticationError)
-		if user.user_type != "Website User":
-			frappe.throw(_("Only website users can sign in with phone OTP."))
-		user.mobile_no = phone_number
-		user.phone = phone_number
-		user.enabled = 1
-		user.save(ignore_permissions=True)
-		frappe.db.commit()
-		return user
-
 	return None
 
 
