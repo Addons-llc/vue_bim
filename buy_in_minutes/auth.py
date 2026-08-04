@@ -21,6 +21,7 @@ DEFAULT_OTP_VERIFY_LIMIT = 30
 DEFAULT_OTP_RATE_LIMIT_SECONDS = 10 * 60
 DEFAULT_OTP_REQUEST_COOLDOWN_SECONDS = 60
 OTP_RATE_LIMIT_CACHE_VERSION = "v2"
+PROFILE_TOKEN_TTL_SECONDS = 10 * 60
 
 
 def _error(message, status_code=400):
@@ -40,6 +41,16 @@ def _get_conf_int(key, default):
 		return default
 
 
+def _get_conf_list(key):
+	value = frappe.conf.get(key)
+	if isinstance(value, str):
+		return [item.strip() for item in value.split(",") if item.strip()]
+	if isinstance(value, list | tuple | set):
+		return [str(item).strip() for item in value if str(item).strip()]
+
+	return []
+
+
 def _get_otp_request_limit():
 	return _get_conf_int("phone_login_otp_request_limit", DEFAULT_OTP_REQUEST_LIMIT)
 
@@ -50,6 +61,19 @@ def _get_otp_verify_limit():
 
 def _get_otp_request_cooldown_seconds():
 	return _get_conf_int("phone_login_otp_request_cooldown_seconds", DEFAULT_OTP_REQUEST_COOLDOWN_SECONDS)
+
+
+def _get_test_otp():
+	otp = _get_conf_value("phone_login_test_otp")
+	return otp if otp and OTP_PATTERN.match(otp) else None
+
+
+def _is_test_otp_enabled(phone_number):
+	test_otp = _get_test_otp()
+	if not test_otp:
+		return False
+
+	return phone_number in {_normalize_phone(phone) for phone in _get_conf_list("phone_login_test_phone_numbers")}
 
 
 def _check_otp_rate_limit(action, phone_number, limit):
@@ -75,6 +99,10 @@ def _check_otp_rate_limit(action, phone_number, limit):
 
 def _get_otp_request_cooldown_key(phone_number):
 	return frappe.cache.make_key(f"otp-request-cooldown:{OTP_RATE_LIMIT_CACHE_VERSION}:{phone_number}")
+
+
+def _get_phone_profile_token_key(profile_token):
+	return frappe.cache.make_key(f"phone-profile-token:{OTP_RATE_LIMIT_CACHE_VERSION}:{profile_token}")
 
 
 def _check_otp_request_cooldown(phone_number):
@@ -107,6 +135,47 @@ def _set_otp_request_cooldown(phone_number):
 		cooldown_seconds,
 		time.time() + cooldown_seconds,
 	)
+
+
+def _create_phone_profile_token(phone_number):
+	profile_token = frappe.generate_hash(length=32)
+	frappe.cache.setex(_get_phone_profile_token_key(profile_token), PROFILE_TOKEN_TTL_SECONDS, phone_number)
+	return profile_token
+
+
+def _validate_phone_profile_token(profile_token, phone_number):
+	profile_token = (profile_token or "").strip()
+	if not profile_token:
+		frappe.throw(_("Please verify the OTP before completing your profile."), frappe.AuthenticationError)
+
+	cached_phone_number = frappe.cache.get(_get_phone_profile_token_key(profile_token))
+	if isinstance(cached_phone_number, bytes):
+		cached_phone_number = cached_phone_number.decode()
+
+	if cached_phone_number != phone_number:
+		frappe.throw(_("Your verification has expired. Please verify the OTP again."), frappe.AuthenticationError)
+
+	return profile_token
+
+
+def _clear_phone_profile_token(profile_token):
+	if profile_token:
+		frappe.cache.delete_value(_get_phone_profile_token_key(profile_token))
+
+
+def _format_twilio_error(exc):
+	error_code = f" Twilio error code: {exc.code}." if exc.code else ""
+
+	if exc.status == 403:
+		return _(
+			"Twilio rejected the OTP request. Check the Verify service, SMS geo permissions, "
+			"trial account recipient verification, and account credentials."
+		) + error_code
+
+	if exc.status == 429:
+		return _("Too many OTP requests were sent to this phone number. Please wait a few minutes and try again.")
+
+	return _("Unable to send OTP. Please try again.") + error_code
 
 
 def _get_settings():
@@ -161,30 +230,51 @@ def _normalize_phone(phone_number):
 	return phone_number
 
 
-def _get_or_create_phone_user(phone_number):
-	user_name = frappe.db.get_value("User", {"mobile_no": phone_number}, "name")
+def _get_existing_website_user_by_phone(phone_number):
+	user_name = frappe.db.get_value(
+		"User",
+		{"mobile_no": phone_number, "user_type": "Website User"},
+		"name",
+	)
 	if user_name:
 		user = frappe.get_doc("User", user_name)
 		if not user.enabled:
 			frappe.throw(_("User disabled or missing"), frappe.AuthenticationError)
-		return user, False
+		return user
 
 	digits = re.sub(r"\D", "", phone_number)
 	email = f"{digits}@{PHONE_USER_EMAIL_DOMAIN}"
 	if frappe.db.exists("User", email):
 		user = frappe.get_doc("User", email)
+		if not user.enabled:
+			frappe.throw(_("User disabled or missing"), frappe.AuthenticationError)
+		if user.user_type != "Website User":
+			frappe.throw(_("Only website users can sign in with phone OTP."))
 		user.mobile_no = phone_number
 		user.phone = phone_number
 		user.enabled = 1
 		user.save(ignore_permissions=True)
 		frappe.db.commit()
-		return user, False
+		return user
 
+	return None
+
+
+def _create_profile_website_user(full_name, email, phone_number):
+	if frappe.db.exists("User", email):
+		frappe.throw(_("A user with this email address already exists."))
+
+	if _get_existing_website_user_by_phone(phone_number):
+		frappe.throw(_("A user with this phone number already exists. Please sign in again."))
+
+	first_name, last_name = _split_full_name(full_name)
 	user = frappe.get_doc(
 		{
 			"doctype": "User",
 			"email": email,
-			"first_name": _("Customer"),
+			"first_name": first_name,
+			"last_name": last_name,
+			"full_name": full_name,
 			"enabled": 1,
 			"user_type": "Website User",
 			"send_welcome_email": 0,
@@ -198,7 +288,25 @@ def _get_or_create_phone_user(phone_number):
 
 	user.insert(ignore_permissions=True)
 	frappe.db.commit()
-	return user, True
+	return user
+
+
+def _get_phone_user_payload(user, is_new_user):
+	needs_profile = _needs_phone_profile(user)
+
+	return {
+		"is_new_user": is_new_user,
+		"website_user_created": is_new_user,
+		"website_user_exists": not is_new_user,
+		"needs_profile": needs_profile,
+		"profile_completed": not needs_profile,
+		"user": {
+			"name": user.name,
+			"email": user.email,
+			"mobile_no": user.mobile_no,
+			"full_name": user.full_name,
+		},
+	}
 
 
 def _login_user(user_name):
@@ -220,7 +328,7 @@ def _is_phone_login_user(user):
 
 
 def _needs_phone_profile(user):
-	return _is_phone_login_user(user) or not (user.full_name or "").strip() or user.full_name == _("Customer")
+	return _is_phone_login_user(user)
 
 
 def _rename_phone_user_if_needed(user, email):
@@ -263,6 +371,14 @@ def request_phone_otp(phone_number=None, phoneNumber=None):
 	if rate_limit_response:
 		return rate_limit_response
 
+	if _is_test_otp_enabled(phone_number):
+		_set_otp_request_cooldown(phone_number)
+		return {
+			"success": True,
+			"status": "test",
+			"message": _("Test OTP enabled. Use the configured OTP to continue."),
+		}
+
 	client, service_sid = _get_twilio_client()
 
 	try:
@@ -275,13 +391,7 @@ def request_phone_otp(phone_number=None, phoneNumber=None):
 			title="Twilio OTP Request Failed",
 			message=f"Twilio error {exc.code}: {exc.msg}",
 		)
-		if exc.status == 429:
-			return _error(
-				_("Too many OTP requests were sent to this phone number. Please wait a few minutes and try again."),
-				429,
-			)
-
-		return _error(_("Unable to send OTP. Please try again."), exc.status or 400)
+		return _error(_format_twilio_error(exc), exc.status or 400)
 
 	_set_otp_request_cooldown(phone_number)
 
@@ -304,6 +414,32 @@ def verify_phone_otp(phone_number=None, otp=None, phoneNumber=None):
 	if not OTP_PATTERN.match(otp):
 		return _error(_("Enter a valid OTP."))
 
+	test_otp = _get_test_otp()
+	if _is_test_otp_enabled(phone_number):
+		if otp != test_otp:
+			return _error(_("Invalid OTP."), 400)
+
+		user = _get_existing_website_user_by_phone(phone_number)
+		if not user:
+			return {
+				"success": True,
+				"is_new_user": True,
+				"website_user_created": False,
+				"website_user_exists": False,
+				"needs_profile": True,
+				"profile_completed": False,
+				"profile_token": _create_phone_profile_token(phone_number),
+				"message": _("OTP verified. Complete your profile to continue."),
+			}
+
+		_login_user(user.name)
+
+		return {
+			"success": True,
+			**_get_phone_user_payload(user, False),
+			"message": _("Logged in successfully."),
+		}
+
 	client, service_sid = _get_twilio_client()
 
 	try:
@@ -321,39 +457,53 @@ def verify_phone_otp(phone_number=None, otp=None, phoneNumber=None):
 	if check.status != "approved":
 		return _error(_("Invalid OTP."), 400)
 
-	user, is_new_user = _get_or_create_phone_user(phone_number)
-	website_user_exists = bool(frappe.db.exists("User", user.name))
+	user = _get_existing_website_user_by_phone(phone_number)
+	if not user:
+		return {
+			"success": True,
+			"is_new_user": True,
+			"website_user_created": False,
+			"website_user_exists": False,
+			"needs_profile": True,
+			"profile_completed": False,
+			"profile_token": _create_phone_profile_token(phone_number),
+			"message": _("OTP verified. Complete your profile to continue."),
+		}
+
 	_login_user(user.name)
-	needs_profile = _needs_phone_profile(user)
 
 	return {
 		"success": True,
-		"is_new_user": is_new_user,
-		"website_user_created": is_new_user,
-		"website_user_exists": website_user_exists,
-		"needs_profile": needs_profile,
-		"profile_completed": not needs_profile,
-		"user": {
-			"name": user.name,
-			"email": user.email,
-			"mobile_no": user.mobile_no,
-			"full_name": user.full_name,
-		},
+		**_get_phone_user_payload(user, False),
 		"message": _("Logged in successfully."),
 	}
 
 
-@frappe.whitelist(methods=["POST"])
-def complete_phone_profile(full_name=None, email=None, phone_number=None, phoneNumber=None):
-	if frappe.session.user == "Guest":
-		frappe.throw(_("Please sign in before completing your profile."), frappe.AuthenticationError)
-
+@frappe.whitelist(allow_guest=True, methods=["POST"])
+def complete_phone_profile(full_name=None, email=None, phone_number=None, phoneNumber=None, profile_token=None):
 	phone_number = _normalize_phone(phone_number or phoneNumber)
 	full_name = (full_name or "").strip()
 	email = validate_email_address(email, throw=True)
 
 	if not full_name:
 		frappe.throw(_("Full name is required."))
+
+	if frappe.session.user == "Guest":
+		profile_token = _validate_phone_profile_token(profile_token, phone_number)
+		user = _create_profile_website_user(full_name, email, phone_number)
+		_login_user(user.name)
+		_clear_phone_profile_token(profile_token)
+
+		return {
+			"success": True,
+			"user": {
+				"name": user.name,
+				"email": user.email,
+				"mobile_no": user.mobile_no,
+				"full_name": user.full_name,
+			},
+			"message": _("Profile completed successfully."),
+		}
 
 	user = frappe.get_doc("User", frappe.session.user)
 	if user.user_type != "Website User":

@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 180" role="img" aria-label="BIM rider onboarding illustration">
+  <defs>
+    <linearGradient id="rider-jacket" x1="82" x2="148" y1="55" y2="132" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#f97316"/>
+      <stop offset="1" stop-color="#dc2626"/>
+    </linearGradient>
+    <linearGradient id="bike-body" x1="42" x2="176" y1="105" y2="148" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#111827"/>
+      <stop offset=".55" stop-color="#374151"/>
+      <stop offset="1" stop-color="#0f172a"/>
+    </linearGradient>
+    <linearGradient id="bag" x1="156" x2="210" y1="70" y2="132" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#22c55e"/>
+      <stop offset="1" stop-color="#15803d"/>
+    </linearGradient>
+    <filter id="rider-shadow" x="-20%" y="-25%" width="140%" height="155%">
+      <feDropShadow dx="0" dy="10" stdDeviation="8" flood-color="#7f1d1d" flood-opacity=".2"/>
+    </filter>
+  </defs>
+  <path d="M30 70c27-34 80-48 132-42 43 5 69 31 63 65-7 40-57 65-111 59-58-7-116-38-84-82Z" fill="#fff7ed" opacity=".8"/>
+  <circle cx="193" cy="47" r="19" fill="#fde047" opacity=".85"/>
+  <path d="M39 56h22M50 45v22M201 71h20M211 61v20" stroke="#fb923c" stroke-width="5" stroke-linecap="round" opacity=".75"/>
+  <ellipse cx="122" cy="154" rx="88" ry="14" fill="#7f1d1d" opacity=".16"/>
+  <g filter="url(#rider-shadow)">
+    <circle cx="67" cy="141" r="19" fill="#0f172a"/>
+    <circle cx="67" cy="141" r="8" fill="#fed7aa"/>
+    <circle cx="171" cy="141" r="19" fill="#0f172a"/>
+    <circle cx="171" cy="141" r="8" fill="#fed7aa"/>
+    <path d="M59 124h95c12 0 23 8 28 20H43c3-12 8-20 16-20Z" fill="url(#bike-body)"/>
+    <path d="M79 108h42c9 0 17 5 21 13l8 17H97l-18-30Z" fill="#f97316"/>
+    <path d="M43 119h43c7 0 12 5 12 12v8H35l2-11c1-5 3-9 6-9Z" fill="#1f2937"/>
+    <path d="M141 100h28c11 0 20 9 20 20v10h-57l9-30Z" fill="#fb923c"/>
+    <path d="M160 79h43v52h-43z" fill="url(#bag)"/>
+    <path d="M160 79h43l-10-13h-43l10 13Z" fill="#bbf7d0"/>
+    <path d="M203 79v52l-10 10V91l10-12Z" fill="#166534"/>
+    <path d="M171 100h22" stroke="#dcfce7" stroke-width="5" stroke-linecap="round"/>
+    <path d="M177 111h11" stroke="#dcfce7" stroke-width="4" stroke-linecap="round"/>
+  </g>
+  <g filter="url(#rider-shadow)">
+    <circle cx="112" cy="42" r="18" fill="#fed7aa"/>
+    <path d="M93 42c1-15 13-25 30-19 10 4 15 12 13 24-15 2-29-1-43-5Z" fill="#111827"/>
+    <path d="M95 64h37c9 0 16 7 16 16v39H80V80c0-9 7-16 15-16Z" fill="url(#rider-jacket)"/>
+    <path d="M103 73h23" stroke="#fff7ed" stroke-width="5" stroke-linecap="round"/>
+    <path d="M96 84 76 118" stroke="#7f1d1d" stroke-width="9" stroke-linecap="round"/>
+    <path d="M134 84 154 117" stroke="#7f1d1d" stroke-width="9" stroke-linecap="round"/>
+    <path d="M99 119h25l-5 31H90l9-31Z" fill="#374151"/>
+    <path d="M123 119h24l12 31h-30l-6-31Z" fill="#1f2937"/>
+  </g>
+</svg>
