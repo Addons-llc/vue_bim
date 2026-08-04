@@ -290,6 +290,7 @@ def _get_phone_user_payload(user, is_new_user):
 			"email": user.email,
 			"mobile_no": user.mobile_no,
 			"full_name": user.full_name,
+			"user_image": user.user_image,
 		},
 	}
 
@@ -343,6 +344,28 @@ def _rename_phone_user_if_needed(user, email):
 @frappe.whitelist(allow_guest=True, methods=["GET"])
 def get_csrf_token():
 	return {"csrf_token": frappe.sessions.get_csrf_token()}
+
+
+@frappe.whitelist(allow_guest=True, methods=["GET"])
+def get_current_user():
+	if frappe.session.user == "Guest":
+		return {
+			"is_authenticated": False,
+			"user": None,
+		}
+
+	user = frappe.get_doc("User", frappe.session.user)
+	return {
+		"is_authenticated": True,
+		"user": {
+			"name": user.name,
+			"email": user.email,
+			"mobile_no": user.mobile_no,
+			"full_name": user.full_name,
+			"user_type": user.user_type,
+			"user_image": user.user_image,
+		},
+	}
 
 
 @frappe.whitelist(allow_guest=True, methods=["GET", "POST"])
@@ -487,6 +510,7 @@ def complete_phone_profile(full_name=None, email=None, phone_number=None, phoneN
 				"email": user.email,
 				"mobile_no": user.mobile_no,
 				"full_name": user.full_name,
+				"user_image": user.user_image,
 			},
 			"message": _("Profile completed successfully."),
 		}
@@ -520,6 +544,7 @@ def complete_phone_profile(full_name=None, email=None, phone_number=None, phoneN
 			"email": user.email,
 			"mobile_no": user.mobile_no,
 			"full_name": user.full_name,
+			"user_image": user.user_image,
 		},
 		"message": _("Profile completed successfully."),
 	}
