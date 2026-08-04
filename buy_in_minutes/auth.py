@@ -469,11 +469,12 @@ def complete_phone_profile(full_name=None, email=None, phone_number=None, phoneN
 	phone_number = _normalize_phone(phone_number or phoneNumber)
 	full_name = (full_name or "").strip()
 	email = validate_email_address(email, throw=True)
+	profile_token = (profile_token or "").strip()
 
 	if not full_name:
 		frappe.throw(_("Full name is required."))
 
-	if frappe.session.user == "Guest":
+	if profile_token:
 		profile_token = _validate_phone_profile_token(profile_token, phone_number)
 		user = _create_profile_website_user(full_name, email, phone_number)
 		_login_user(user.name)
@@ -489,6 +490,9 @@ def complete_phone_profile(full_name=None, email=None, phone_number=None, phoneN
 			},
 			"message": _("Profile completed successfully."),
 		}
+
+	if frappe.session.user == "Guest":
+		frappe.throw(_("Please verify the OTP before completing your profile."), frappe.AuthenticationError)
 
 	user = frappe.get_doc("User", frappe.session.user)
 	if user.user_type != "Website User":
