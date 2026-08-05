@@ -16,6 +16,7 @@ DEFAULT_CURRENCY = "aed"
 HANDLING_FEE = 2
 DELIVERY_FEE = 6
 FREE_DELIVERY_MINIMUM = 60
+SELLING_PRICE_LIST = "Selling Price"
 
 
 def _error(message, status_code=400):
@@ -91,6 +92,32 @@ def _normalize_cart_items(cart_items):
 	return normalized_items
 
 
+def _get_item_selling_price(item_code, fallback_rate=0):
+	price_record = frappe.db.get_value(
+		"Item Price",
+		{
+			"item_code": item_code,
+			"price_list": SELLING_PRICE_LIST,
+			"selling": 1,
+		},
+		["price_list_rate"],
+		as_dict=True,
+	)
+
+	if not price_record:
+		price_record = frappe.db.get_value(
+			"Item Price",
+			{
+				"item_code": item_code,
+				"selling": 1,
+			},
+			["price_list_rate"],
+			as_dict=True,
+		)
+
+	return flt(price_record.price_list_rate if price_record else fallback_rate)
+
+
 def _get_checkout_items(cart_items):
 	checkout_items = []
 	for cart_item in _normalize_cart_items(cart_items):
@@ -103,7 +130,7 @@ def _get_checkout_items(cart_items):
 		if not item:
 			frappe.throw(_("Item {0} is not available.").format(cart_item["item_code"]))
 
-		rate = flt(item.standard_rate)
+		rate = _get_item_selling_price(item.name, item.standard_rate)
 		if rate <= 0:
 			frappe.throw(_("Item {0} does not have a valid price.").format(item.item_name or item.name))
 
