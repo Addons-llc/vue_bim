@@ -184,6 +184,10 @@ def _get_non_group_default(doctype, setting_key, label):
 
 
 def _get_default_customer_group():
+	for candidate in ("Commercial", "Individual", "Non Profit", "Government"):
+		if frappe.db.exists("Customer Group", {"name": candidate, "is_group": 0}):
+			return candidate
+
 	return _get_non_group_default("Customer Group", "customer_group", "Customer Group")
 
 
