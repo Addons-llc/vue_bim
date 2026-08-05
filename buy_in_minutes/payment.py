@@ -9,6 +9,9 @@ from urllib.request import Request, urlopen
 import frappe
 from frappe import _
 from frappe.utils import flt, get_url, nowdate
+from erpnext.setup.doctype.brand.brand import get_brand_defaults
+from erpnext.setup.doctype.item_group.item_group import get_item_group_defaults
+from erpnext.stock.doctype.item.item import get_item_defaults
 
 
 STRIPE_API_BASE_URL = "https://api.stripe.com/v1"
@@ -17,10 +20,6 @@ HANDLING_FEE = 2
 DELIVERY_FEE = 6
 FREE_DELIVERY_MINIMUM = 60
 SELLING_PRICE_LIST = "Selling Price"
-DEFAULT_CUSTOMER_GROUP = "All Customer Groups"
-DEFAULT_TERRITORY = "All Territories"
-
-
 def _error(message, status_code=400):
 	frappe.local.response["http_status_code"] = status_code
 	return {"success": False, "message": message}
@@ -72,6 +71,38 @@ def _stripe_request(path, params):
 	except Exception:
 		frappe.log_error(title="Stripe Checkout Request Failed", message=frappe.get_traceback())
 		frappe.throw(_("Unable to start Stripe checkout. Please try again."))
+
+
+def _stripe_get_request(path):
+	secret_key = _get_stripe_secret_key()
+	if not secret_key:
+		frappe.throw(_("Stripe secret key is not configured."))
+
+	auth = base64.b64encode(f"{secret_key}:".encode()).decode()
+	request = Request(
+		f"{STRIPE_API_BASE_URL}{path}",
+		headers={
+			"Authorization": f"Basic {auth}",
+		},
+		method="GET",
+	)
+
+	try:
+		with urlopen(request, timeout=30) as response:
+			return json.loads(response.read().decode())
+	except HTTPError as exc:
+		error_body = exc.read().decode()
+		frappe.log_error(title="Stripe Checkout Session Fetch Failed", message=frappe.get_traceback())
+		try:
+			error_data = json.loads(error_body)
+			error_message = error_data.get("error", {}).get("message")
+		except ValueError:
+			error_message = None
+
+		frappe.throw(error_message or _("Unable to verify Stripe payment. Please try again."))
+	except Exception:
+		frappe.log_error(title="Stripe Checkout Session Fetch Failed", message=frappe.get_traceback())
+		frappe.throw(_("Unable to verify Stripe payment. Please try again."))
 
 
 def _normalize_cart_items(cart_items):
@@ -132,34 +163,42 @@ def _get_default_company():
 	return company
 
 
+def _get_non_group_default(doctype, setting_key, label):
+	configured_value = frappe.defaults.get_global_default(setting_key)
+	if configured_value:
+		is_group = frappe.db.get_value(doctype, {"name": configured_value}, "is_group")
+		if not is_group:
+			return configured_value
+
+	leaf_values = frappe.get_all(
+		doctype,
+		fields=["name"],
+		filters={"is_group": 0},
+		order_by="modified desc",
+		limit_page_length=1,
+	)
+	if leaf_values:
+		return leaf_values[0].name
+
+	frappe.throw(_("Please configure a non-group {0} before checkout.").format(label))
+
+
 def _get_default_customer_group():
-	customer_group = frappe.defaults.get_global_default("customer_group")
-	if customer_group:
-		return customer_group
-
-	if frappe.db.exists("Customer Group", DEFAULT_CUSTOMER_GROUP):
-		return DEFAULT_CUSTOMER_GROUP
-
-	customer_group = frappe.db.get_value("Customer Group", {"is_group": 0}, "name")
-	if not customer_group:
-		frappe.throw(_("Please configure a Customer Group before checkout."))
-
-	return customer_group
+	return _get_non_group_default("Customer Group", "customer_group", "Customer Group")
 
 
 def _get_default_territory():
-	territory = frappe.defaults.get_global_default("territory")
-	if territory:
-		return territory
+	return _get_non_group_default("Territory", "territory", "Territory")
 
-	if frappe.db.exists("Territory", DEFAULT_TERRITORY):
-		return DEFAULT_TERRITORY
 
-	territory = frappe.db.get_value("Territory", {"is_group": 0}, "name")
-	if not territory:
-		frappe.throw(_("Please configure a Territory before checkout."))
+def _get_default_supplier_for_item(item_code, company):
+	for resolver in (get_item_defaults, get_item_group_defaults, get_brand_defaults):
+		defaults = resolver(item_code, company) or {}
+		supplier = defaults.get("default_supplier")
+		if supplier:
+			return supplier
 
-	return territory
+	return None
 
 
 def _get_or_create_customer_for_user(user_name):
@@ -241,11 +280,19 @@ def _get_checkout_items(cart_items):
 	return checkout_items
 
 
-def _build_sales_order_item_rows(checkout_items):
+def _build_sales_order_item_rows(checkout_items, company):
 	order_items = []
 	for item in checkout_items:
 		if not frappe.db.exists("Item", item["item_code"]):
 			continue
+
+		supplier = _get_default_supplier_for_item(item["item_code"], company)
+		if not supplier:
+			frappe.throw(
+				_("This item is not available for purchase right now. Please contact support for {0}.").format(
+					item["item_name"]
+				)
+			)
 
 		order_items.append(
 			{
@@ -254,17 +301,39 @@ def _build_sales_order_item_rows(checkout_items):
 				"qty": item["quantity"],
 				"rate": item["rate"],
 				"delivery_date": nowdate(),
+				"supplier": supplier,
 			}
 		)
 
 	return order_items
 
 
+def _create_purchase_orders_for_sales_order(sales_order):
+	if not sales_order or sales_order.docstatus != 1:
+		return []
+
+	if frappe.db.exists("Purchase Order Item", {"sales_order": sales_order.name}):
+		return []
+
+	selected_items = [
+		{"item_code": item.item_code, "supplier": item.supplier}
+		for item in sales_order.items
+		if item.item_code and item.supplier
+	]
+
+	if not selected_items:
+		return []
+
+	from erpnext.selling.doctype.sales_order.sales_order import make_purchase_order_for_default_supplier
+
+	return make_purchase_order_for_default_supplier(sales_order.name, selected_items=selected_items) or []
+
+
 def _upsert_sales_order(checkout_items, sales_order_name=None, submit=False):
 	customer = _get_or_create_customer_for_user(frappe.session.user)
 	company = _get_default_company()
 	delivery_date = nowdate()
-	order_items = _build_sales_order_item_rows(checkout_items)
+	order_items = _build_sales_order_item_rows(checkout_items, company)
 
 	if not order_items:
 		frappe.throw(_("Cart does not contain orderable items."))
@@ -296,6 +365,7 @@ def _upsert_sales_order(checkout_items, sales_order_name=None, submit=False):
 
 	if submit:
 		sales_order.submit()
+		_create_purchase_orders_for_sales_order(sales_order)
 
 	return sales_order
 
@@ -323,6 +393,55 @@ def _build_checkout_params(checkout_items, sales_order_name=None):
 		params[f"line_items[{index}][price_data][product_data][metadata][item_code]"] = item["item_code"]
 
 	return params
+
+
+def _submit_sales_order(sales_order_name):
+	if not sales_order_name or not frappe.db.exists("Sales Order", sales_order_name):
+		return None
+
+	sales_order = frappe.get_doc("Sales Order", sales_order_name)
+	if sales_order.docstatus != 0:
+		return sales_order
+
+	sales_order.submit()
+	_create_purchase_orders_for_sales_order(sales_order)
+	return sales_order
+
+
+@frappe.whitelist(methods=["POST"])
+def finalize_stripe_checkout(session_id=None):
+	if frappe.session.user == "Guest":
+		frappe.throw(_("Please sign in before checkout."), frappe.AuthenticationError)
+
+	if not session_id:
+		frappe.throw(_("Missing Stripe session id."))
+
+	session = _stripe_get_request(f"/checkout/sessions/{session_id}")
+	if session.get("payment_status") != "paid":
+		frappe.throw(_("Stripe payment is not complete yet."))
+
+	sales_order_name = session.get("metadata", {}).get("sales_order")
+	sales_order = _submit_sales_order(sales_order_name)
+
+	return {
+		"success": True,
+		"sales_order": sales_order.name if sales_order else sales_order_name,
+		"payment_status": session.get("payment_status"),
+	}
+
+
+@frappe.whitelist(methods=["POST"])
+def sync_cart_sales_order(cart_items=None, sales_order_name=None):
+	if frappe.session.user == "Guest":
+		frappe.throw(_("Please sign in before checkout."), frappe.AuthenticationError)
+
+	checkout_items = _get_checkout_items(cart_items)
+	sales_order = _upsert_sales_order(checkout_items, sales_order_name=sales_order_name)
+
+	return {
+		"success": True,
+		"sales_order": sales_order.name,
+	}
 
 
 @frappe.whitelist(methods=["POST"])
@@ -360,19 +479,6 @@ def create_cash_on_delivery_order(cart_items=None, sales_order_name=None):
 	}
 
 
-@frappe.whitelist(methods=["POST"])
-def sync_draft_sales_order(cart_items=None, sales_order_name=None):
-	if frappe.session.user == "Guest":
-		frappe.throw(_("Please sign in before syncing your cart."), frappe.AuthenticationError)
-
-	checkout_items = _get_checkout_items(cart_items)
-	sales_order = _upsert_sales_order(checkout_items, sales_order_name=sales_order_name)
-
-	return {
-		"success": True,
-		"sales_order": sales_order.name,
-		"status": sales_order.status,
-	}
 
 
 def _get_signature_timestamp_and_signatures(signature_header):
@@ -414,6 +520,15 @@ def stripe_webhook():
 	event = json.loads(payload.decode())
 	if event.get("type") == "checkout.session.completed":
 		session = event.get("data", {}).get("object", {})
+		sales_order_name = session.get("metadata", {}).get("sales_order")
+		if session.get("payment_status") == "paid" and sales_order_name:
+			try:
+				_submit_sales_order(sales_order_name)
+			except Exception:
+				frappe.log_error(
+					title="Stripe Checkout Sales Order Submission Failed",
+					message=frappe.get_traceback(),
+				)
 		frappe.log_error(
 			title="Stripe Checkout Completed",
 			message=json.dumps(
