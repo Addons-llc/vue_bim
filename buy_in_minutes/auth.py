@@ -3,13 +3,11 @@ import time
 
 import frappe
 import frappe.sessions
-import requests
 from frappe import _
 from frappe.auth import LoginManager
 from frappe.model.rename_doc import rename_doc
 from frappe.utils import validate_email_address
 from twilio.base.exceptions import TwilioRestException
-from twilio.http.http_client import TwilioHttpClient
 from twilio.rest import Client
 
 
@@ -24,7 +22,6 @@ DEFAULT_OTP_RATE_LIMIT_SECONDS = 10 * 60
 DEFAULT_OTP_REQUEST_COOLDOWN_SECONDS = 60
 OTP_RATE_LIMIT_CACHE_VERSION = "v2"
 PROFILE_TOKEN_TTL_SECONDS = 10 * 60
-TWILIO_REQUEST_TIMEOUT_SECONDS = 10
 
 
 def _error(message, status_code=400):
@@ -210,8 +207,7 @@ def _get_twilio_client():
 	if not account_sid or not auth_token or not service_sid:
 		frappe.throw(_("Twilio phone login is not configured."))
 
-	http_client = TwilioHttpClient(timeout=TWILIO_REQUEST_TIMEOUT_SECONDS)
-	return Client(account_sid, auth_token, http_client=http_client), service_sid
+	return Client(account_sid, auth_token), service_sid
 
 
 def _normalize_phone(phone_number):
@@ -404,9 +400,6 @@ def request_phone_otp(phone_number=None, phoneNumber=None):
 			message=f"Twilio error {exc.code}: {exc.msg}",
 		)
 		return _error(_format_twilio_error(exc), exc.status or 400)
-	except requests.exceptions.RequestException as exc:
-		frappe.log_error(title="Twilio OTP Request Timed Out", message=str(exc))
-		return _error(_("Unable to reach the OTP service. Please try again."), 504)
 
 	_set_otp_request_cooldown(phone_number)
 
@@ -468,9 +461,6 @@ def verify_phone_otp(phone_number=None, otp=None, phoneNumber=None):
 			message=f"Twilio error {exc.code}: {exc.msg}",
 		)
 		return _error(_("Unable to verify OTP. Please try again."), exc.status or 400)
-	except requests.exceptions.RequestException as exc:
-		frappe.log_error(title="Twilio OTP Verification Timed Out", message=str(exc))
-		return _error(_("Unable to reach the OTP service. Please try again."), 504)
 
 	if check.status != "approved":
 		return _error(_("Invalid OTP."), 400)
