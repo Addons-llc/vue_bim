@@ -396,8 +396,10 @@ def _upsert_sales_order(checkout_items, sales_order_name=None, submit=False):
 		sales_order.save(ignore_permissions=True)
 
 	if submit:
-		sales_order.submit()
-		_create_purchase_orders_for_sales_order(sales_order)
+		with _as_administrator():
+			sales_order.flags.ignore_permissions = True
+			sales_order.submit()
+			_create_purchase_orders_for_sales_order(sales_order)
 
 	return sales_order
 
