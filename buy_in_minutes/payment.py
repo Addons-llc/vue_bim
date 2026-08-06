@@ -2,13 +2,14 @@ import base64
 import hashlib
 import hmac
 import json
+from contextlib import contextmanager
 from urllib.parse import urlencode
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
 import frappe
 from frappe import _
-from frappe.utils import flt, get_url, nowdate
+from frappe.utils import flt, get_url, getdate, nowdate
 from erpnext.setup.doctype.brand.brand import get_brand_defaults
 from erpnext.setup.doctype.item_group.item_group import get_item_group_defaults
 from erpnext.stock.doctype.item.item import get_item_defaults
@@ -291,23 +292,18 @@ def _build_sales_order_item_rows(checkout_items, company):
 			continue
 
 		supplier = _get_default_supplier_for_item(item["item_code"], company)
-		if not supplier:
-			frappe.throw(
-				_("This item is not available for purchase right now. Please contact support for {0}.").format(
-					item["item_name"]
-				)
-			)
 
-		order_items.append(
-			{
-				"item_code": item["item_code"],
-				"item_name": item["item_name"],
-				"qty": item["quantity"],
-				"rate": item["rate"],
-				"delivery_date": nowdate(),
-				"supplier": supplier,
-			}
-		)
+		row = {
+			"item_code": item["item_code"],
+			"item_name": item["item_name"],
+			"qty": item["quantity"],
+			"rate": item["rate"],
+			"delivery_date": nowdate(),
+		}
+		if supplier:
+			row["supplier"] = supplier
+
+		order_items.append(row)
 
 	return order_items
 
@@ -333,20 +329,50 @@ def _create_purchase_orders_for_sales_order(sales_order):
 	return make_purchase_order_for_default_supplier(sales_order.name, selected_items=selected_items) or []
 
 
+@contextmanager
+def _as_administrator():
+	previous_user = frappe.session.user
+	frappe.set_user("Administrator")
+	try:
+		yield
+	finally:
+		frappe.set_user(previous_user)
+
+
+def _normalize_payment_schedule_dates(sales_order):
+	transaction_date = sales_order.transaction_date or nowdate()
+	transaction_date_value = getdate(transaction_date)
+
+	for payment_row in sales_order.get("payment_schedule") or []:
+		if not payment_row.due_date or getdate(payment_row.due_date) < transaction_date_value:
+			payment_row.due_date = transaction_date
+
+
 def _upsert_sales_order(checkout_items, sales_order_name=None, submit=False):
 	customer = _get_or_create_customer_for_user(frappe.session.user)
 	company = _get_default_company()
-	delivery_date = nowdate()
+	order_date = nowdate()
+	delivery_date = order_date
 	order_items = _build_sales_order_item_rows(checkout_items, company)
 
 	if not order_items:
 		frappe.throw(_("Cart does not contain orderable items."))
 
 	if sales_order_name and frappe.db.exists("Sales Order", sales_order_name):
-		sales_order = frappe.get_doc("Sales Order", sales_order_name)
-		if sales_order.docstatus != 0:
+		sales_order_owner = frappe.db.sql(
+			"select owner from `tabSales Order` where name = %s",
+			(sales_order_name,),
+			as_dict=True,
+		)
+		if not sales_order_owner or sales_order_owner[0].owner != frappe.session.user:
 			frappe.throw(_("The linked Sales Order is no longer editable."))
-		sales_order.set("items", [])
+
+		with _as_administrator():
+			sales_order = frappe.get_doc("Sales Order", sales_order_name)
+			if sales_order.docstatus != 0:
+				frappe.throw(_("The linked Sales Order is no longer editable."))
+			sales_order.set("items", [])
+			sales_order.set("payment_schedule", [])
 	else:
 		sales_order = frappe.get_doc({"doctype": "Sales Order"})
 
@@ -354,13 +380,15 @@ def _upsert_sales_order(checkout_items, sales_order_name=None, submit=False):
 		{
 			"customer": customer,
 			"company": company,
-			"transaction_date": nowdate(),
+			"transaction_date": order_date,
 			"delivery_date": delivery_date,
 			"order_type": "Sales",
 		}
 	)
 	for item in order_items:
 		sales_order.append("items", item)
+
+	_normalize_payment_schedule_dates(sales_order)
 
 	if sales_order.is_new():
 		sales_order.insert(ignore_permissions=True)
@@ -399,37 +427,118 @@ def _build_checkout_params(checkout_items, sales_order_name=None):
 	return params
 
 
+# def _submit_sales_order(sales_order_name):
+# 	if not sales_order_name or not frappe.db.exists("Sales Order", sales_order_name):
+# 		return None
+
+# 	with _as_administrator():
+# 		sales_order = frappe.get_doc("Sales Order", sales_order_name)
+# 		if sales_order.docstatus != 0:
+# 			return sales_order
+
+# 		sales_order.submit()
+# 		_create_purchase_orders_for_sales_order(sales_order)
+# 	return sales_order
+
 def _submit_sales_order(sales_order_name):
-	if not sales_order_name or not frappe.db.exists("Sales Order", sales_order_name):
-		return None
+	if not sales_order_name:
+		frappe.throw(_("Sales Order is missing from Stripe payment."))
 
-	sales_order = frappe.get_doc("Sales Order", sales_order_name)
-	if sales_order.docstatus != 0:
-		return sales_order
+	if not frappe.db.exists("Sales Order", sales_order_name):
+		frappe.throw(
+			_("Sales Order {0} does not exist.").format(sales_order_name)
+		)
 
-	sales_order.submit()
-	_create_purchase_orders_for_sales_order(sales_order)
+	with _as_administrator():
+		sales_order = frappe.get_doc("Sales Order", sales_order_name)
+
+		if sales_order.docstatus == 2:
+			frappe.throw(
+				_("Sales Order {0} is cancelled.").format(sales_order_name)
+			)
+
+		# Submit the Sales Order after successful Stripe payment
+		if sales_order.docstatus == 0:
+			sales_order.flags.ignore_permissions = True
+			sales_order.submit()
+
+		# Create Purchase Orders first
+		_create_purchase_orders_for_sales_order(sales_order)
+
+		# Force the status after ERPNext completes its submit processing
+		if sales_order.docstatus == 1:
+			frappe.db.set_value(
+				"Sales Order",
+				sales_order.name,
+				{
+					"status": "To Deliver",
+					"billing_status": "Fully Billed",
+					"per_billed": 100,
+				},
+				update_modified=False,
+			)
+
+			frappe.db.commit()
+			sales_order.reload()
+
 	return sales_order
 
+
+# @frappe.whitelist(methods=["POST"])
+# def finalize_stripe_checkout(session_id=None):
+# 	if frappe.session.user == "Guest":
+# 		frappe.throw(_("Please sign in before checkout."), frappe.AuthenticationError)
+
+# 	if not session_id:
+# 		frappe.throw(_("Missing Stripe session id."))
+
+# 	session = _stripe_get_request(f"/checkout/sessions/{session_id}")
+# 	if session.get("payment_status") != "paid":
+# 		frappe.throw(_("Stripe payment is not complete yet."))
+
+# 	sales_order_name = session.get("metadata", {}).get("sales_order")
+# 	sales_order = _submit_sales_order(sales_order_name)
+
+# 	return {
+# 		"success": True,
+# 		"sales_order": sales_order.name if sales_order else sales_order_name,
+# 		"payment_status": session.get("payment_status"),
+# 	}
 
 @frappe.whitelist(methods=["POST"])
 def finalize_stripe_checkout(session_id=None):
 	if frappe.session.user == "Guest":
-		frappe.throw(_("Please sign in before checkout."), frappe.AuthenticationError)
+		frappe.throw(
+			_("Please sign in before checkout."),
+			frappe.AuthenticationError,
+		)
 
 	if not session_id:
 		frappe.throw(_("Missing Stripe session id."))
 
-	session = _stripe_get_request(f"/checkout/sessions/{session_id}")
+	session = _stripe_get_request(
+		f"/checkout/sessions/{session_id}"
+	)
+
 	if session.get("payment_status") != "paid":
 		frappe.throw(_("Stripe payment is not complete yet."))
 
-	sales_order_name = session.get("metadata", {}).get("sales_order")
+	sales_order_name = (
+		session.get("metadata", {}).get("sales_order")
+	)
+
+	if not sales_order_name:
+		frappe.throw(
+			_("Sales Order is missing from Stripe session metadata.")
+		)
+
 	sales_order = _submit_sales_order(sales_order_name)
 
 	return {
 		"success": True,
-		"sales_order": sales_order.name if sales_order else sales_order_name,
+		"sales_order": sales_order.name,
+		"sales_order_status": sales_order.status,
+		"docstatus": sales_order.docstatus,
 		"payment_status": session.get("payment_status"),
 	}
 
