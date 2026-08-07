@@ -302,6 +302,7 @@ def _build_sales_order_item_rows(checkout_items, company):
 		}
 		if supplier:
 			row["supplier"] = supplier
+			row["delivered_by_supplier"] = 1
 
 		order_items.append(row)
 
