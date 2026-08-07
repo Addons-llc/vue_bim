@@ -363,7 +363,7 @@ def on_sales_order_submit(doc, method=None):
 
 @contextmanager
 def _as_administrator():
-	previous_user = frappe.session.user
+	previous_user = frappe.session.user or "Guest"
 	frappe.set_user("Administrator")
 	try:
 		yield
