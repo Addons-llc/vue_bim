@@ -151,6 +151,26 @@ doc_events = {
 	}
 }
 
+# Fixtures
+# --------
+# Exported customizations that reapply automatically on bench migrate.
+
+fixtures = [
+	{
+		"dt": "Property Setter",
+		"filters": [
+			[
+				"name",
+				"in",
+				[
+					"Sales Order Item-supplier-in_list_view",
+					"Sales Order Item-delivered_by_supplier-in_list_view",
+				],
+			]
+		],
+	}
+]
+
 # Scheduled Tasks
 # ---------------
 
