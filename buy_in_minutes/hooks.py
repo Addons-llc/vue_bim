@@ -145,6 +145,12 @@ home_page = "buy-in-minutes"
 # 	}
 # }
 
+doc_events = {
+	"Sales Order": {
+		"on_submit": "buy_in_minutes.payment.on_sales_order_submit",
+	}
+}
+
 # Scheduled Tasks
 # ---------------
 

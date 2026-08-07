@@ -310,9 +310,17 @@ def _build_sales_order_item_rows(checkout_items, company):
 
 def _create_purchase_orders_for_sales_order(sales_order):
 	if not sales_order or sales_order.docstatus != 1:
+		frappe.logger("buy_in_minutes.payment").info(
+			f"Skipping purchase order creation for {getattr(sales_order, 'name', None)}: "
+			f"not submitted (docstatus={getattr(sales_order, 'docstatus', None)})"
+		)
 		return []
 
 	if frappe.db.exists("Purchase Order Item", {"sales_order": sales_order.name}):
+		frappe.logger("buy_in_minutes.payment").info(
+			f"Skipping purchase order creation for {sales_order.name}: "
+			f"a Purchase Order already references this Sales Order"
+		)
 		return []
 
 	selected_items = [
@@ -322,11 +330,34 @@ def _create_purchase_orders_for_sales_order(sales_order):
 	]
 
 	if not selected_items:
+		missing_supplier_items = [item.item_code for item in sales_order.items if not item.supplier]
+		frappe.logger("buy_in_minutes.payment").info(
+			f"Skipping purchase order creation for {sales_order.name}: "
+			f"no item has a default supplier (items without a supplier: {missing_supplier_items})"
+		)
 		return []
 
 	from erpnext.selling.doctype.sales_order.sales_order import make_purchase_order_for_default_supplier
 
-	return make_purchase_order_for_default_supplier(sales_order.name, selected_items=selected_items) or []
+	try:
+		purchase_orders = make_purchase_order_for_default_supplier(sales_order.name, selected_items=selected_items) or []
+	except Exception:
+		frappe.log_error(
+			title="Purchase Order Creation Failed",
+			message=f"Sales Order: {sales_order.name}\n\n{frappe.get_traceback()}",
+		)
+		return []
+
+	frappe.logger("buy_in_minutes.payment").info(
+		f"Created {len(purchase_orders)} purchase order(s) for {sales_order.name}: "
+		f"{[po.name for po in purchase_orders]}"
+	)
+
+	return purchase_orders
+
+
+def on_sales_order_submit(doc, method=None):
+	_create_purchase_orders_for_sales_order(doc)
 
 
 @contextmanager
