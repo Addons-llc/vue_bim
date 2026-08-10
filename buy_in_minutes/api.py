@@ -10,6 +10,32 @@ PUBLISH_FIELDS = (
 	"show_in_website",
 	"website_published",
 )
+ITEM_SUPPLIER_FIELDS = (
+	"supplier",
+	"default_supplier",
+	"supplier_name",
+	"custom_supplier",
+	"custom_supplier_name",
+)
+SUPPLIER_DETAIL_FIELDS = (
+	"supplier_name",
+	"supplier_group",
+	"supplier_type",
+	"supplier_details",
+	"website",
+	"mobile_no",
+	"email_id",
+	"image",
+	"supplier_logo",
+	"supplier_image",
+	"supplier_banner",
+	"supplier_banner_image",
+	"custom_supplier_logo",
+	"custom_supplier_image",
+	"custom_supplier_banner",
+	"custom_supplier_banner_image",
+	"custom_seller_since",
+)
 
 
 def _is_truthy_flag(value):
@@ -109,12 +135,112 @@ def _apply_item_group_images(items):
 		item.item_group_image = item_group_images.get(item.item_group)
 
 
+def _get_item_supplier_links(item_names):
+	item_names = [item_name for item_name in item_names if item_name]
+	if not item_names or not frappe.db.exists("DocType", "Item Supplier"):
+		return {}
+
+	item_supplier_rows = frappe.get_all(
+		"Item Supplier",
+		fields=["parent", "supplier"],
+		filters={"parent": ["in", item_names]},
+		order_by="idx asc",
+		ignore_permissions=True,
+		limit_page_length=len(item_names) * 5,
+	)
+	item_suppliers = {}
+	for row in item_supplier_rows:
+		if row.parent and row.supplier and row.parent not in item_suppliers:
+			item_suppliers[row.parent] = row.supplier
+
+	return item_suppliers
+
+
+def _get_supplier_from_item_fields(item):
+	for fieldname in ITEM_SUPPLIER_FIELDS:
+		if item.get(fieldname):
+			return item.get(fieldname)
+
+	return ""
+
+
+def _apply_supplier_details(items):
+	item_names = [item.name for item in items if item.name]
+	item_supplier_links = _get_item_supplier_links(item_names)
+	item_suppliers = {}
+
+	for item in items:
+		supplier = _get_supplier_from_item_fields(item) or item_supplier_links.get(item.name) or ""
+		if supplier:
+			item_suppliers[item.name] = supplier
+
+	supplier_names = sorted({supplier for supplier in item_suppliers.values() if supplier})
+	if not supplier_names:
+		return
+
+	supplier_fields = ["name"] + _get_existing_fields("Supplier", SUPPLIER_DETAIL_FIELDS)
+	supplier_records = frappe.get_all(
+		"Supplier",
+		fields=supplier_fields,
+		filters={"name": ["in", supplier_names]},
+		ignore_permissions=True,
+		limit_page_length=len(supplier_names),
+	)
+	suppliers_by_name = {
+		supplier.name: supplier
+		for supplier in supplier_records
+	}
+
+	for item in items:
+		supplier_name = item_suppliers.get(item.name)
+		supplier = suppliers_by_name.get(supplier_name)
+		if not supplier_name:
+			continue
+
+		item.supplier = supplier_name
+		item.default_supplier = supplier_name
+		item.supplier_display_name = (
+			supplier.get("supplier_name")
+			if supplier
+			else supplier_name
+		) or supplier_name
+
+		if not supplier:
+			continue
+
+		item.supplier_name = supplier.get("supplier_name") or supplier_name
+		item.supplier_group = supplier.get("supplier_group")
+		item.supplier_type = supplier.get("supplier_type")
+		item.supplier_details = supplier.get("supplier_details")
+		item.supplier_phone = supplier.get("mobile_no")
+		item.supplier_email = supplier.get("email_id")
+		item.supplier_website = supplier.get("website")
+		item.supplier_image = (
+			supplier.get("image")
+			or supplier.get("supplier_logo")
+			or supplier.get("supplier_image")
+			or supplier.get("custom_supplier_logo")
+			or supplier.get("custom_supplier_image")
+		)
+		item.supplier_banner = (
+			supplier.get("supplier_banner")
+			or supplier.get("supplier_banner_image")
+			or supplier.get("custom_supplier_banner")
+			or supplier.get("custom_supplier_banner_image")
+		)
+		item.seller_since = supplier.get("custom_seller_since")
+
+
 @frappe.whitelist(allow_guest=True)
-def get_items(limit_page_length=20, search=None, item_group=None):
+def get_items(limit_page_length=20, limit_start=0, search=None, item_group=None, item=None):
 	limit_page_length = frappe.utils.cint(limit_page_length) or 20
+	limit_start = frappe.utils.cint(limit_start) or 0
 
 	filters = {"disabled": 0}
 	or_filters = None
+
+	if item:
+		filters["name"] = item
 
 	if item_group:
 		filters["item_group"] = item_group
@@ -130,7 +256,13 @@ def get_items(limit_page_length=20, search=None, item_group=None):
 	item_meta = frappe.get_meta("Item")
 	optional_fields = [
 		fieldname
-		for fieldname in ("image", "website_image", "thumbnail", "standard_rate")
+		for fieldname in (
+			"image",
+			"website_image",
+			"thumbnail",
+			"standard_rate",
+			*ITEM_SUPPLIER_FIELDS,
+		)
 		if item_meta.has_field(fieldname)
 	]
 
@@ -147,11 +279,13 @@ def get_items(limit_page_length=20, search=None, item_group=None):
 		filters=filters,
 		or_filters=or_filters,
 		order_by="modified desc",
+		limit_start=limit_start,
 		limit_page_length=limit_page_length,
 	)
 
 	_apply_selling_prices(items)
 	_apply_item_group_images(items)
+	_apply_supplier_details(items)
 
 	return items
 
