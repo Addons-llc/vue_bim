@@ -207,3 +207,149 @@ def get_item_groups(limit_page_length=5000, published=1):
 		]
 
 	return item_groups
+
+
+@frappe.whitelist()
+def get_sales_order(sales_order_name):
+	if not sales_order_name:
+		frappe.throw("Sales Order is required.")
+
+	if not frappe.db.exists("Sales Order", sales_order_name):
+		frappe.throw("Sales Order was not found.")
+
+	sales_order = frappe.get_doc("Sales Order", sales_order_name)
+	if sales_order.owner != frappe.session.user and frappe.session.user != "Administrator":
+		frappe.throw("You are not allowed to view this Sales Order.")
+
+	item_codes = [row.item_code for row in sales_order.items if row.item_code]
+	item_images = {}
+	if item_codes:
+		item_meta = frappe.get_meta("Item")
+		image_fields = [
+			fieldname
+			for fieldname in ("image", "website_image", "thumbnail")
+			if item_meta.has_field(fieldname)
+		]
+		if image_fields:
+			item_records = frappe.get_all(
+				"Item",
+				fields=["name"] + image_fields,
+				filters={"name": ["in", item_codes]},
+				ignore_permissions=True,
+				limit_page_length=len(item_codes),
+			)
+			for item in item_records:
+				item_images[item.name] = next(
+					(item.get(fieldname) for fieldname in image_fields if item.get(fieldname)),
+					"",
+				)
+
+	return {
+		"name": sales_order.name,
+		"status": sales_order.status,
+		"transaction_date": sales_order.transaction_date,
+		"grand_total": flt(sales_order.grand_total),
+		"currency": sales_order.currency or "AED",
+		"items": [
+			{
+				"item_code": row.item_code,
+				"item_name": row.item_name or row.item_code,
+				"description": row.description,
+				"qty": flt(row.qty),
+				"rate": flt(row.rate),
+				"amount": flt(row.amount),
+				"image": item_images.get(row.item_code),
+			}
+			for row in sales_order.items
+		],
+	}
+
+
+@frappe.whitelist()
+def get_ordered_products(limit_page_length=40):
+	limit_page_length = frappe.utils.cint(limit_page_length) or 40
+	if frappe.session.user == "Guest":
+		frappe.throw("Please sign in to view ordered products.")
+
+	sales_orders = frappe.get_all(
+		"Sales Order",
+		fields=["name", "transaction_date"],
+		filters={
+			"owner": frappe.session.user,
+			"docstatus": ["<", 2],
+		},
+		order_by="modified desc",
+		ignore_permissions=True,
+		limit_page_length=20,
+	)
+	sales_order_names = [sales_order.name for sales_order in sales_orders]
+	if not sales_order_names:
+		return []
+
+	order_dates = {
+		sales_order.name: sales_order.transaction_date
+		for sales_order in sales_orders
+	}
+	rows = frappe.get_all(
+		"Sales Order Item",
+		fields=["parent", "item_code", "item_name", "description", "qty", "rate", "amount"],
+		filters={"parent": ["in", sales_order_names]},
+		order_by="creation desc",
+		ignore_permissions=True,
+		limit_page_length=limit_page_length,
+	)
+	item_codes = list({row.item_code for row in rows if row.item_code})
+	item_images = {}
+	item_groups = {}
+
+	if item_codes:
+		item_meta = frappe.get_meta("Item")
+		image_fields = [
+			fieldname
+			for fieldname in ("image", "website_image", "thumbnail")
+			if item_meta.has_field(fieldname)
+		]
+		item_records = frappe.get_all(
+			"Item",
+			fields=["name", "item_group"] + image_fields,
+			filters={"name": ["in", item_codes]},
+			ignore_permissions=True,
+			limit_page_length=len(item_codes),
+		)
+		for item in item_records:
+			item_groups[item.name] = item.item_group
+			item_images[item.name] = next(
+				(item.get(fieldname) for fieldname in image_fields if item.get(fieldname)),
+				"",
+			)
+
+	ordered_products = []
+	seen_item_codes = set()
+	for row in rows:
+		if not row.item_code or row.item_code in seen_item_codes:
+			continue
+
+		seen_item_codes.add(row.item_code)
+		ordered_products.append(
+			{
+				"id": row.item_code,
+				"itemCode": row.item_code,
+				"name": row.item_name or row.item_code,
+				"category": item_groups.get(row.item_code) or "",
+				"description": row.description,
+				"price": flt(row.rate),
+				"currency": "AED",
+				"quantity": flt(row.qty),
+				"orderedAmount": flt(row.amount),
+				"orderedDate": order_dates.get(row.parent),
+				"salesOrder": row.parent,
+				"rating": 4.8,
+				"reviewCount": 0,
+				"stockQuantity": 1,
+				"inStock": True,
+				"deliveryTime": "Ordered",
+				"image": item_images.get(row.item_code),
+			}
+		)
+
+	return ordered_products

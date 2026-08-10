@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 180" role="img" aria-label="Fresh grocery basket">
+  <circle cx="120" cy="90" r="82" fill="#ecfdf5"/>
+  <path d="M66 96c10 38 25 55 54 55s44-17 54-55H66Z" fill="#ffffff" stroke="#0f766e" stroke-width="8" stroke-linejoin="round"/>
+  <path d="M82 96c0-28 16-47 38-47s38 19 38 47" fill="none" stroke="#0f766e" stroke-width="8" stroke-linecap="round"/>
+  <circle cx="88" cy="105" r="21" fill="#22c55e"/>
+  <circle cx="119" cy="94" r="23" fill="#f97316"/>
+  <circle cx="151" cy="110" r="22" fill="#ef4444"/>
+  <path d="M109 62c8-14 22-21 39-19" fill="none" stroke="#16a34a" stroke-width="8" stroke-linecap="round"/>
+  <path d="M71 76c11-13 27-17 45-11" fill="none" stroke="#65a30d" stroke-width="8" stroke-linecap="round"/>
+  <path d="M84 132h72" stroke="#111827" stroke-width="8" stroke-linecap="round"/>
+  <circle cx="61" cy="61" r="7" fill="#bfdbfe"/>
+  <circle cx="184" cy="69" r="8" fill="#bfdbfe"/>
+  <circle cx="178" cy="138" r="6" fill="#bfdbfe"/>
+</svg>
