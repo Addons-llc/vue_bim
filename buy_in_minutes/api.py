@@ -52,6 +52,24 @@ def _get_existing_fields(doctype, fieldnames):
 	]
 
 
+def _record_has_publish_flag(record, publish_fields):
+	if not publish_fields:
+		return True
+
+	return any(_is_truthy_flag(record.get(fieldname)) for fieldname in publish_fields)
+
+
+def _filter_published_records(records, publish_fields):
+	if not publish_fields:
+		return records
+
+	return [
+		record
+		for record in records
+		if _record_has_publish_flag(record, publish_fields)
+	]
+
+
 def _get_selling_prices(item_codes):
 	item_codes = [item_code for item_code in item_codes if item_code]
 	if not item_codes:
@@ -232,7 +250,7 @@ def _apply_supplier_details(items):
 
 
 @frappe.whitelist(allow_guest=True)
-def get_items(limit_page_length=20, limit_start=0, search=None, item_group=None, item=None):
+def get_items(limit_page_length=20, limit_start=0, search=None, item_group=None, item=None, published=1):
 	limit_page_length = frappe.utils.cint(limit_page_length) or 20
 	limit_start = frappe.utils.cint(limit_start) or 0
 
@@ -254,6 +272,7 @@ def get_items(limit_page_length=20, limit_start=0, search=None, item_group=None,
 		]
 
 	item_meta = frappe.get_meta("Item")
+	publish_fields = _get_existing_fields("Item", PUBLISH_FIELDS)
 	optional_fields = [
 		fieldname
 		for fieldname in (
@@ -265,23 +284,35 @@ def get_items(limit_page_length=20, limit_start=0, search=None, item_group=None,
 		)
 		if item_meta.has_field(fieldname)
 	]
+	fields = [
+		"name",
+		"item_code",
+		"item_name",
+		"item_group",
+		"description",
+		"disabled",
+	] + optional_fields + publish_fields
+	get_all_kwargs = {
+		"fields": fields,
+		"filters": filters,
+		"or_filters": or_filters,
+		"order_by": "modified desc",
+	}
+
+	if _is_truthy_flag(published) and publish_fields:
+		get_all_kwargs["limit_page_length"] = 0
+	else:
+		get_all_kwargs["limit_start"] = limit_start
+		get_all_kwargs["limit_page_length"] = limit_page_length
 
 	items = frappe.get_all(
 		"Item",
-		fields=[
-			"name",
-			"item_code",
-			"item_name",
-			"item_group",
-			"description",
-			"disabled",
-		] + optional_fields,
-		filters=filters,
-		or_filters=or_filters,
-		order_by="modified desc",
-		limit_start=limit_start,
-		limit_page_length=limit_page_length,
+		**get_all_kwargs,
 	)
+
+	if _is_truthy_flag(published):
+		items = _filter_published_records(items, publish_fields)
+		items = items[limit_start:limit_start + limit_page_length]
 
 	_apply_selling_prices(items)
 	_apply_item_group_images(items)
@@ -293,20 +324,23 @@ def get_items(limit_page_length=20, limit_start=0, search=None, item_group=None,
 @frappe.whitelist(allow_guest=True)
 def get_item_groups(limit_page_length=5000, published=1):
 	limit_page_length = frappe.utils.cint(limit_page_length) or 5000
+	item_publish_fields = _get_existing_fields("Item", PUBLISH_FIELDS)
 
-	item_groups_with_items = frappe.get_all(
+	item_records = frappe.get_all(
 		"Item",
-		fields=["item_group"],
+		fields=["item_group"] + item_publish_fields,
 		filters={"disabled": 0},
-		group_by="item_group",
 		ignore_permissions=True,
-		limit_page_length=limit_page_length,
+		limit_page_length=0,
 	)
-	item_group_names = [
-		item_group.item_group
-		for item_group in item_groups_with_items
-		if item_group.item_group
-	]
+	if _is_truthy_flag(published):
+		item_records = _filter_published_records(item_records, item_publish_fields)
+
+	item_group_names = sorted({
+		item.item_group
+		for item in item_records
+		if item.item_group
+	})
 
 	if not item_group_names:
 		return []
