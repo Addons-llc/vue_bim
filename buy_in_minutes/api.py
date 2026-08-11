@@ -3,12 +3,9 @@ from frappe.utils import flt
 
 
 SELLING_PRICE_LIST = "Selling Price"
-PUBLISH_FIELDS = (
-	"published",
-	"is_published",
-	"published_in_website",
-	"show_in_website",
-	"website_published",
+ITEM_SUPPLIER_PORTAL_PUBLISH_FIELDS = (
+	"published_in_supplier_portal",
+	"custom_published_in_supplier_portal",
 )
 ITEM_SUPPLIER_FIELDS = (
 	"supplier",
@@ -49,6 +46,20 @@ def _get_existing_fields(doctype, fieldnames):
 		fieldname
 		for fieldname in fieldnames
 		if meta.has_field(fieldname)
+	]
+
+
+def _get_item_supplier_portal_publish_fields():
+	meta = frappe.get_meta("Item")
+	publish_fields = _get_existing_fields("Item", ITEM_SUPPLIER_PORTAL_PUBLISH_FIELDS)
+
+	if publish_fields:
+		return publish_fields
+
+	return [
+		df.fieldname
+		for df in meta.fields
+		if df.fieldname and df.label == "Published in Supplier Portal"
 	]
 
 
@@ -359,7 +370,7 @@ def get_items(
 		]
 
 	item_meta = frappe.get_meta("Item")
-	publish_fields = _get_existing_fields("Item", PUBLISH_FIELDS)
+	publish_fields = _get_item_supplier_portal_publish_fields()
 	optional_fields = [
 		fieldname
 		for fieldname in (
