@@ -423,27 +423,6 @@ def get_items(
 @frappe.whitelist(allow_guest=True)
 def get_item_groups(limit_page_length=5000, published=1):
 	limit_page_length = frappe.utils.cint(limit_page_length) or 5000
-	item_publish_fields = _get_existing_fields("Item", PUBLISH_FIELDS)
-
-	item_records = frappe.get_all(
-		"Item",
-		fields=["item_group"] + item_publish_fields,
-		filters={"disabled": 0},
-		ignore_permissions=True,
-		limit_page_length=0,
-	)
-	if _is_truthy_flag(published):
-		item_records = _filter_published_records(item_records, item_publish_fields)
-
-	item_group_names = sorted({
-		item.item_group
-		for item in item_records
-		if item.item_group
-	})
-
-	if not item_group_names:
-		return []
-
 	optional_fields = _get_existing_fields(
 		"Item Group",
 		(
@@ -451,30 +430,29 @@ def get_item_groups(limit_page_length=5000, published=1):
 			"profile_image",
 			"category_profile_image",
 			"item_group_profile_image",
+			"item_group_image",
+			"item_group_website_image",
 			"image",
 			"website_image",
+			"parent_item_group",
+			"is_group",
 		),
 	)
-	publish_fields = _get_existing_fields("Item Group", PUBLISH_FIELDS)
 	order_fields = _get_item_group_order_fields()
 
 	item_groups = frappe.get_all(
 		"Item Group",
-		fields=["name"] + optional_fields + publish_fields + order_fields,
-		filters={"name": ["in", item_group_names]},
+		fields=["name"] + optional_fields + order_fields,
 		ignore_permissions=True,
 		order_by=_get_item_group_order_by(order_fields),
-		limit_page_length=len(item_group_names),
+		limit_page_length=limit_page_length,
 	)
 
-	if _is_truthy_flag(published) and publish_fields:
-		item_groups = [
-			item_group
-			for item_group in item_groups
-			if any(_is_truthy_flag(item_group.get(fieldname)) for fieldname in publish_fields)
-		]
-
-	return item_groups
+	return [
+		item_group
+		for item_group in item_groups
+		if item_group.name != "All Item Groups"
+	]
 
 
 @frappe.whitelist()
