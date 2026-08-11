@@ -70,6 +70,20 @@ def _filter_published_records(records, publish_fields):
 	]
 
 
+def _get_item_group_order_fields():
+	return _get_existing_fields("Item Group", ("lft", "idx"))
+
+
+def _get_item_group_order_by(order_fields):
+	if "lft" in order_fields:
+		return "lft asc"
+
+	if "idx" in order_fields:
+		return "idx asc"
+
+	return "name asc"
+
+
 def _get_selling_prices(item_codes):
 	item_codes = [item_code for item_code in item_codes if item_code]
 	if not item_codes:
@@ -250,6 +264,44 @@ def _apply_supplier_details(items):
 
 
 @frappe.whitelist(allow_guest=True)
+def get_supplier_stores(limit_page_length=24, published=1):
+	limit_page_length = frappe.utils.cint(limit_page_length) or 24
+
+	if not frappe.db.exists("DocType", "Supplier Store"):
+		return []
+
+	fields = [
+		"name",
+		"store_name",
+		"store_code",
+		"supplier",
+		"store_status",
+		"published",
+		"store_logo",
+		"banner_image",
+		"primary_colour",
+		"secondary_colour",
+		"contact_number",
+		"whatsapp_number",
+	]
+	filters = {
+		"store_status": "Active",
+	}
+
+	if _is_truthy_flag(published):
+		filters["published"] = 1
+
+	return frappe.get_all(
+		"Supplier Store",
+		fields=fields,
+		filters=filters,
+		ignore_permissions=True,
+		order_by="modified desc",
+		limit_page_length=limit_page_length,
+	)
+
+
+@frappe.whitelist(allow_guest=True)
 def get_items(limit_page_length=20, limit_start=0, search=None, item_group=None, item=None, published=1):
 	limit_page_length = frappe.utils.cint(limit_page_length) or 20
 	limit_start = frappe.utils.cint(limit_start) or 0
@@ -357,13 +409,14 @@ def get_item_groups(limit_page_length=5000, published=1):
 		),
 	)
 	publish_fields = _get_existing_fields("Item Group", PUBLISH_FIELDS)
+	order_fields = _get_item_group_order_fields()
 
 	item_groups = frappe.get_all(
 		"Item Group",
-		fields=["name"] + optional_fields + publish_fields,
+		fields=["name"] + optional_fields + publish_fields + order_fields,
 		filters={"name": ["in", item_group_names]},
 		ignore_permissions=True,
-		order_by="name asc",
+		order_by=_get_item_group_order_by(order_fields),
 		limit_page_length=len(item_group_names),
 	)
 

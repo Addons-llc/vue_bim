@@ -1,0 +1,60 @@
+{
+  "actions": [],
+  "creation": "2026-08-10 00:00:00.000000",
+  "doctype": "DocType",
+  "editable_grid": 1,
+  "engine": "InnoDB",
+  "field_order": [
+    "item_code",
+    "published",
+    "featured",
+    "route_slug",
+    "display_order"
+  ],
+  "fields": [
+    {
+      "fieldname": "item_code",
+      "fieldtype": "Link",
+      "in_list_view": 1,
+      "label": "Item",
+      "options": "Item",
+      "reqd": 1
+    },
+    {
+      "default": "1",
+      "fieldname": "published",
+      "fieldtype": "Check",
+      "in_list_view": 1,
+      "label": "Published"
+    },
+    {
+      "default": "0",
+      "fieldname": "featured",
+      "fieldtype": "Check",
+      "in_list_view": 1,
+      "label": "Featured"
+    },
+    {
+      "fieldname": "route_slug",
+      "fieldtype": "Data",
+      "label": "Route Slug"
+    },
+    {
+      "default": "0",
+      "fieldname": "display_order",
+      "fieldtype": "Int",
+      "label": "Display Order"
+    }
+  ],
+  "index_web_pages_for_search": 0,
+  "istable": 1,
+  "module": "BIM Supplier Store",
+  "modified": "2026-08-10 00:00:00.000000",
+  "modified_by": "Administrator",
+  "name": "Store Product",
+  "owner": "Administrator",
+  "permissions": [],
+  "sort_field": "idx",
+  "sort_order": "ASC"
+}
+
