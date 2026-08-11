@@ -263,6 +263,32 @@ def _apply_supplier_details(items):
 		item.seller_since = supplier.get("custom_seller_since")
 
 
+def _get_supplier_detail_record(supplier):
+	if not supplier:
+		return None
+
+	supplier_fields = ["name"] + _get_existing_fields("Supplier", SUPPLIER_DETAIL_FIELDS)
+	supplier_filters = {"name": supplier}
+
+	if not frappe.db.exists("Supplier", supplier):
+		supplier_filters = {"supplier_name": supplier}
+
+	supplier_records = frappe.get_all(
+		"Supplier",
+		fields=supplier_fields,
+		filters=supplier_filters,
+		ignore_permissions=True,
+		limit_page_length=1,
+	)
+
+	return supplier_records[0] if supplier_records else None
+
+
+@frappe.whitelist(allow_guest=True)
+def get_supplier_details(supplier):
+	return _get_supplier_detail_record(supplier) or {}
+
+
 @frappe.whitelist(allow_guest=True)
 def get_supplier_stores(limit_page_length=24, published=1):
 	limit_page_length = frappe.utils.cint(limit_page_length) or 24
@@ -302,7 +328,16 @@ def get_supplier_stores(limit_page_length=24, published=1):
 
 
 @frappe.whitelist(allow_guest=True)
-def get_items(limit_page_length=20, limit_start=0, search=None, item_group=None, item=None, published=1):
+def get_items(
+	limit_page_length=20,
+	limit_start=0,
+	search=None,
+	item_group=None,
+	item=None,
+	supplier=None,
+	supplier_store=None,
+	published=1,
+):
 	limit_page_length = frappe.utils.cint(limit_page_length) or 20
 	limit_start = frappe.utils.cint(limit_start) or 0
 
@@ -369,6 +404,18 @@ def get_items(limit_page_length=20, limit_start=0, search=None, item_group=None,
 	_apply_selling_prices(items)
 	_apply_item_group_images(items)
 	_apply_supplier_details(items)
+
+	if supplier:
+		items = [
+			item
+			for item in items
+			if supplier in (
+				item.get("supplier"),
+				item.get("default_supplier"),
+				item.get("supplier_name"),
+				item.get("supplier_display_name"),
+			)
+		]
 
 	return items
 
