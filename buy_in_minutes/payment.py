@@ -361,13 +361,13 @@ def _get_purchase_orders_for_sales_order(sales_order_name):
 	purchase_order_names = frappe.get_all(
 		"Purchase Order Item",
 		filters={"sales_order": sales_order_name, "docstatus": ["<", 2]},
-		fields=["distinct parent as parent"],
+		pluck="parent",
 	)
 
 	return [
-		frappe.get_doc("Purchase Order", row.parent)
-		for row in purchase_order_names
-		if row.parent
+		frappe.get_doc("Purchase Order", purchase_order_name)
+		for purchase_order_name in dict.fromkeys(purchase_order_names)
+		if purchase_order_name
 	]
 
 
