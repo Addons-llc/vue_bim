@@ -661,10 +661,22 @@ def _submit_sales_order(sales_order_name):
 # 		"payment_status": session.get("payment_status"),
 # 	}
 
-@frappe.whitelist(methods=["POST"])
-def finalize_stripe_checkout(session_id=None):
-	_require_checkout_user()
+def _get_sales_order_item_summary(sales_order):
+	return [
+		{
+			"item_code": row.item_code,
+			"item_name": row.item_name or row.item_code,
+			"description": row.description,
+			"qty": flt(row.qty),
+			"rate": flt(row.rate),
+			"amount": flt(row.amount),
+		}
+		for row in sales_order.items
+	]
 
+
+@frappe.whitelist(allow_guest=True, methods=["POST"])
+def finalize_stripe_checkout(session_id=None):
 	if not session_id:
 		frappe.throw(_("Missing Stripe session id."))
 
@@ -692,6 +704,7 @@ def finalize_stripe_checkout(session_id=None):
 		"sales_order_status": sales_order.status,
 		"docstatus": sales_order.docstatus,
 		"payment_status": session.get("payment_status"),
+		"items": _get_sales_order_item_summary(sales_order),
 	}
 
 
