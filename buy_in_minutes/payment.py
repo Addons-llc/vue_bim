@@ -21,6 +21,7 @@ HANDLING_FEE = 2
 DELIVERY_FEE = 6
 FREE_DELIVERY_MINIMUM = 60
 SELLING_PRICE_LIST = "Selling Price"
+STRIPE_SETTINGS_DOCTYPE = "Stripe Settings"
 def _error(message, status_code=400):
 	frappe.local.response["http_status_code"] = status_code
 	return {"success": False, "message": message}
@@ -31,12 +32,38 @@ def _get_conf_value(key):
 	return value.strip() if isinstance(value, str) else value
 
 
+def _get_stripe_settings():
+	if frappe.db.exists("DocType", STRIPE_SETTINGS_DOCTYPE):
+		settings = frappe.get_single(STRIPE_SETTINGS_DOCTYPE)
+		secret_key = settings.get_password("secret_key") if settings.secret_key else None
+		webhook_secret = settings.get_password("webhook_secret") if settings.webhook_secret else None
+		if settings.enabled and secret_key:
+			stripe_currency = (
+				settings.get("currency")
+				or settings.get("default_currency")
+				or DEFAULT_CURRENCY
+			)
+			return {
+				"publishable_key": settings.publishable_key,
+				"secret_key": secret_key,
+				"webhook_secret": webhook_secret,
+				"currency": stripe_currency.strip().lower(),
+			}
+
+	return {
+		"publishable_key": _get_conf_value("stripe_publishable_key"),
+		"secret_key": _get_conf_value("stripe_secret_key"),
+		"webhook_secret": _get_conf_value("stripe_webhook_secret"),
+		"currency": DEFAULT_CURRENCY,
+	}
+
+
 def _get_stripe_secret_key():
-	return _get_conf_value("stripe_secret_key")
+	return _get_stripe_settings().get("secret_key")
 
 
 def _get_stripe_webhook_secret():
-	return _get_conf_value("stripe_webhook_secret")
+	return _get_stripe_settings().get("webhook_secret")
 
 
 def _stripe_request(path, params):
@@ -533,6 +560,7 @@ def _upsert_sales_order(checkout_items, sales_order_name=None, submit=False):
 def _build_checkout_params(checkout_items, sales_order_name=None):
 	success_url = get_url("/buy-in-minutes#/payment/success?method=stripe&session_id={CHECKOUT_SESSION_ID}")
 	cancel_url = get_url("/buy-in-minutes#/payment/cancel")
+	stripe_currency = _get_stripe_settings().get("currency") or DEFAULT_CURRENCY
 	params = {
 		"mode": "payment",
 		"success_url": success_url,
@@ -547,7 +575,7 @@ def _build_checkout_params(checkout_items, sales_order_name=None):
 	for index, item in enumerate(checkout_items):
 		unit_amount = int(round(item["rate"] * 100))
 		params[f"line_items[{index}][quantity]"] = item["quantity"]
-		params[f"line_items[{index}][price_data][currency]"] = DEFAULT_CURRENCY
+		params[f"line_items[{index}][price_data][currency]"] = stripe_currency
 		params[f"line_items[{index}][price_data][unit_amount]"] = unit_amount
 		params[f"line_items[{index}][price_data][product_data][name]"] = item["item_name"]
 		params[f"line_items[{index}][price_data][product_data][metadata][item_code]"] = item["item_code"]
