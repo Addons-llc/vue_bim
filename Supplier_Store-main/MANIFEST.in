@@ -1,4 +1,0 @@
-include license.txt
-include README.md
-recursive-include bim_supplier_store *.css *.csv *.html *.ico *.js *.json *.md *.png *.py *.svg *.txt
-

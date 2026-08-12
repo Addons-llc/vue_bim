@@ -203,6 +203,16 @@ def _get_default_supplier_for_item(item_code, company):
 		if supplier:
 			return supplier
 
+	item_suppliers = frappe.get_all(
+		"Item Supplier",
+		filters={"parent": item_code, "parenttype": "Item"},
+		fields=["supplier"],
+		order_by="idx asc",
+		limit_page_length=1,
+	)
+	if item_suppliers and item_suppliers[0].supplier:
+		return item_suppliers[0].supplier
+
 	return None
 
 
@@ -309,6 +319,53 @@ def _build_sales_order_item_rows(checkout_items, company):
 	return order_items
 
 
+def _resolve_sales_order_item_suppliers(sales_order):
+	company = sales_order.company or _get_default_company()
+	for item in sales_order.items:
+		if item.supplier or not item.item_code:
+			continue
+
+		supplier = _get_default_supplier_for_item(item.item_code, company)
+		if not supplier:
+			continue
+
+		item.supplier = supplier
+		item.delivered_by_supplier = 1
+		frappe.db.set_value(
+			item.doctype,
+			item.name,
+			{
+				"supplier": supplier,
+				"delivered_by_supplier": 1,
+			},
+			update_modified=False,
+		)
+
+
+def _get_purchase_orders_for_sales_order(sales_order_name):
+	purchase_order_names = frappe.get_all(
+		"Purchase Order Item",
+		filters={"sales_order": sales_order_name, "docstatus": ["<", 2]},
+		fields=["distinct parent as parent"],
+	)
+
+	return [
+		frappe.get_doc("Purchase Order", row.parent)
+		for row in purchase_order_names
+		if row.parent
+	]
+
+
+def _get_purchase_orderable_sales_order_items(sales_order):
+	return [
+		{"item_code": item.item_code, "supplier": item.supplier}
+		for item in sales_order.items
+		if item.item_code
+		and item.supplier
+		and flt(item.ordered_qty) < flt(item.stock_qty)
+	]
+
+
 def _create_purchase_orders_for_sales_order(sales_order):
 	if not sales_order or sales_order.docstatus != 1:
 		frappe.logger("buy_in_minutes.payment").info(
@@ -317,37 +374,25 @@ def _create_purchase_orders_for_sales_order(sales_order):
 		)
 		return []
 
-	if frappe.db.exists("Purchase Order Item", {"sales_order": sales_order.name}):
-		purchase_order_names = frappe.get_all(
-			"Purchase Order Item",
-			filters={"sales_order": sales_order.name},
-			fields=["distinct parent as parent"],
-		)
-		purchase_orders = [
-			frappe.get_doc("Purchase Order", row.parent)
-			for row in purchase_order_names
-			if row.parent
-		]
-		_submit_purchase_orders(purchase_orders, sales_order.name)
-		frappe.logger("buy_in_minutes.payment").info(
-			f"Skipping purchase order creation for {sales_order.name}: "
-			f"a Purchase Order already references this Sales Order"
-		)
-		return purchase_orders
+	_resolve_sales_order_item_suppliers(sales_order)
 
-	selected_items = [
-		{"item_code": item.item_code, "supplier": item.supplier}
-		for item in sales_order.items
-		if item.item_code and item.supplier
-	]
+	linked_purchase_orders = _get_purchase_orders_for_sales_order(sales_order.name)
+	_submit_purchase_orders(linked_purchase_orders, sales_order.name)
+
+	if linked_purchase_orders:
+		sales_order.reload()
+		_resolve_sales_order_item_suppliers(sales_order)
+
+	selected_items = _get_purchase_orderable_sales_order_items(sales_order)
 
 	if not selected_items:
 		missing_supplier_items = [item.item_code for item in sales_order.items if not item.supplier]
 		frappe.logger("buy_in_minutes.payment").info(
 			f"Skipping purchase order creation for {sales_order.name}: "
-			f"no item has a default supplier (items without a supplier: {missing_supplier_items})"
+			f"no remaining item needs a Purchase Order "
+			f"(items without a supplier: {missing_supplier_items})"
 		)
-		return []
+		return linked_purchase_orders
 
 	from erpnext.selling.doctype.sales_order.sales_order import make_purchase_order_for_default_supplier
 
@@ -358,7 +403,7 @@ def _create_purchase_orders_for_sales_order(sales_order):
 			title="Purchase Order Creation Failed",
 			message=f"Sales Order: {sales_order.name}\n\n{frappe.get_traceback()}",
 		)
-		return []
+		raise
 
 	_submit_purchase_orders(purchase_orders, sales_order.name)
 
@@ -367,7 +412,7 @@ def _create_purchase_orders_for_sales_order(sales_order):
 		f"{[po.name for po in purchase_orders]}"
 	)
 
-	return purchase_orders
+	return linked_purchase_orders + purchase_orders
 
 
 def _submit_purchase_orders(purchase_orders, sales_order_name):
@@ -388,6 +433,7 @@ def _submit_purchase_orders(purchase_orders, sales_order_name):
 					f"{frappe.get_traceback()}"
 				),
 			)
+			raise
 
 
 def on_sales_order_submit(doc, method=None):

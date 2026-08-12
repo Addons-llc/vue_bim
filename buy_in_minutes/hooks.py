@@ -200,9 +200,9 @@ fixtures = [
 # Overriding Methods
 # ------------------------------
 #
-# override_whitelisted_methods = {
-# 	"frappe.desk.doctype.event.event.get_events": "buy_in_minutes.event.get_events"
-# }
+override_whitelisted_methods = {
+	"buy_in_minutes.create_cash_on_delivery_order": "buy_in_minutes.payment.create_cash_on_delivery_order"
+}
 #
 # each overriding function accepts a `data` argument;
 # generated from the base implementation of the doctype dashboard,
