@@ -318,11 +318,22 @@ def _create_purchase_orders_for_sales_order(sales_order):
 		return []
 
 	if frappe.db.exists("Purchase Order Item", {"sales_order": sales_order.name}):
+		purchase_order_names = frappe.get_all(
+			"Purchase Order Item",
+			filters={"sales_order": sales_order.name},
+			fields=["distinct parent as parent"],
+		)
+		purchase_orders = [
+			frappe.get_doc("Purchase Order", row.parent)
+			for row in purchase_order_names
+			if row.parent
+		]
+		_submit_purchase_orders(purchase_orders, sales_order.name)
 		frappe.logger("buy_in_minutes.payment").info(
 			f"Skipping purchase order creation for {sales_order.name}: "
 			f"a Purchase Order already references this Sales Order"
 		)
-		return []
+		return purchase_orders
 
 	selected_items = [
 		{"item_code": item.item_code, "supplier": item.supplier}
@@ -349,12 +360,34 @@ def _create_purchase_orders_for_sales_order(sales_order):
 		)
 		return []
 
+	_submit_purchase_orders(purchase_orders, sales_order.name)
+
 	frappe.logger("buy_in_minutes.payment").info(
 		f"Created {len(purchase_orders)} purchase order(s) for {sales_order.name}: "
 		f"{[po.name for po in purchase_orders]}"
 	)
 
 	return purchase_orders
+
+
+def _submit_purchase_orders(purchase_orders, sales_order_name):
+	for purchase_order in purchase_orders or []:
+		if not purchase_order or purchase_order.docstatus != 0:
+			continue
+
+		try:
+			with _as_administrator():
+				purchase_order.flags.ignore_permissions = True
+				purchase_order.submit()
+		except Exception:
+			frappe.log_error(
+				title="Purchase Order Submission Failed",
+				message=(
+					f"Sales Order: {sales_order_name}\n"
+					f"Purchase Order: {getattr(purchase_order, 'name', None)}\n\n"
+					f"{frappe.get_traceback()}"
+				),
+			)
 
 
 def on_sales_order_submit(doc, method=None):
