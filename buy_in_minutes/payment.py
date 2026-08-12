@@ -216,7 +216,22 @@ def _get_default_supplier_for_item(item_code, company):
 	return None
 
 
+def _is_guest_user(user_name=None):
+	user_name = user_name if user_name is not None else frappe.session.user
+	return not user_name or user_name == "Guest"
+
+
+def _require_checkout_user():
+	if _is_guest_user():
+		frappe.throw(_("Please sign in before checkout."), frappe.AuthenticationError)
+
+	return frappe.session.user
+
+
 def _get_or_create_customer_for_user(user_name):
+	if _is_guest_user(user_name):
+		frappe.throw(_("Please sign in before checkout."), frappe.AuthenticationError)
+
 	user = frappe.get_doc("User", user_name)
 	customer_name = None
 	if user.email:
@@ -620,11 +635,7 @@ def _submit_sales_order(sales_order_name):
 
 @frappe.whitelist(methods=["POST"])
 def finalize_stripe_checkout(session_id=None):
-	if frappe.session.user == "Guest":
-		frappe.throw(
-			_("Please sign in before checkout."),
-			frappe.AuthenticationError,
-		)
+	_require_checkout_user()
 
 	if not session_id:
 		frappe.throw(_("Missing Stripe session id."))
@@ -658,8 +669,7 @@ def finalize_stripe_checkout(session_id=None):
 
 @frappe.whitelist(methods=["POST"])
 def sync_cart_sales_order(cart_items=None, sales_order_name=None):
-	if frappe.session.user == "Guest":
-		frappe.throw(_("Please sign in before checkout."), frappe.AuthenticationError)
+	_require_checkout_user()
 
 	checkout_items = _get_checkout_items(cart_items)
 	sales_order = _upsert_sales_order(checkout_items, sales_order_name=sales_order_name)
@@ -672,8 +682,7 @@ def sync_cart_sales_order(cart_items=None, sales_order_name=None):
 
 @frappe.whitelist(methods=["POST"])
 def create_checkout_session(cart_items=None, sales_order_name=None):
-	if frappe.session.user == "Guest":
-		frappe.throw(_("Please sign in before checkout."), frappe.AuthenticationError)
+	_require_checkout_user()
 
 	checkout_items = _get_checkout_items(cart_items)
 	sales_order = _upsert_sales_order(checkout_items, sales_order_name=sales_order_name)
@@ -692,8 +701,7 @@ def create_checkout_session(cart_items=None, sales_order_name=None):
 
 @frappe.whitelist(methods=["POST"])
 def create_cash_on_delivery_order(cart_items=None, sales_order_name=None):
-	if frappe.session.user == "Guest":
-		frappe.throw(_("Please sign in before checkout."), frappe.AuthenticationError)
+	_require_checkout_user()
 
 	checkout_items = _get_checkout_items(cart_items)
 	sales_order = _upsert_sales_order(checkout_items, sales_order_name=sales_order_name, submit=True)
