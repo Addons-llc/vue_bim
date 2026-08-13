@@ -23,7 +23,7 @@ async function openCategoriesTab(store) {
       brandError.value = message
     },
   })
-}
+} 
 
 async function loadBrands() {
   isLoadingBrands.value = !brands.value.length
