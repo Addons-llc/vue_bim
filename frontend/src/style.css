@@ -1,0 +1,10 @@
+@import './styles/base.css';
+@import './styles/header.css';
+@import './styles/home.css';
+@import './styles/category-rail.css';
+@import './styles/products.css';
+@import './styles/category-detail.css';
+@import './styles/cart-payment.css';
+@import './styles/auth.css';
+@import './styles/supplier-location-footer.css';
+@import './styles/responsive.css';

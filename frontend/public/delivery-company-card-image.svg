@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 180" role="img" aria-label="Delivery company enrollment illustration">
+  <defs>
+    <linearGradient id="rider" x1="88" x2="152" y1="35" y2="126" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#22c55e"/>
+      <stop offset="1" stop-color="#15803d"/>
+    </linearGradient>
+    <linearGradient id="scooter" x1="40" x2="168" y1="96" y2="146" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0ea5e9"/>
+      <stop offset="1" stop-color="#0369a1"/>
+    </linearGradient>
+    <linearGradient id="box" x1="159" x2="217" y1="79" y2="149" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#fbbf24"/>
+      <stop offset="1" stop-color="#f97316"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-25%" width="140%" height="155%">
+      <feDropShadow dx="0" dy="10" stdDeviation="8" flood-color="#14532d" flood-opacity=".22"/>
+    </filter>
+  </defs>
+  <circle cx="189" cy="45" r="18" fill="#bef264" opacity=".8"/>
+  <path d="M28 73c29-35 88-49 143-38 38 8 58 33 53 62-7 40-59 65-112 57-59-9-115-39-84-81Z" fill="#dcfce7" opacity=".7"/>
+  <ellipse cx="123" cy="153" rx="88" ry="14" fill="#14532d" opacity=".14"/>
+  <g filter="url(#shadow)">
+    <path d="M65 123h88c11 0 21 9 24 20H50c2-12 7-20 15-20Z" fill="url(#scooter)"/>
+    <path d="M142 99h27c10 0 19 8 19 18v7h-52l6-25Z" fill="#38bdf8"/>
+    <path d="M57 116h51c5 0 8 4 7 9l-2 11H39l5-12c2-5 7-8 13-8Z" fill="#075985"/>
+    <circle cx="66" cy="143" r="17" fill="#052e16"/>
+    <circle cx="66" cy="143" r="8" fill="#bbf7d0"/>
+    <circle cx="167" cy="143" r="17" fill="#052e16"/>
+    <circle cx="167" cy="143" r="8" fill="#bbf7d0"/>
+    <path d="M164 91h38v48h-38z" fill="url(#box)"/>
+    <path d="M164 91h38l-10-13h-38l10 13Z" fill="#fed7aa"/>
+    <path d="M202 91v48l-10 9v-44l10-13Z" fill="#ea580c"/>
+  </g>
+  <g filter="url(#shadow)">
+    <circle cx="111" cy="44" r="18" fill="#fed7aa"/>
+    <path d="M93 41c2-17 18-25 34-14 5 11-2 20-13 20-8 0-13-3-21-6Z" fill="#14532d"/>
+    <path d="M96 66h38c8 0 15 7 15 15v38H82V81c0-8 6-15 14-15Z" fill="url(#rider)"/>
+    <path d="M99 84 83 113" stroke="#14532d" stroke-width="9" stroke-linecap="round"/>
+    <path d="M134 84 157 111" stroke="#14532d" stroke-width="9" stroke-linecap="round"/>
+    <path d="M98 119h26l-4 30H91l7-30Z" fill="#0f766e"/>
+    <path d="M123 119h26l11 30h-30l-7-30Z" fill="#0f766e"/>
+    <path d="M103 72h29" stroke="#dcfce7" stroke-width="5" stroke-linecap="round"/>
+  </g>
+  <path d="M41 54h25M54 42v25M203 62h18M212 53v18" stroke="#22c55e" stroke-width="5" stroke-linecap="round" opacity=".7"/>
+</svg>

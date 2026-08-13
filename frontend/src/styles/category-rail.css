@@ -1,0 +1,202 @@
+.category-section {
+  padding: 24px 0 6px;
+}
+
+.dashboard-hero + .category-section {
+  margin-top: 26px;
+}
+
+.dashboard-hero ~ .category-section {
+  border: 0;
+  border-radius: 0;
+  padding: 0 0 18px;
+  background: transparent;
+  box-shadow: none;
+}
+
+.dashboard-hero ~ .category-section + .category-section {
+  border-top: 0;
+  padding-top: 12px;
+}
+
+.dashboard-hero ~ .category-section .category-grid {
+  grid-template-columns: repeat(auto-fill, minmax(86px, 92px));
+  justify-content: start;
+  gap: 22px 30px;
+}
+
+.dashboard-hero ~ .category-section .category-tile {
+  border-radius: 0;
+  padding: 0;
+  background: transparent;
+}
+
+.dashboard-hero ~ .category-section .category-tile:hover,
+.dashboard-hero ~ .category-section .category-tile:focus-visible,
+.dashboard-hero ~ .category-section .category-tile.is-active {
+  background: transparent;
+}
+
+.dashboard-hero ~ .category-section .category-image-wrap {
+  width: 86px;
+  height: 86px;
+  max-width: 86px;
+  background: #ffffff;
+  border: 1px solid #aeb8c6;
+  box-shadow: none;
+}
+
+.dashboard-hero ~ .category-section .category-image {
+  transform: scale(1.16);
+}
+
+.category-section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.category-section-heading h2 {
+  margin: 0;
+  color: #111827;
+  font-size: 22px;
+  font-weight: 750;
+  line-height: 1.18;
+}
+
+.category-section-heading .category-view-all-link {
+  flex: 0 0 auto;
+  font-size: 14px;
+  text-decoration: none;
+}
+
+.category-grid {
+  display: grid;
+  grid-template-columns: repeat(10, minmax(0, 1fr));
+  gap: 24px 16px;
+  align-items: start;
+}
+
+.categories-page .category-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  justify-content: stretch;
+  justify-items: center;
+}
+
+.categories-page .category-tile {
+  width: 100%;
+  max-width: 112px;
+}
+
+.category-section .category-grid.is-manual-scroll,
+.dashboard-hero ~ .category-section .category-grid.is-manual-scroll {
+  display: flex;
+  flex-wrap: nowrap;
+  grid-template-columns: none;
+  justify-content: flex-start;
+  gap: 22px 30px;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x proximity;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.category-section .category-grid.is-manual-scroll::-webkit-scrollbar,
+.dashboard-hero ~ .category-section .category-grid.is-manual-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.category-section .category-grid.is-manual-scroll .category-tile {
+  flex: 0 0 92px;
+  width: 92px;
+  min-width: 92px;
+  scroll-snap-align: start;
+}
+
+.category-tile {
+  display: grid;
+  gap: 10px;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: #374151;
+  text-align: center;
+  cursor: pointer;
+  transition:
+    color 0.2s ease,
+    transform 0.2s ease;
+}
+
+.category-tile:hover,
+.category-tile:focus-visible,
+.category-tile.is-active {
+  color: #111827;
+}
+
+.category-tile:hover,
+.category-tile:focus-visible {
+  transform: translateY(-2px);
+}
+
+.category-tile:focus-visible {
+  outline: 3px solid rgba(37, 99, 235, 0.18);
+  outline-offset: 6px;
+}
+
+.category-image-wrap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: auto;
+  max-width: 112px;
+  aspect-ratio: 1;
+  justify-self: center;
+  border-radius: 999px;
+  background: #ffffff;
+  overflow: hidden;
+  clip-path: circle(50%);
+  -webkit-mask-image: radial-gradient(circle, #000 99%, transparent 100%);
+  mask-image: radial-gradient(circle, #000 99%, transparent 100%);
+  padding: 0;
+  transition:
+    box-shadow 0.2s ease,
+    background-color 0.2s ease;
+}
+
+.category-tile:hover .category-image-wrap,
+.category-tile:focus-visible .category-image-wrap,
+.category-tile.is-active .category-image-wrap {
+  background: #eaf2ff;
+  box-shadow: 0 10px 24px rgba(37, 99, 235, 0.13);
+}
+
+.category-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  object-fit: cover;
+  object-position: center;
+}
+
+.category-name {
+  display: -webkit-box;
+  min-height: 36px;
+  overflow: hidden;
+  color: currentColor;
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 1.25;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.category-tile.is-active .category-name {
+  color: #2563eb;
+}
