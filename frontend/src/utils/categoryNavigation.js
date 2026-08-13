@@ -13,6 +13,36 @@ function getCategoryName(item = {}) {
   return item.itemGroup || item.category || item.name?.replace(/\s+Shop$/, '') || ''
 }
 
+function getSourceLabel(item = {}, sourceType = 'category') {
+  if (sourceType === 'brand') {
+    return 'Brand'
+  }
+
+  if (sourceType === 'store' || /\s+Shop$/.test(item.name || '')) {
+    return 'Store'
+  }
+
+  return 'Category'
+}
+
+function getSelectedProductWithSource(product, item, sourceType) {
+  return {
+    ...product,
+    sourceListing: {
+      type: sourceType,
+      label: getSourceLabel(item, sourceType),
+      id: item.id || '',
+      name: item.name || getCategoryName(item),
+      itemGroup: getCategoryName(item),
+      supplier: item.supplier || product.supplier || '',
+      supplierName: product.supplierName || product.supplier || item.supplier || '',
+      storeCode: item.storeCode || '',
+      description: item.description || item.supplierDetails || '',
+      image: item.image || item.bannerImage || '',
+    },
+  }
+}
+
 function getCategoryKeys(item = {}) {
   return [
     item.itemGroup,
@@ -96,18 +126,19 @@ export async function openCategoryOrProduct({
       return
     }
 
-    const supplierName = product.supplierName || product.supplier || 'Supplier not set'
+    const selectedProduct = getSelectedProductWithSource(product, item, sourceType)
+    const supplierName = selectedProduct.supplierName || selectedProduct.supplier || 'Supplier not set'
 
-    saveSelectedProduct(product)
+    saveSelectedProduct(selectedProduct)
     saveSelectedSupplier({
       name: supplierName,
-      details: product.supplierDetails,
-      product,
+      details: selectedProduct.supplierDetails,
+      product: selectedProduct,
     })
 
     await router.push({
       name: 'product-details',
-      params: { productId: product.id },
+      params: { productId: selectedProduct.id },
     })
   } catch (error) {
     onError?.(error.message || `Unable to open ${item.name}.`)

@@ -136,7 +136,11 @@ async function openCategoriesTab(category) {
     categories: categories.value,
     item: category,
     router,
-    sourceType: category.storeCode || category.supplier ? 'brand' : 'category',
+    sourceType: category.storeCode || category.supplier
+      ? 'brand'
+      : /\s+Shop$/.test(category.name || '')
+        ? 'store'
+        : 'category',
   })
 }
 

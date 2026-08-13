@@ -28,6 +28,7 @@ const productQuantity = computed(() => {
 const supplierName = computed(() =>
   product.value?.supplierName || product.value?.supplier || 'Supplier not set',
 )
+const sourceListing = computed(() => product.value?.sourceListing || null)
 const ratingStars = computed(() => {
   const rating = Math.round(Number(product.value?.rating || 0))
 
@@ -49,6 +50,7 @@ function mergeProductDetails(cachedProduct, loadedProduct) {
     supplierName: loadedProduct.supplierName || cachedProduct.supplierName,
     supplier: loadedProduct.supplier || cachedProduct.supplier,
     supplierDetails: loadedProduct.supplierDetails || cachedProduct.supplierDetails,
+    sourceListing: cachedProduct.sourceListing || loadedProduct.sourceListing,
     deliveryTime: loadedProduct.deliveryTime || cachedProduct.deliveryTime,
     reviewCount: loadedProduct.reviewCount || cachedProduct.reviewCount,
     stockQuantity: loadedProduct.stockQuantity || cachedProduct.stockQuantity,
@@ -110,11 +112,17 @@ const productDetails = computed(() => {
   }
 
   return [
+    sourceListing.value?.name
+      ? { label: sourceListing.value.label || 'Selected from', value: sourceListing.value.name }
+      : null,
     { label: 'Supplier', value: supplierName.value },
+    sourceListing.value?.storeCode
+      ? { label: 'Store code', value: sourceListing.value.storeCode }
+      : null,
     { label: 'Pack size', value: product.value.description },
     { label: 'Category', value: product.value.category },
     { label: 'Delivery', value: product.value.deliveryTime },
-  ].filter((detail) => detail.value)
+  ].filter((detail) => detail?.value)
 })
 
 async function loadProduct() {
@@ -259,6 +267,9 @@ watch(productId, loadProduct, { immediate: true })
 
       <div class="product-detail-content">
         <p class="product-detail-category">{{ supplierName }}</p>
+        <p v-if="sourceListing" class="product-detail-category">
+          {{ sourceListing.label }}: {{ sourceListing.name }}
+        </p>
         <h2 :id="`product-detail-title-${product.id}`">{{ product.name }}</h2>
 
         <div class="product-detail-rating-row">

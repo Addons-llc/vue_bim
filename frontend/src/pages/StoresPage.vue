@@ -27,7 +27,7 @@ async function openCategoriesTab(store) {
     categories: categories.value,
     item: store,
     router,
-    sourceType: 'category',
+    sourceType: 'store',
     onError: (message) => {
       storeError.value = message
     },

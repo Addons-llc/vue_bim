@@ -274,6 +274,90 @@ def _apply_supplier_details(items):
 		item.seller_since = supplier.get("custom_seller_since")
 
 
+def _get_supplier_store_record(supplier_store):
+	if not supplier_store or not frappe.db.exists("DocType", "Supplier Store"):
+		return None
+
+	if frappe.db.exists("Supplier Store", supplier_store):
+		return frappe.get_doc("Supplier Store", supplier_store)
+
+	store_meta = frappe.get_meta("Supplier Store")
+	or_filters = [
+		[fieldname, "=", supplier_store]
+		for fieldname in ("store_code", "store_name", "supplier")
+		if store_meta.has_field(fieldname)
+	]
+
+	if not or_filters:
+		return None
+
+	store_records = frappe.get_all(
+		"Supplier Store",
+		fields=["name"],
+		or_filters=or_filters,
+		ignore_permissions=True,
+		limit_page_length=1,
+	)
+
+	return frappe.get_doc("Supplier Store", store_records[0].name) if store_records else None
+
+
+def _get_supplier_store_item_codes(supplier_store_record):
+	if not supplier_store_record:
+		return []
+
+	item_codes = []
+	store_meta = frappe.get_meta("Supplier Store")
+	table_fields = [
+		field
+		for field in store_meta.fields
+		if field.fieldtype == "Table"
+	]
+
+	for table_field in table_fields:
+		for row in supplier_store_record.get(table_field.fieldname) or []:
+			for fieldname in (
+				"item",
+				"item_code",
+				"item_name",
+				"product",
+				"product_code",
+			):
+				if row.get(fieldname):
+					item_codes.append(row.get(fieldname))
+					break
+
+	return list(dict.fromkeys(item_codes))
+
+
+def _filter_items_by_supplier(items, supplier):
+	if not supplier:
+		return items
+
+	return [
+		item
+		for item in items
+		if supplier in (
+			item.get("supplier"),
+			item.get("default_supplier"),
+			item.get("supplier_name"),
+			item.get("supplier_display_name"),
+		)
+	]
+
+
+def _filter_items_by_item_codes(items, item_codes):
+	item_codes = set(item_codes or [])
+	if not item_codes:
+		return items
+
+	return [
+		item
+		for item in items
+		if item.get("name") in item_codes or item.get("item_code") in item_codes
+	]
+
+
 def _get_supplier_detail_record(supplier):
 	if not supplier:
 		return None
@@ -307,25 +391,51 @@ def get_supplier_stores(limit_page_length=24, published=1):
 	if not frappe.db.exists("DocType", "Supplier Store"):
 		return []
 
-	fields = [
-		"name",
-		"store_name",
-		"store_code",
-		"supplier",
-		"store_status",
-		"published",
-		"store_logo",
-		"banner_image",
-		"primary_colour",
-		"secondary_colour",
-		"contact_number",
-		"whatsapp_number",
-	]
-	filters = {
-		"store_status": "Active",
-	}
+	store_fields = _get_existing_fields(
+		"Supplier Store",
+		(
+			"store_name",
+			"store_code",
+			"supplier",
+			"store_status",
+			"published",
+			"store_logo",
+			"logo",
+			"supplier_logo",
+			"custom_store_logo",
+			"custom_supplier_logo",
+			"banner_image",
+			"store_banner",
+			"store_banner_image",
+			"supplier_banner",
+			"supplier_banner_image",
+			"custom_banner_image",
+			"custom_store_banner",
+			"custom_store_banner_image",
+			"custom_supplier_banner",
+			"custom_supplier_banner_image",
+			"primary_colour",
+			"secondary_colour",
+			"contact_number",
+			"whatsapp_number",
+			"email",
+			"contact_email",
+			"website",
+			"store_website",
+			"description",
+			"store_details",
+			"about",
+			"supplier_details",
+			"seller_since",
+		),
+	)
+	fields = ["name"] + store_fields
+	filters = {}
 
-	if _is_truthy_flag(published):
+	if "store_status" in store_fields:
+		filters["store_status"] = "Active"
+
+	if _is_truthy_flag(published) and "published" in store_fields:
 		filters["published"] = 1
 
 	return frappe.get_all(
@@ -351,6 +461,14 @@ def get_items(
 ):
 	limit_page_length = frappe.utils.cint(limit_page_length) or 20
 	limit_start = frappe.utils.cint(limit_start) or 0
+	supplier_store_record = _get_supplier_store_record(supplier_store)
+	supplier_store_item_codes = _get_supplier_store_item_codes(supplier_store_record)
+
+	if supplier_store and not supplier_store_record:
+		return []
+
+	if supplier_store_record and not supplier:
+		supplier = supplier_store_record.get("supplier")
 
 	filters = {"disabled": 0}
 	or_filters = None
@@ -396,8 +514,9 @@ def get_items(
 		"or_filters": or_filters,
 		"order_by": "modified desc",
 	}
+	should_filter_after_loading = bool(supplier or supplier_store_item_codes)
 
-	if _is_truthy_flag(published) and publish_fields:
+	if _is_truthy_flag(published) and (publish_fields or should_filter_after_loading):
 		get_all_kwargs["limit_page_length"] = 0
 	else:
 		get_all_kwargs["limit_start"] = limit_start
@@ -410,23 +529,15 @@ def get_items(
 
 	if _is_truthy_flag(published):
 		items = _filter_published_records(items, publish_fields)
-		items = items[limit_start:limit_start + limit_page_length]
 
 	_apply_selling_prices(items)
 	_apply_item_group_images(items)
 	_apply_supplier_details(items)
+	items = _filter_items_by_item_codes(items, supplier_store_item_codes)
+	items = _filter_items_by_supplier(items, supplier)
 
-	if supplier:
-		items = [
-			item
-			for item in items
-			if supplier in (
-				item.get("supplier"),
-				item.get("default_supplier"),
-				item.get("supplier_name"),
-				item.get("supplier_display_name"),
-			)
-		]
+	if _is_truthy_flag(published) and (publish_fields or should_filter_after_loading):
+		items = items[limit_start:limit_start + limit_page_length]
 
 	return items
 
