@@ -12,16 +12,26 @@ const emptySearchText = computed(() => '')
 const isStoreDetailsPage = computed(() => route.name === 'store-details')
 const selectedCategory = computed(() => route.params.categoryName || '')
 const selectedCategoryTitle = computed(() => {
+  const routeTitle = Array.isArray(route.query.title) ? route.query.title[0] : route.query.title
+
+  if (routeTitle) {
+    return routeTitle
+  }
+
   if (!selectedCategory.value) {
     return isStoreDetailsPage.value ? 'Store' : 'Category'
   }
 
   return isStoreDetailsPage.value
-    ? `${selectedCategory.value} Shop`
+    ? selectedCategory.value
     : selectedCategory.value
 })
 const detailLabel = computed(() => (isStoreDetailsPage.value ? 'Store' : 'Category'))
-const backRoute = computed(() => ({ name: isStoreDetailsPage.value ? 'stores' : 'categories' }))
+const backRoute = computed(() =>
+  isStoreDetailsPage.value
+    ? { name: 'categories', query: { tab: 'stores' } }
+    : { name: 'categories' },
+)
 const detailRouteName = computed(() =>
   isStoreDetailsPage.value ? 'store-details' : 'category-details',
 )
@@ -35,7 +45,12 @@ const {
   loadMoreProducts,
   productError,
   products,
-} = useProducts(emptySearchText, selectedCategory)
+} = useProducts(emptySearchText, selectedCategory, {
+  getCategoryProductParams: (category) =>
+    isStoreDetailsPage.value
+      ? { supplier_store: category }
+      : { item_group: category },
+})
 
 const categoryPlaceholderImage = `${import.meta.env.BASE_URL}grocery-card-image-v3.svg?v=3`
 
@@ -117,7 +132,11 @@ function openProductDetails(product) {
     </header>
 
     <div class="category-detail-layout">
-      <aside class="category-detail-sidebar" aria-label="Categories">
+      <aside
+        v-if="!isStoreDetailsPage"
+        class="category-detail-sidebar"
+        aria-label="Categories"
+      >
         <button
           class="category-side-item"
           :class="{ 'is-active': !activeCategory }"

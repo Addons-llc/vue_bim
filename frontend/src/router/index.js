@@ -1,5 +1,6 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
 import BrandsPage from '../pages/BrandsPage.vue'
+import BrandDetailsPage from '../pages/BrandDetailsPage.vue'
 import CartPage from '../pages/CartPage.vue'
 import CategoryDetailsPage from '../pages/CategoryDetailsPage.vue'
 import CategoriesPage from '../pages/CategoriesPage.vue'
@@ -47,6 +48,11 @@ const routes = [
     path: '/brands',
     name: 'brands',
     component: BrandsPage,
+  },
+  {
+    path: '/brands/:brandName',
+    name: 'brand-details',
+    component: BrandDetailsPage,
   },
   {
     path: '/stores',

@@ -75,6 +75,10 @@
   min-width: 0;
 }
 
+.category-detail-page.is-store-detail-page .category-detail-layout {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .category-detail-sidebar {
   position: sticky;
   top: 84px;

@@ -101,16 +101,30 @@ function openProductDetails(product) {
   })
 }
 
-async function openCategoriesTab(category) {
+async function openBrandItem(brand) {
+  await openCategoryOrProduct({
+    categories: categories.value,
+    item: brand,
+    router,
+    sourceType: 'brand',
+  })
+}
+
+async function openStoreItem(store) {
+  await openCategoryOrProduct({
+    categories: categories.value,
+    item: store,
+    router,
+    sourceType: 'store',
+  })
+}
+
+async function openCategoryItem(category) {
   await openCategoryOrProduct({
     categories: categories.value,
     item: category,
     router,
-    sourceType: category.brand || category.storeCode || category.supplier
-      ? 'brand'
-      : /\s+Shop$/.test(category.name || '')
-        ? 'store'
-        : 'category',
+    sourceType: 'category',
   })
 }
 
@@ -218,7 +232,7 @@ onUnmounted(() => {
     horizontal
     :view-all-to="brandsTabRoute"
     :categories="brands"
-    @select="openCategoriesTab"
+    @select="openBrandItem"
   />
 
   <CategoryRail
@@ -229,7 +243,7 @@ onUnmounted(() => {
     horizontal
     :view-all-to="storesTabRoute"
     :categories="stores"
-    @select="openCategoriesTab"
+    @select="openStoreItem"
   />
 
   <CategoryRail
@@ -241,7 +255,7 @@ onUnmounted(() => {
     :view-all-to="categoriesTabRoute"
     :active-category="activeCategory"
     :categories="discoveryItems"
-    @select="openCategoriesTab"
+    @select="openCategoryItem"
   />
 
   <ProductSections

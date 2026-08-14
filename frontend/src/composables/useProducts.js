@@ -5,7 +5,7 @@ import {
   getProducts,
 } from '../api/productApi'
 
-export function useProducts(searchText, initialCategory) {
+export function useProducts(searchText, initialCategory, options = {}) {
   const PRODUCT_PAGE_SIZE = 48
   const products = ref([])
   const categories = ref(getCachedProductCategories())
@@ -154,7 +154,7 @@ export function useProducts(searchText, initialCategory) {
     activeCategory.value = category.name
 
     return loadProducts({
-      item_group: category.itemGroup || category.name,
+      ...(category.productParams || { item_group: category.itemGroup || category.name }),
       limit_page_length: PRODUCT_PAGE_SIZE,
     })
   }
@@ -175,7 +175,11 @@ export function useProducts(searchText, initialCategory) {
 
         if (category) {
           loadCategories()
-          selectCategory({ name: category, itemGroup: category })
+          selectCategory({
+            name: category,
+            itemGroup: category,
+            productParams: options.getCategoryProductParams?.(category),
+          })
           return
         }
 

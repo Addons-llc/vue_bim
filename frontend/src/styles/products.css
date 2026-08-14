@@ -748,6 +748,16 @@
   font-weight: 800;
 }
 
+.product-detail-brand-link {
+  width: fit-content;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.product-detail-brand-link:hover {
+  color: #1d4ed8;
+}
+
 .product-detail-content h2 {
   margin: 0;
   color: #111827;

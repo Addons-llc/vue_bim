@@ -58,3 +58,18 @@ export async function getBrands(params = {}) {
 
   return brands.map(mapBrand)
 }
+
+export async function getBrand(identifier) {
+  const brands = await getBrands({
+    limit_page_length: 5000,
+  })
+  const normalizedIdentifier = String(identifier || '').toLowerCase()
+
+  return brands.find((brand) =>
+    [
+      brand.id,
+      brand.name,
+      brand.brand,
+    ].some((value) => String(value || '').toLowerCase() === normalizedIdentifier),
+  ) || null
+}

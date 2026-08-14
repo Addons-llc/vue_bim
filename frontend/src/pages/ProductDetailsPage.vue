@@ -29,6 +29,11 @@ const supplierName = computed(() =>
   product.value?.supplierName || product.value?.supplier || 'Supplier not set',
 )
 const sourceListing = computed(() => product.value?.sourceListing || null)
+const brandName = computed(() =>
+  product.value?.brand
+  || (sourceListing.value?.type === 'brand' ? sourceListing.value.name : '')
+  || '',
+)
 const ratingStars = computed(() => {
   const rating = Math.round(Number(product.value?.rating || 0))
 
@@ -49,6 +54,7 @@ function mergeProductDetails(cachedProduct, loadedProduct) {
     oldPrice: loadedProduct.oldPrice || cachedProduct.oldPrice,
     supplierName: loadedProduct.supplierName || cachedProduct.supplierName,
     supplier: loadedProduct.supplier || cachedProduct.supplier,
+    brand: loadedProduct.brand || cachedProduct.brand,
     supplierDetails: loadedProduct.supplierDetails || cachedProduct.supplierDetails,
     sourceListing: cachedProduct.sourceListing || loadedProduct.sourceListing,
     deliveryTime: loadedProduct.deliveryTime || cachedProduct.deliveryTime,
@@ -266,7 +272,14 @@ watch(productId, loadProduct, { immediate: true })
       </div>
 
       <div class="product-detail-content">
-        <p class="product-detail-category">{{ supplierName }}</p>
+        <RouterLink
+          v-if="brandName"
+          class="product-detail-category product-detail-brand-link"
+          :to="{ name: 'brand-details', params: { brandName } }"
+        >
+          {{ brandName }}
+        </RouterLink>
+        <p v-else class="product-detail-category">{{ supplierName }}</p>
         <p v-if="sourceListing" class="product-detail-category">
           {{ sourceListing.label }}: {{ sourceListing.name }}
         </p>

@@ -1,30 +1,19 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import CategoryRail from '../components/product/CategoryRail.vue'
-import {
-  getCachedProductCategories,
-  getProductCategories,
-} from '../api/productApi'
+import { getSupplierStores } from '../api/supplierStoreApi'
 import { openCategoryOrProduct } from '../utils/categoryNavigation'
 
 const router = useRouter()
-const categories = ref(getCachedProductCategories())
+const stores = ref([])
 const isLoadingStores = ref(false)
 const storeError = ref('')
-
-const stores = computed(() =>
-  categories.value.map((category) => ({
-    ...category,
-    id: `store-${category.id}`,
-    name: `${category.name} Shop`,
-  })),
-)
 
 async function openCategoriesTab(store) {
   storeError.value = ''
   await openCategoryOrProduct({
-    categories: categories.value,
+    categories: [],
     item: store,
     router,
     sourceType: 'store',
@@ -35,13 +24,15 @@ async function openCategoriesTab(store) {
 }
 
 async function loadStores() {
-  isLoadingStores.value = !categories.value.length
+  isLoadingStores.value = !stores.value.length
   storeError.value = ''
 
   try {
-    categories.value = await getProductCategories()
+    stores.value = await getSupplierStores({
+      limit_page_length: 5000,
+    })
   } catch (error) {
-    categories.value = []
+    stores.value = []
     storeError.value = error.message || 'Unable to load stores.'
   } finally {
     isLoadingStores.value = false

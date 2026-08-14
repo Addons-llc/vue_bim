@@ -7,6 +7,7 @@ import {
   getProductCategories,
 } from '../api/productApi'
 import { getBrands } from '../api/brandApi'
+import { getSupplierStores } from '../api/supplierStoreApi'
 import {
   getChildCategories,
   openCategoryOrProduct,
@@ -29,16 +30,10 @@ const activeTabLabel = computed(() =>
   categoryTabs.find((tab) => tab.id === activeTab.value)?.label || 'Categories',
 )
 const brands = ref([])
+const stores = ref([])
 const categories = ref(getCachedProductCategories())
 const isLoadingCategories = ref(false)
 const categoryError = ref('')
-const stores = computed(() =>
-  categories.value.map((category) => ({
-    ...category,
-    id: `store-${category.id}`,
-    name: `${category.name} Shop`,
-  })),
-)
 const activeParentCategory = computed(() =>
   categories.value.find((category) =>
     [category.itemGroup, category.name, category.id].includes(activeCategory.value),
@@ -101,18 +96,23 @@ async function loadCategories() {
   categoryError.value = ''
 
   try {
-    const [loadedCategories, loadedBrands] = await Promise.all([
+    const [loadedCategories, loadedBrands, loadedStores] = await Promise.all([
       getProductCategories(),
       getBrands({
+        limit_page_length: 5000,
+      }),
+      getSupplierStores({
         limit_page_length: 5000,
       }),
     ])
 
     categories.value = loadedCategories
     brands.value = loadedBrands
+    stores.value = loadedStores
   } catch (error) {
     categories.value = []
     brands.value = []
+    stores.value = []
     categoryError.value = error.message || 'Unable to load categories.'
   } finally {
     isLoadingCategories.value = false

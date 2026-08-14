@@ -178,6 +178,7 @@ function mapItemToProduct(item) {
     itemCode,
     name: item.item_name || itemCode,
     category: itemGroup,
+    brand: item.brand || '',
     description: description || 'Fresh item available for quick delivery.',
     price: getItemSellingPrice(item),
     priceList: item.price_list || SELLING_PRICE_LIST,

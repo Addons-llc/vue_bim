@@ -13,6 +13,10 @@ function getCategoryName(item = {}) {
   return item.itemGroup || item.category || item.name?.replace(/\s+Shop$/, '') || ''
 }
 
+function getStoreIdentifier(item = {}) {
+  return item.storeCode || item.id || item.name || ''
+}
+
 function getSelectedBrandProduct(product, item) {
   return {
     ...product,
@@ -118,9 +122,17 @@ export async function openCategoryOrProduct({
   }
 
   if (sourceType === 'store') {
+    const storeIdentifier = getStoreIdentifier(item)
+
+    if (!storeIdentifier) {
+      onError?.(`Unable to open ${item.name}.`)
+      return
+    }
+
     await router.push({
       name: 'store-details',
-      params: { categoryName },
+      params: { categoryName: storeIdentifier },
+      query: item.name ? { title: item.name } : undefined,
     })
     return
   }
