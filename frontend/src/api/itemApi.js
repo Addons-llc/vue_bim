@@ -88,6 +88,12 @@ function hasPublishField(item) {
   return [
     'published_in_supplier_portal',
     'custom_published_in_supplier_portal',
+    'published',
+    'is_published',
+    'show_in_website',
+    'custom_published',
+    'custom_is_published',
+    'custom_show_in_website',
   ].some((field) => Object.hasOwn(item, field))
 }
 
@@ -99,6 +105,12 @@ function isPublishedItem(item) {
   return [
     item.published_in_supplier_portal,
     item.custom_published_in_supplier_portal,
+    item.published,
+    item.is_published,
+    item.show_in_website,
+    item.custom_published,
+    item.custom_is_published,
+    item.custom_show_in_website,
   ].some(isTruthyFlag)
 }
 
@@ -234,6 +246,10 @@ export async function getItemMasterItems(params = {}) {
 
   if (params.item) {
     query.set('item', params.item)
+  }
+
+  if (params.brand) {
+    query.set('brand', params.brand)
   }
 
   if (params.supplier) {

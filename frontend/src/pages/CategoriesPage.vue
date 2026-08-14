@@ -6,7 +6,7 @@ import {
   getCachedProductCategories,
   getProductCategories,
 } from '../api/productApi'
-import { getSupplierStores } from '../api/supplierStoreApi'
+import { getBrands } from '../api/brandApi'
 import {
   getChildCategories,
   openCategoryOrProduct,
@@ -103,7 +103,7 @@ async function loadCategories() {
   try {
     const [loadedCategories, loadedBrands] = await Promise.all([
       getProductCategories(),
-      getSupplierStores({
+      getBrands({
         limit_page_length: 5000,
       }),
     ])

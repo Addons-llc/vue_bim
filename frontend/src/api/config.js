@@ -16,6 +16,9 @@ export const PRODUCT_API_PATH =
 export const ITEM_GROUP_API_PATH =
   import.meta.env.VITE_ITEM_GROUP_API_PATH || '/method/buy_in_minutes.api.get_item_groups'
 
+export const BRAND_API_PATH =
+  import.meta.env.VITE_BRAND_API_PATH || '/method/buy_in_minutes.api.get_brands'
+
 export const SUPPLIER_STORE_API_PATH =
   import.meta.env.VITE_SUPPLIER_STORE_API_PATH || '/method/buy_in_minutes.api.get_supplier_stores'
 

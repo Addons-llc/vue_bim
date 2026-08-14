@@ -2,8 +2,8 @@
 import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import CategoryRail from '../components/product/CategoryRail.vue'
+import { getBrands } from '../api/brandApi'
 import { getCachedProductCategories, getProductCategories } from '../api/productApi'
-import { getSupplierStores } from '../api/supplierStoreApi'
 import { openCategoryOrProduct } from '../utils/categoryNavigation'
 
 const router = useRouter()
@@ -31,7 +31,7 @@ async function loadBrands() {
 
   try {
     const [loadedBrands, loadedCategories] = await Promise.all([
-      getSupplierStores({
+      getBrands({
         limit_page_length: 5000,
       }),
       getProductCategories(),

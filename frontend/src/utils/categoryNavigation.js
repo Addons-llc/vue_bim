@@ -59,7 +59,9 @@ export function hasChildCategories(category, categories = []) {
 async function loadFirstBrandProduct(item) {
   const queries = []
 
-  if (item.storeCode || item.id) {
+  if (item.brand) {
+    queries.push({ brand: item.brand })
+  } else if (item.storeCode || item.id) {
     queries.push({ supplier_store: item.storeCode || item.id })
   }
 

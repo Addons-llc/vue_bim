@@ -3,6 +3,7 @@ import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import CategoryRail from '../components/product/CategoryRail.vue'
 import ProductSections from '../components/product/ProductSections.vue'
+import { getBrands } from '../api/brandApi'
 import { getSupplierStores } from '../api/supplierStoreApi'
 import { useProducts } from '../composables/useProducts'
 import { saveSelectedProduct } from '../data/productSelectionStore'
@@ -25,6 +26,7 @@ const searchText = computed(() => props.searchText)
 const initialCategory = computed(() => props.category)
 const activeHeroSlide = ref(0)
 const brands = ref([])
+const stores = ref([])
 let heroSlideTimer = null
 
 const heroSlides = [
@@ -80,14 +82,6 @@ const brandsTabRoute = { name: 'categories', query: { tab: 'brands' } }
 const storesTabRoute = { name: 'categories', query: { tab: 'stores' } }
 const categoriesTabRoute = { name: 'categories', query: { tab: 'categories' } }
 
-const shops = computed(() =>
-  discoveryItems.value.map((category) => ({
-    ...category,
-    id: `shop-${category.id}`,
-    name: `${category.name} Shop`,
-  })),
-)
-
 function openProductDetails(product) {
   const supplierName = product.supplierName || product.supplier || 'Supplier not set'
 
@@ -112,7 +106,7 @@ async function openCategoriesTab(category) {
     categories: categories.value,
     item: category,
     router,
-    sourceType: category.storeCode || category.supplier
+    sourceType: category.brand || category.storeCode || category.supplier
       ? 'brand'
       : /\s+Shop$/.test(category.name || '')
         ? 'store'
@@ -122,11 +116,21 @@ async function openCategoriesTab(category) {
 
 async function loadBrands() {
   try {
-    brands.value = await getSupplierStores({
+    brands.value = await getBrands({
       limit_page_length: 24,
     })
   } catch {
     brands.value = []
+  }
+}
+
+async function loadStores() {
+  try {
+    stores.value = await getSupplierStores({
+      limit_page_length: 24,
+    })
+  } catch {
+    stores.value = []
   }
 }
 
@@ -155,6 +159,7 @@ function syncHeroAutoplay() {
 
 onMounted(() => {
   loadBrands()
+  loadStores()
   syncHeroAutoplay()
 })
 
@@ -217,13 +222,13 @@ onUnmounted(() => {
   />
 
   <CategoryRail
-    v-if="shops.length"
+    v-if="stores.length"
     class="home-rail-section home-rail-store"
     section-id="shops"
     title="Store"
     horizontal
     :view-all-to="storesTabRoute"
-    :categories="shops"
+    :categories="stores"
     @select="openCategoriesTab"
   />
 

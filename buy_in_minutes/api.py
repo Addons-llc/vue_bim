@@ -14,6 +14,14 @@ ITEM_SUPPLIER_FIELDS = (
 	"custom_supplier",
 	"custom_supplier_name",
 )
+ITEM_GROUP_PUBLISH_FIELDS = (
+	"published",
+	"is_published",
+	"show_in_website",
+	"custom_published",
+	"custom_is_published",
+	"custom_show_in_website",
+)
 SUPPLIER_DETAIL_FIELDS = (
 	"supplier_name",
 	"supplier_group",
@@ -93,6 +101,10 @@ def _get_item_group_order_by(order_fields):
 		return "idx asc"
 
 	return "name asc"
+
+
+def _get_item_group_publish_fields():
+	return _get_existing_fields("Item Group", ITEM_GROUP_PUBLISH_FIELDS)
 
 
 def _get_selling_prices(item_codes):
@@ -380,6 +392,48 @@ def _get_supplier_detail_record(supplier):
 
 
 @frappe.whitelist(allow_guest=True)
+def get_brands(limit_page_length=24, published=1):
+	limit_page_length = frappe.utils.cint(limit_page_length) or 24
+
+	if not frappe.db.exists("DocType", "Brand"):
+		return []
+
+	brand_fields = _get_existing_fields(
+		"Brand",
+		(
+			"brand",
+			"description",
+			"image",
+			"brand_image",
+			"website_image",
+			"logo",
+			"brand_logo",
+			"banner_image",
+			"brand_banner",
+			"published",
+			"disabled",
+		),
+	)
+	fields = ["name"] + brand_fields
+	filters = {}
+
+	if "disabled" in brand_fields:
+		filters["disabled"] = 0
+
+	if _is_truthy_flag(published) and "published" in brand_fields:
+		filters["published"] = 1
+
+	return frappe.get_all(
+		"Brand",
+		fields=fields,
+		filters=filters,
+		ignore_permissions=True,
+		order_by="modified desc",
+		limit_page_length=limit_page_length,
+	)
+
+
+@frappe.whitelist(allow_guest=True)
 def get_supplier_details(supplier):
 	return _get_supplier_detail_record(supplier) or {}
 
@@ -455,6 +509,7 @@ def get_items(
 	search=None,
 	item_group=None,
 	item=None,
+	brand=None,
 	supplier=None,
 	supplier_store=None,
 	published=1,
@@ -470,6 +525,7 @@ def get_items(
 	if supplier_store_record and not supplier:
 		supplier = supplier_store_record.get("supplier")
 
+	item_meta = frappe.get_meta("Item")
 	filters = {"disabled": 0}
 	or_filters = None
 
@@ -479,6 +535,11 @@ def get_items(
 	if item_group:
 		filters["item_group"] = item_group
 
+	if brand:
+		if not item_meta.has_field("brand"):
+			return []
+		filters["brand"] = brand
+
 	if search:
 		search_text = f"%{search}%"
 		or_filters = [
@@ -487,7 +548,6 @@ def get_items(
 			["description", "like", search_text],
 		]
 
-	item_meta = frappe.get_meta("Item")
 	publish_fields = _get_item_supplier_portal_publish_fields()
 	optional_fields = [
 		fieldname
@@ -495,6 +555,7 @@ def get_items(
 			"image",
 			"website_image",
 			"thumbnail",
+			"brand",
 			"standard_rate",
 			*ITEM_SUPPLIER_FIELDS,
 		)
@@ -561,14 +622,18 @@ def get_item_groups(limit_page_length=5000, published=1):
 		),
 	)
 	order_fields = _get_item_group_order_fields()
+	publish_fields = _get_item_group_publish_fields()
 
 	item_groups = frappe.get_all(
 		"Item Group",
-		fields=["name"] + optional_fields + order_fields,
+		fields=["name"] + optional_fields + order_fields + publish_fields,
 		ignore_permissions=True,
 		order_by=_get_item_group_order_by(order_fields),
 		limit_page_length=limit_page_length,
 	)
+
+	if _is_truthy_flag(published):
+		item_groups = _filter_published_records(item_groups, publish_fields)
 
 	return [
 		item_group
