@@ -745,6 +745,25 @@
     margin-right: 16px;
   }
 
+  .product-rail.is-expanded-grid {
+    display: grid;
+    grid-auto-columns: initial;
+    grid-auto-flow: row;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    overflow: visible;
+    padding: 0;
+  }
+
+  .product-rail.is-expanded-grid > *,
+  .product-rail.is-expanded-grid .product-card.is-compact {
+    width: 100%;
+    flex: initial;
+    max-width: none;
+    min-width: 0;
+    margin-right: 0;
+  }
+
   .product-card.is-compact:last-child {
     margin-right: 0;
   }

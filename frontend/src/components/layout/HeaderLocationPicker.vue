@@ -20,7 +20,7 @@ const UAE_PLACE_RESTRICTIONS = { country: 'ae' }
 let autocompleteService
 let geocoder
 let placesSessionToken
-let placesService
+let placeApi
 let hasAttemptedAutoLocation = false
 
 function setSelectedLocation(location) {
@@ -137,30 +137,35 @@ function getReadableGeocodedLocation(results = []) {
 }
 
 async function getPlaceDetails(placeId) {
-  if (!placesService || !placeId) {
+  if (!placeApi?.Place || !placeId) {
     return null
   }
 
-  return new Promise((resolve) => {
-    placesService.getDetails(
-      {
-        placeId,
-        fields: ['name', 'formatted_address', 'address_components', 'geometry', 'plus_code', 'types'],
-      },
-      (place, status) => {
-        if (status !== window.google.maps.places.PlacesServiceStatus.OK || !place) {
-          resolve(null)
-          return
-        }
+  try {
+    const place = new placeApi.Place({ id: placeId })
 
-        resolve(place)
-      },
-    )
-  })
+    await place.fetchFields({
+      fields: ['displayName', 'formattedAddress', 'addressComponents', 'location', 'types'],
+    })
+
+    return {
+      name: place.displayName,
+      formatted_address: place.formattedAddress,
+      address_components: (place.addressComponents || []).map((component) => ({
+        long_name: component.longText || component.long_name || '',
+        short_name: component.shortText || component.short_name || '',
+        types: component.types || [],
+      })),
+      geometry: place.location ? { location: place.location } : undefined,
+      types: place.types || [],
+    }
+  } catch {
+    return null
+  }
 }
 
 async function initializePlaces() {
-  if (autocompleteService && geocoder && placesService) {
+  if (autocompleteService && geocoder && placeApi) {
     return
   }
 
@@ -169,7 +174,7 @@ async function initializePlaces() {
     autocompleteService = new maps.places.AutocompleteService()
     geocoder = new maps.Geocoder()
     placesSessionToken = new maps.places.AutocompleteSessionToken()
-    placesService = new maps.places.PlacesService(document.createElement('div'))
+    placeApi = await window.google.maps.importLibrary('places')
   } catch (error) {
     locationError.value = error.message
   }

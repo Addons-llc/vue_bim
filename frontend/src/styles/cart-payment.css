@@ -199,6 +199,35 @@
   margin-top: 0;
 }
 
+.cart-checkout-message {
+  display: grid;
+  gap: 10px;
+  justify-items: stretch;
+}
+
+.cart-checkout-message .form-message {
+  width: 100%;
+  margin: 14px 0 0;
+}
+
+.cart-add-address-button {
+  min-height: 40px;
+  border: 1px solid #2563eb;
+  border-radius: 8px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.cart-add-address-button:hover,
+.cart-add-address-button:focus-visible {
+  background: #dbeafe;
+  outline: 0;
+}
+
 .cart-payment-actions {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
@@ -528,4 +557,3 @@
   cursor: not-allowed;
   opacity: 0.68;
 }
-

@@ -1,6 +1,6 @@
 import { apiRequest } from './http'
 
-export function createStripeCheckoutSession(cartItems, salesOrderName = '') {
+export function createStripeCheckoutSession(cartItems, salesOrderName = '', deliveryAddress = null) {
   return apiRequest('/method/buy_in_minutes.payment.create_checkout_session', {
     method: 'POST',
     body: JSON.stringify({
@@ -12,11 +12,12 @@ export function createStripeCheckoutSession(cartItems, salesOrderName = '') {
         supplier_name: item.supplierName || '',
       })),
       sales_order_name: salesOrderName,
+      delivery_address: deliveryAddress,
     }),
   })
 }
 
-export function createCashOnDeliveryOrder(cartItems, salesOrderName = '') {
+export function createCashOnDeliveryOrder(cartItems, salesOrderName = '', deliveryAddress = null) {
   return apiRequest('/method/buy_in_minutes.payment.create_cash_on_delivery_order', {
     method: 'POST',
     body: JSON.stringify({
@@ -28,6 +29,7 @@ export function createCashOnDeliveryOrder(cartItems, salesOrderName = '') {
         supplier_name: item.supplierName || '',
       })),
       sales_order_name: salesOrderName,
+      delivery_address: deliveryAddress,
     }),
   })
 }

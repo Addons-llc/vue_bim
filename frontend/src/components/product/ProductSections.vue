@@ -35,6 +35,7 @@ const props = defineProps({
 
 const emit = defineEmits(['load-more', 'select-product', 'select-section'])
 const loadMoreTrigger = ref(null)
+const expandedSectionIds = ref(new Set())
 let loadMoreObserver = null
 
 function scrollProductRail(sectionId, direction = 1) {
@@ -56,6 +57,22 @@ function requestMoreProducts() {
   }
 
   emit('load-more')
+}
+
+function isSectionExpanded(sectionId) {
+  return expandedSectionIds.value.has(sectionId)
+}
+
+function toggleSectionExpanded(sectionId) {
+  const nextExpandedSectionIds = new Set(expandedSectionIds.value)
+
+  if (nextExpandedSectionIds.has(sectionId)) {
+    nextExpandedSectionIds.delete(sectionId)
+  } else {
+    nextExpandedSectionIds.add(sectionId)
+  }
+
+  expandedSectionIds.value = nextExpandedSectionIds
 }
 
 function stopLoadMoreObserver() {
@@ -125,15 +142,15 @@ onUnmounted(() => {
             v-if="!isFilteredProducts && section.products.length > 1"
             class="section-link product-section-action"
             type="button"
-            @click="$emit('select-section', section)"
+            @click="toggleSectionExpanded(section.id)"
           >
-            see all
+            {{ isSectionExpanded(section.id) ? 'show less' : 'see all' }}
           </button>
         </div>
 
         <div class="product-rail-wrap">
           <button
-            v-if="section.products.length > 6"
+            v-if="section.products.length > 6 && !isSectionExpanded(section.id)"
             class="product-rail-arrow is-left"
             type="button"
             :aria-label="`Scroll ${section.title} products left`"
@@ -142,7 +159,11 @@ onUnmounted(() => {
             ‹
           </button>
 
-          <div class="product-rail" :data-product-rail="section.id">
+          <div
+            class="product-rail"
+            :class="{ 'is-expanded-grid': isSectionExpanded(section.id) }"
+            :data-product-rail="section.id"
+          >
             <ProductCard
               v-for="product in section.products"
               :key="product.id"
@@ -153,7 +174,7 @@ onUnmounted(() => {
           </div>
 
           <button
-            v-if="section.products.length > 6"
+            v-if="section.products.length > 6 && !isSectionExpanded(section.id)"
             class="product-rail-arrow is-right"
             type="button"
             :aria-label="`Scroll ${section.title} products right`"

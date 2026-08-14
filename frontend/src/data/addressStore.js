@@ -32,6 +32,8 @@ export function addCustomerAddress(address) {
     area: address.area.trim(),
     building: address.building.trim(),
     landmark: address.landmark.trim(),
+    latitude: address.latitude || '',
+    longitude: address.longitude || '',
     isDefault: shouldSetDefault,
   }
 
@@ -58,6 +60,8 @@ export function updateCustomerAddress(addressId, address) {
       area: address.area.trim(),
       building: address.building.trim(),
       landmark: address.landmark.trim(),
+      latitude: address.latitude || '',
+      longitude: address.longitude || '',
       isDefault: shouldSetDefault || item.isDefault,
     }
   })

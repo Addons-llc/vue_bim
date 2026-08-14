@@ -27,7 +27,6 @@ const initialCategory = computed(() => props.category)
 const activeHeroSlide = ref(0)
 const brands = ref([])
 const stores = ref([])
-const isCategoriesExpanded = ref(false)
 let heroSlideTimer = null
 
 const heroSlides = [
@@ -77,12 +76,12 @@ const {
   selectProductSection,
 } = useProducts(searchText, initialCategory)
 
+const discoveryBrands = computed(() => brands.value.slice(0, 12))
+const discoveryStores = computed(() => stores.value.slice(0, 12))
 const discoveryCategories = computed(() => categories.value.slice(0, 12))
-const discoveryItems = computed(() =>
-  isCategoriesExpanded.value ? categories.value : discoveryCategories.value,
-)
 const brandsTabRoute = { name: 'categories', query: { tab: 'brands' } }
 const storesTabRoute = { name: 'categories', query: { tab: 'stores' } }
+const categoriesTabRoute = { name: 'categories', query: { tab: 'categories' } }
 
 function openProductDetails(product) {
   const supplierName = product.supplierName || product.supplier || 'Supplier not set'
@@ -133,7 +132,7 @@ async function openCategoryItem(category) {
 async function loadBrands() {
   try {
     brands.value = await getBrands({
-      limit_page_length: 24,
+      limit_page_length: 5000,
     })
   } catch {
     brands.value = []
@@ -143,7 +142,7 @@ async function loadBrands() {
 async function loadStores() {
   try {
     stores.value = await getSupplierStores({
-      limit_page_length: 24,
+      limit_page_length: 5000,
     })
   } catch {
     stores.value = []
@@ -171,10 +170,6 @@ function startHeroAutoplay() {
 
 function syncHeroAutoplay() {
   startHeroAutoplay()
-}
-
-function toggleCategoriesExpanded() {
-  isCategoriesExpanded.value = !isCategoriesExpanded.value
 }
 
 onMounted(() => {
@@ -237,7 +232,7 @@ onUnmounted(() => {
     title="Brands"
     horizontal
     :view-all-to="brandsTabRoute"
-    :categories="brands"
+    :categories="discoveryBrands"
     @select="openBrandItem"
   />
 
@@ -248,7 +243,7 @@ onUnmounted(() => {
     title="Store"
     horizontal
     :view-all-to="storesTabRoute"
-    :categories="stores"
+    :categories="discoveryStores"
     @select="openStoreItem"
   />
 
@@ -257,13 +252,11 @@ onUnmounted(() => {
     class="home-rail-section home-rail-categories"
     section-id="categories"
     title="Categories"
-    :horizontal="!isCategoriesExpanded"
-    show-view-all-button
-    :view-all-label="isCategoriesExpanded ? 'Show less' : 'View all'"
+    horizontal
+    :view-all-to="categoriesTabRoute"
     :active-category="activeCategory"
-    :categories="discoveryItems"
+    :categories="discoveryCategories"
     @select="openCategoryItem"
-    @view-all="toggleCategoriesExpanded"
   />
 
   <ProductSections

@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { createCashOnDeliveryOrder, createStripeCheckoutSession } from '../api/paymentApi'
+import { customerAddresses } from '../data/addressStore'
 import { currentUser, isAuthReady } from '../data/authStore'
 import { clearCart } from '../data/cartStore'
 import {
@@ -19,8 +20,15 @@ const payableTotal = computed(() => cartTotal.value + deliveryFee.value + handli
 const isStartingCheckout = ref(false)
 const isPlacingCodOrder = ref(false)
 const checkoutError = ref('')
+const isAddressRequired = ref(false)
 const LAST_COD_ORDER_ITEMS_STORAGE_KEY = 'buyInMinutesLastCodOrderItems'
 const canCheckout = computed(() => isAuthReady.value && Boolean(currentUser.value))
+const hasDeliveryAddress = computed(() => customerAddresses.value.length > 0)
+const selectedDeliveryAddress = computed(() =>
+  customerAddresses.value.find((address) => address.isDefault)
+  || customerAddresses.value[0]
+  || null,
+)
 const itemSavings = computed(() =>
   cartProducts.value.reduce((total, item) => {
     if (!item.oldPrice || item.oldPrice <= item.price) {
@@ -33,16 +41,23 @@ const itemSavings = computed(() =>
 
 async function startStripeCheckout() {
   checkoutError.value = ''
+  isAddressRequired.value = false
 
   if (!canCheckout.value) {
     emit('login')
     return
   }
 
+  if (!hasDeliveryAddress.value) {
+    checkoutError.value = 'Please add a delivery address before checkout.'
+    isAddressRequired.value = true
+    return
+  }
+
   isStartingCheckout.value = true
 
   try {
-    const response = await createStripeCheckoutSession(cartProducts.value)
+    const response = await createStripeCheckoutSession(cartProducts.value, '', selectedDeliveryAddress.value)
     const checkoutUrl = response?.message?.checkout_url
 
     if (!checkoutUrl) {
@@ -59,16 +74,23 @@ async function startStripeCheckout() {
 
 async function placeCashOnDeliveryOrder() {
   checkoutError.value = ''
+  isAddressRequired.value = false
 
   if (!canCheckout.value) {
     emit('login')
     return
   }
 
+  if (!hasDeliveryAddress.value) {
+    checkoutError.value = 'Please add a delivery address before checkout.'
+    isAddressRequired.value = true
+    return
+  }
+
   isPlacingCodOrder.value = true
 
   try {
-    const response = await createCashOnDeliveryOrder(cartProducts.value)
+    const response = await createCashOnDeliveryOrder(cartProducts.value, '', selectedDeliveryAddress.value)
     const salesOrder = response?.message?.sales_order
     const orderedItems = cartProducts.value.map((item) => ({
       item_code: item.itemCode || item.id,
@@ -92,6 +114,16 @@ async function placeCashOnDeliveryOrder() {
   } finally {
     isPlacingCodOrder.value = false
   }
+}
+
+function goToAddAddress() {
+  router.push({
+    name: 'profile',
+    query: {
+      openAddress: '1',
+      returnTo: 'cart',
+    },
+  })
 }
 </script>
 
@@ -172,9 +204,19 @@ async function placeCashOnDeliveryOrder() {
             <span>Grand total</span>
             <strong>AED {{ payableTotal }}</strong>
           </div>
-          <p v-if="checkoutError" class="form-message error-message">
-            {{ checkoutError }}
-          </p>
+          <div v-if="checkoutError" class="cart-checkout-message">
+            <p class="form-message error-message">
+              {{ checkoutError }}
+            </p>
+            <button
+              v-if="isAddressRequired"
+              class="cart-add-address-button"
+              type="button"
+              @click="goToAddAddress"
+            >
+              Add Address
+            </button>
+          </div>
           <div class="cart-payment-actions">
             <button
               class="cart-secondary-button"

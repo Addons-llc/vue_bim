@@ -144,13 +144,43 @@ def _normalize_cart_items(cart_items):
 	for cart_item in cart_items:
 		item_code = (cart_item.get("item_code") or cart_item.get("itemCode") or cart_item.get("id") or "").strip()
 		quantity = frappe.utils.cint(cart_item.get("quantity"))
+		supplier = _resolve_supplier_name(
+			cart_item.get("supplier"),
+			cart_item.get("supplier_name") or cart_item.get("supplierName"),
+		)
 
 		if not item_code or quantity <= 0:
 			frappe.throw(_("Cart contains an invalid item."))
 
-		normalized_items.append({"item_code": item_code, "quantity": quantity})
+		normalized_items.append(
+			{
+				"item_code": item_code,
+				"quantity": quantity,
+				"supplier": supplier,
+			}
+		)
 
 	return normalized_items
+
+
+def _resolve_supplier_name(supplier=None, supplier_name=None):
+	for value in (supplier, supplier_name):
+		value = str(value or "").strip()
+		if not value or value == "Supplier not set":
+			continue
+
+		if frappe.db.exists("Supplier", value):
+			return value
+
+		matched_supplier = frappe.db.get_value("Supplier", {"supplier_name": value}, "name")
+		if matched_supplier:
+			return matched_supplier
+
+	return ""
+
+
+def _clean_text(value):
+	return str(value or "").strip()
 
 
 def _get_item_selling_price(item_code, fallback_rate=0):
@@ -223,7 +253,11 @@ def _get_default_territory():
 	return _get_non_group_default("Territory", "territory", "Territory")
 
 
-def _get_default_supplier_for_item(item_code, company):
+def _get_default_supplier_for_item(item_code, company, preferred_supplier=None):
+	preferred_supplier = _resolve_supplier_name(preferred_supplier)
+	if preferred_supplier:
+		return preferred_supplier
+
 	for resolver in (get_item_defaults, get_item_group_defaults, get_brand_defaults):
 		defaults = resolver(item_code, company) or {}
 		supplier = defaults.get("default_supplier")
@@ -285,6 +319,175 @@ def _get_or_create_customer_for_user(user_name):
 	return customer_doc.name
 
 
+def _normalize_delivery_address(delivery_address):
+	if isinstance(delivery_address, str):
+		delivery_address = json.loads(delivery_address) if delivery_address else None
+
+	if not isinstance(delivery_address, dict):
+		return {}
+
+	return {
+		"label": _clean_text(delivery_address.get("label") or "Home") or "Home",
+		"contact_name": _clean_text(delivery_address.get("contactName") or delivery_address.get("contact_name")),
+		"phone": _clean_text(delivery_address.get("phone")),
+		"area": _clean_text(delivery_address.get("area")),
+		"building": _clean_text(delivery_address.get("building")),
+		"landmark": _clean_text(delivery_address.get("landmark")),
+		"latitude": _clean_text(delivery_address.get("latitude")),
+		"longitude": _clean_text(delivery_address.get("longitude")),
+	}
+
+
+def _get_linked_customer_address(customer, address):
+	if not customer or not address.get("building") or not address.get("area"):
+		return None
+
+	linked_addresses = frappe.get_all(
+		"Dynamic Link",
+		filters={
+			"link_doctype": "Customer",
+			"link_name": customer,
+			"parenttype": "Address",
+		},
+		pluck="parent",
+		ignore_permissions=True,
+		limit_page_length=100,
+	)
+	if not linked_addresses:
+		return None
+
+	return frappe.db.get_value(
+		"Address",
+		{
+			"name": ["in", linked_addresses],
+			"address_line1": address["building"],
+			"address_line2": address["area"],
+		},
+		"name",
+	)
+
+
+def _set_optional_doc_value(doc, fieldname, value):
+	if value and doc.meta.has_field(fieldname):
+		doc.set(fieldname, value)
+
+
+def _get_or_create_customer_address(customer, delivery_address):
+	address = _normalize_delivery_address(delivery_address)
+	if not address:
+		return None
+
+	if not address.get("building") or not address.get("area"):
+		frappe.throw(_("Please add a complete delivery address before checkout."))
+
+	existing_address = _get_linked_customer_address(customer, address)
+	if existing_address:
+		return existing_address
+
+	address_doc = frappe.get_doc(
+		{
+			"doctype": "Address",
+			"address_title": address.get("contact_name") or customer,
+			"address_type": address.get("label") if address.get("label") in ("Billing", "Shipping", "Office", "Personal") else "Shipping",
+			"address_line1": address["building"],
+			"address_line2": address["area"],
+			"city": address["area"],
+			"country": "United Arab Emirates",
+			"phone": address.get("phone"),
+			"links": [
+				{
+					"link_doctype": "Customer",
+					"link_name": customer,
+				}
+			],
+		}
+	)
+	_set_optional_doc_value(address_doc, "address_line3", address.get("landmark"))
+	_set_optional_doc_value(address_doc, "latitude", address.get("latitude"))
+	_set_optional_doc_value(address_doc, "longitude", address.get("longitude"))
+	address_doc.insert(ignore_permissions=True)
+
+	return address_doc.name
+
+
+def _get_or_create_customer_contact(customer, delivery_address):
+	address = _normalize_delivery_address(delivery_address)
+	if not address:
+		return None
+
+	contact_name = address.get("contact_name")
+	phone = address.get("phone")
+	if not contact_name and not phone:
+		return None
+
+	linked_contacts = frappe.get_all(
+		"Dynamic Link",
+		filters={
+			"link_doctype": "Customer",
+			"link_name": customer,
+			"parenttype": "Contact",
+		},
+		pluck="parent",
+		ignore_permissions=True,
+		limit_page_length=100,
+	)
+	if linked_contacts and phone:
+		existing_contact = frappe.db.get_value(
+			"Contact Phone",
+			{
+				"parent": ["in", linked_contacts],
+				"phone": phone,
+			},
+			"parent",
+		)
+		if existing_contact:
+			return existing_contact
+
+	contact_doc = frappe.get_doc(
+		{
+			"doctype": "Contact",
+			"first_name": contact_name or phone or customer,
+			"is_primary_contact": 1,
+			"is_billing_contact": 1,
+			"links": [
+				{
+					"link_doctype": "Customer",
+					"link_name": customer,
+				}
+			],
+		}
+	)
+	if phone:
+		contact_doc.append(
+			"phone_nos",
+			{
+				"phone": phone,
+				"is_primary_phone": 1,
+				"is_primary_mobile_no": 1,
+			},
+		)
+	contact_doc.insert(ignore_permissions=True)
+
+	return contact_doc.name
+
+
+def _apply_delivery_address_to_sales_order(sales_order, customer, delivery_address):
+	if not delivery_address:
+		return
+
+	customer_address = _get_or_create_customer_address(customer, delivery_address)
+	contact_person = _get_or_create_customer_contact(customer, delivery_address)
+
+	if customer_address:
+		sales_order.customer_address = customer_address
+		sales_order.shipping_address_name = customer_address
+
+	if contact_person:
+		sales_order.contact_person = contact_person
+
+	sales_order.set_missing_values()
+
+
 def _get_checkout_items(cart_items):
 	checkout_items = []
 	for cart_item in _normalize_cart_items(cart_items):
@@ -308,6 +511,7 @@ def _get_checkout_items(cart_items):
 				"quantity": cart_item["quantity"],
 				"rate": rate,
 				"amount": rate * cart_item["quantity"],
+				"supplier": cart_item.get("supplier"),
 			}
 		)
 
@@ -343,7 +547,11 @@ def _build_sales_order_item_rows(checkout_items, company):
 		if not frappe.db.exists("Item", item["item_code"]):
 			continue
 
-		supplier = _get_default_supplier_for_item(item["item_code"], company)
+		supplier = _get_default_supplier_for_item(
+			item["item_code"],
+			company,
+			item.get("supplier"),
+		)
 
 		row = {
 			"item_code": item["item_code"],
@@ -501,7 +709,7 @@ def _normalize_payment_schedule_dates(sales_order):
 			payment_row.due_date = transaction_date
 
 
-def _upsert_sales_order(checkout_items, sales_order_name=None, submit=False):
+def _upsert_sales_order(checkout_items, sales_order_name=None, submit=False, delivery_address=None):
 	customer = _get_or_create_customer_for_user(frappe.session.user)
 	company = _get_default_company()
 	order_date = nowdate()
@@ -541,6 +749,7 @@ def _upsert_sales_order(checkout_items, sales_order_name=None, submit=False):
 	for item in order_items:
 		sales_order.append("items", item)
 
+	_apply_delivery_address_to_sales_order(sales_order, customer, delivery_address)
 	_normalize_payment_schedule_dates(sales_order)
 
 	if sales_order.is_new():
@@ -552,7 +761,7 @@ def _upsert_sales_order(checkout_items, sales_order_name=None, submit=False):
 		with _as_administrator():
 			sales_order.flags.ignore_permissions = True
 			sales_order.submit()
-			_create_purchase_orders_for_sales_order(sales_order)
+			sales_order.purchase_orders = _create_purchase_orders_for_sales_order(sales_order)
 
 	return sales_order
 
@@ -709,11 +918,15 @@ def finalize_stripe_checkout(session_id=None):
 
 
 @frappe.whitelist(methods=["POST"])
-def sync_cart_sales_order(cart_items=None, sales_order_name=None):
+def sync_cart_sales_order(cart_items=None, sales_order_name=None, delivery_address=None):
 	_require_checkout_user()
 
 	checkout_items = _get_checkout_items(cart_items)
-	sales_order = _upsert_sales_order(checkout_items, sales_order_name=sales_order_name)
+	sales_order = _upsert_sales_order(
+		checkout_items,
+		sales_order_name=sales_order_name,
+		delivery_address=delivery_address,
+	)
 
 	return {
 		"success": True,
@@ -722,11 +935,15 @@ def sync_cart_sales_order(cart_items=None, sales_order_name=None):
 
 
 @frappe.whitelist(methods=["POST"])
-def create_checkout_session(cart_items=None, sales_order_name=None):
+def create_checkout_session(cart_items=None, sales_order_name=None, delivery_address=None):
 	_require_checkout_user()
 
 	checkout_items = _get_checkout_items(cart_items)
-	sales_order = _upsert_sales_order(checkout_items, sales_order_name=sales_order_name)
+	sales_order = _upsert_sales_order(
+		checkout_items,
+		sales_order_name=sales_order_name,
+		delivery_address=delivery_address,
+	)
 	session = _stripe_request(
 		"/checkout/sessions",
 		_build_checkout_params(checkout_items, sales_order.name),
@@ -741,15 +958,25 @@ def create_checkout_session(cart_items=None, sales_order_name=None):
 
 
 @frappe.whitelist(methods=["POST"])
-def create_cash_on_delivery_order(cart_items=None, sales_order_name=None):
+def create_cash_on_delivery_order(cart_items=None, sales_order_name=None, delivery_address=None):
 	_require_checkout_user()
 
 	checkout_items = _get_checkout_items(cart_items)
-	sales_order = _upsert_sales_order(checkout_items, sales_order_name=sales_order_name, submit=True)
+	sales_order = _upsert_sales_order(
+		checkout_items,
+		sales_order_name=sales_order_name,
+		submit=True,
+		delivery_address=delivery_address,
+	)
+	purchase_orders = getattr(sales_order, "purchase_orders", None)
+
+	if purchase_orders is None:
+		purchase_orders = _get_purchase_orders_for_sales_order(sales_order.name)
 
 	return {
 		"success": True,
 		"sales_order": sales_order.name,
+		"purchase_orders": [purchase_order.name for purchase_order in purchase_orders],
 		"payment_method": "cod",
 	}
 
