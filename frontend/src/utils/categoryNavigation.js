@@ -1,3 +1,7 @@
+import { getProducts } from '../api/productApi'
+import { saveSelectedProduct } from '../data/productSelectionStore'
+import { saveSelectedSupplier } from '../data/supplierSelectionStore'
+
 function normalizeKey(value = '') {
   return String(value)
     .replace(/\s+Shop$/, '')
@@ -7,6 +11,23 @@ function normalizeKey(value = '') {
 
 function getCategoryName(item = {}) {
   return item.itemGroup || item.category || item.name?.replace(/\s+Shop$/, '') || ''
+}
+
+function getSelectedBrandProduct(product, item) {
+  return {
+    ...product,
+    sourceListing: {
+      type: 'brand',
+      label: 'Brand',
+      id: item.id || '',
+      name: item.name || item.supplier || '',
+      supplier: item.supplier || product.supplier || '',
+      supplierName: product.supplierName || product.supplier || item.supplier || '',
+      storeCode: item.storeCode || '',
+      description: item.description || item.supplierDetails || '',
+      image: item.image || item.bannerImage || '',
+    },
+  }
 }
 
 function getCategoryKeys(item = {}) {
@@ -35,6 +56,31 @@ export function hasChildCategories(category, categories = []) {
   return getChildCategories(category, categories).length > 0
 }
 
+async function loadFirstBrandProduct(item) {
+  const queries = []
+
+  if (item.storeCode || item.id) {
+    queries.push({ supplier_store: item.storeCode || item.id })
+  }
+
+  if (item.supplier) {
+    queries.push({ supplier: item.supplier })
+  }
+
+  for (const query of queries) {
+    const products = await getProducts({
+      ...query,
+      limit_page_length: 1,
+    })
+
+    if (products.length) {
+      return products[0]
+    }
+  }
+
+  return null
+}
+
 export async function openCategoryOrProduct({
   categories = [],
   item,
@@ -45,9 +91,26 @@ export async function openCategoryOrProduct({
   const categoryName = getCategoryName(item)
 
   if (sourceType === 'brand') {
+    const product = await loadFirstBrandProduct(item)
+
+    if (!product) {
+      onError?.(`No products found in ${item.name}.`)
+      return
+    }
+
+    const selectedProduct = getSelectedBrandProduct(product, item)
+    const supplierName = selectedProduct.supplierName || selectedProduct.supplier || 'Supplier not set'
+
+    saveSelectedProduct(selectedProduct)
+    saveSelectedSupplier({
+      name: supplierName,
+      details: selectedProduct.supplierDetails,
+      product: selectedProduct,
+    })
+
     await router.push({
-      name: 'supplier-details',
-      params: { supplierName: item.supplier || item.name },
+      name: 'product-details',
+      params: { productId: selectedProduct.id },
     })
     return
   }

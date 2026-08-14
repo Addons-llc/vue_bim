@@ -1262,6 +1262,21 @@
     padding: 22px;
   }
 
+  .profile-address-heading,
+  .profile-address-form-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .profile-address-add-button,
+  .profile-address-cancel-button {
+    width: 100%;
+  }
+
+  .profile-address-list {
+    grid-template-columns: 1fr;
+  }
+
   .provider-actions {
     grid-template-columns: 1fr;
   }
