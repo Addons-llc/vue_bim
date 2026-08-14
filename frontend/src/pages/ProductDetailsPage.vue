@@ -280,9 +280,12 @@ watch(productId, loadProduct, { immediate: true })
           {{ brandName }}
         </RouterLink>
         <p v-else class="product-detail-category">{{ supplierName }}</p>
+        <!-- Source listing is kept in productDetails below; avoid duplicating Brand under the brand link. -->
+        <!--
         <p v-if="sourceListing" class="product-detail-category">
           {{ sourceListing.label }}: {{ sourceListing.name }}
         </p>
+        -->
         <h2 :id="`product-detail-title-${product.id}`">{{ product.name }}</h2>
 
         <div class="product-detail-rating-row">

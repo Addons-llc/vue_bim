@@ -21,13 +21,19 @@ const brandDetails = computed(() => ({
   bannerImage: brandRecord.value?.bannerImage || '',
 }))
 const brandDisplayName = computed(() => brandDetails.value.displayName || brandName.value)
-const brandBannerImage = computed(() => brandDetails.value.bannerImage || brandDetails.value.image || '')
+const brandBannerImage = computed(() => brandDetails.value.bannerImage || '')
 const brandDescription = computed(() => brandDetails.value.description || '')
 const brandInitials = computed(() => brandDisplayName.value.slice(0, 2).toUpperCase())
 const brandProducts = computed(() =>
   loadedProducts.value.filter((product) => product.isPublished !== false),
 )
-const brandMainDescription = 'Browse published products available from this brand.'
+const brandMainDescription = computed(() =>
+  brandDescription.value || 'Browse published products available from this brand.',
+)
+const dummyBrandRating = {
+  score: '4.7',
+  reviewCount: 128,
+}
 
 function openProductDetails(product) {
   saveSelectedProduct(product)
@@ -87,12 +93,16 @@ watch(brandName, () => {
         </span>
         <h1>{{ brandDisplayName }}</h1>
       </div>
-      <p v-if="brandDescription" class="supplier-profile-summary">{{ brandDescription }}</p>
+      <p class="supplier-profile-summary">{{ brandMainDescription }}</p>
 
       <section class="supplier-profile-info" aria-label="Brand information">
         <div class="supplier-profile-info-row">
           <span>Brand</span>
           <p>{{ brandDetails.brand }}</p>
+        </div>
+        <div class="supplier-profile-info-row">
+          <span>Brand Details</span>
+          <p>{{ brandMainDescription }}</p>
         </div>
       </section>
     </aside>
@@ -120,7 +130,17 @@ watch(brandName, () => {
       <section class="supplier-store-overview">
         <div class="supplier-store-description" aria-label="Brand description">
           <h2>About {{ brandDisplayName }}</h2>
-          <p>{{ brandDescription || brandMainDescription }}</p>
+          <p>{{ brandMainDescription }}</p>
+        </div>
+
+        <div class="supplier-ratings-panel" aria-label="Brand ratings">
+          <div class="supplier-ratings-header">
+            <div class="supplier-rating-score">
+              <strong>{{ dummyBrandRating.score }}</strong>
+              <span>★★★★★</span>
+              <small>{{ dummyBrandRating.reviewCount }} reviews</small>
+            </div>
+          </div>
         </div>
       </section>
 

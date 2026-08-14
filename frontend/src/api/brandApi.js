@@ -30,6 +30,24 @@ function stripHtml(value = '') {
 
 function mapBrand(brand = {}) {
   const brandName = brand.brand || brand.name
+  const bannerImage = getImageUrl(
+    brand.banner
+      || brand.banner_image
+      || brand.brand_banner
+      || brand.brand_banner_image
+      || brand.website_banner
+      || brand.website_banner_image
+      || brand.cover_image
+      || brand.cover_photo
+      || brand.custom_banner
+      || brand.custom_banner_image
+      || brand.custom_brand_banner
+      || brand.custom_brand_banner_image
+      || brand.custom_website_banner
+      || brand.custom_website_banner_image
+      || brand.custom_cover_image
+      || brand.custom_cover_photo,
+  )
   const image = getImageUrl(
     brand.image
       || brand.brand_image
@@ -44,7 +62,7 @@ function mapBrand(brand = {}) {
     brand: brand.name || brandName,
     description: stripHtml(brand.description || ''),
     image,
-    bannerImage: getImageUrl(brand.banner_image || brand.brand_banner),
+    bannerImage,
   }
 }
 
