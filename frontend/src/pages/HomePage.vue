@@ -27,6 +27,7 @@ const initialCategory = computed(() => props.category)
 const activeHeroSlide = ref(0)
 const brands = ref([])
 const stores = ref([])
+const isCategoriesExpanded = ref(false)
 let heroSlideTimer = null
 
 const heroSlides = [
@@ -77,10 +78,11 @@ const {
 } = useProducts(searchText, initialCategory)
 
 const discoveryCategories = computed(() => categories.value.slice(0, 12))
-const discoveryItems = computed(() => discoveryCategories.value)
+const discoveryItems = computed(() =>
+  isCategoriesExpanded.value ? categories.value : discoveryCategories.value,
+)
 const brandsTabRoute = { name: 'categories', query: { tab: 'brands' } }
 const storesTabRoute = { name: 'categories', query: { tab: 'stores' } }
-const categoriesTabRoute = { name: 'categories', query: { tab: 'categories' } }
 
 function openProductDetails(product) {
   const supplierName = product.supplierName || product.supplier || 'Supplier not set'
@@ -171,6 +173,10 @@ function syncHeroAutoplay() {
   startHeroAutoplay()
 }
 
+function toggleCategoriesExpanded() {
+  isCategoriesExpanded.value = !isCategoriesExpanded.value
+}
+
 onMounted(() => {
   loadBrands()
   loadStores()
@@ -251,11 +257,13 @@ onUnmounted(() => {
     class="home-rail-section home-rail-categories"
     section-id="categories"
     title="Categories"
-    horizontal
-    :view-all-to="categoriesTabRoute"
+    :horizontal="!isCategoriesExpanded"
+    show-view-all-button
+    :view-all-label="isCategoriesExpanded ? 'Show less' : 'View all'"
     :active-category="activeCategory"
     :categories="discoveryItems"
     @select="openCategoryItem"
+    @view-all="toggleCategoriesExpanded"
   />
 
   <ProductSections

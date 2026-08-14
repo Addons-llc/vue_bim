@@ -22,6 +22,10 @@ const props = defineProps({
     type: String,
     default: 'View all',
   },
+  showViewAllButton: {
+    type: Boolean,
+    default: false,
+  },
   sectionId: {
     type: String,
     default: '',
@@ -32,7 +36,7 @@ const props = defineProps({
   },
 })
 
-const emit = defineEmits(['select'])
+const emit = defineEmits(['select', 'view-all'])
 
 const categoryPlaceholderImage = `${import.meta.env.BASE_URL}grocery-card-image-v3.svg?v=3`
 
@@ -55,6 +59,10 @@ function getCategoryImage(category) {
 function selectCategory(category) {
   emit('select', category)
 }
+
+function viewAll() {
+  emit('view-all')
+}
 </script>
 
 <template>
@@ -68,6 +76,14 @@ function selectCategory(category) {
       >
         {{ viewAllLabel }}
       </RouterLink>
+      <button
+        v-else-if="showViewAllButton"
+        class="section-link category-view-all-link"
+        type="button"
+        @click="viewAll"
+      >
+        {{ viewAllLabel }}
+      </button>
     </div>
     <div class="category-grid" :class="{ 'is-manual-scroll': horizontal }">
       <button
