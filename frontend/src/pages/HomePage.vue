@@ -25,7 +25,6 @@ const searchText = computed(() => props.searchText)
 const initialCategory = computed(() => props.category)
 const activeHeroSlide = ref(0)
 const brands = ref([])
-const categoriesTabRoute = { name: 'categories' }
 let heroSlideTimer = null
 
 const heroSlides = [
@@ -77,6 +76,9 @@ const {
 
 const discoveryCategories = computed(() => categories.value.slice(0, 12))
 const discoveryItems = computed(() => discoveryCategories.value)
+const brandsTabRoute = { name: 'categories', query: { tab: 'brands' } }
+const storesTabRoute = { name: 'categories', query: { tab: 'stores' } }
+const categoriesTabRoute = { name: 'categories', query: { tab: 'categories' } }
 
 const shops = computed(() =>
   discoveryItems.value.map((category) => ({
@@ -85,32 +87,6 @@ const shops = computed(() =>
     name: `${category.name} Shop`,
   })),
 )
-
-const brandsDetailRoute = computed(() => {
-  const firstBrand = brands.value[0]
-
-  if (!firstBrand) {
-    return ''
-  }
-
-  return {
-    name: 'supplier-details',
-    params: { supplierName: firstBrand.supplier || firstBrand.name },
-  }
-})
-
-const storesDetailRoute = computed(() => {
-  const firstStore = shops.value[0]
-
-  if (!firstStore) {
-    return ''
-  }
-
-  return {
-    name: 'store-details',
-    params: { categoryName: firstStore.itemGroup || firstStore.name.replace(/\s+Shop$/, '') },
-  }
-})
 
 function openProductDetails(product) {
   const supplierName = product.supplierName || product.supplier || 'Supplier not set'
@@ -235,7 +211,7 @@ onUnmounted(() => {
     section-id="brands"
     title="Brands"
     horizontal
-    :view-all-to="brandsDetailRoute"
+    :view-all-to="brandsTabRoute"
     :categories="brands"
     @select="openCategoriesTab"
   />
@@ -246,7 +222,7 @@ onUnmounted(() => {
     section-id="shops"
     title="Store"
     horizontal
-    :view-all-to="storesDetailRoute"
+    :view-all-to="storesTabRoute"
     :categories="shops"
     @select="openCategoriesTab"
   />

@@ -14,6 +14,8 @@ const locationSuggestions = ref([])
 const LOCATION_STORAGE_KEY = 'buyInMinutesSelectedLocation'
 const AUTO_PROMPT_LOCATION_KEY = 'buyInMinutesPromptLocationOnHome'
 const UNWANTED_RESULT_TYPES = ['parking', 'point_of_interest', 'establishment', 'premise', 'subpremise']
+const UAE_COUNTRY_CODE = 'AE'
+const UAE_PLACE_RESTRICTIONS = { country: 'ae' }
 
 let autocompleteService
 let geocoder
@@ -81,6 +83,13 @@ function buildReadableLocationFromComponents(result = {}) {
     getClean('administrative_area_level_1'),
     getClean('country'),
   ].find(Boolean) || ''
+}
+
+function isUnitedArabEmiratesPlace(result = {}) {
+  return (result.address_components || []).some((component) => (
+    (component.types || []).includes('country')
+    && component.short_name === UAE_COUNTRY_CODE
+  ))
 }
 
 function isUnwantedResult(result = {}) {
@@ -283,19 +292,52 @@ async function selectSuggestion(suggestion) {
   await initializePlaces()
 
   const placeDetails = await getPlaceDetails(suggestion.id)
+
+  if (placeDetails && !isUnitedArabEmiratesPlace(placeDetails)) {
+    locationError.value = 'Please select a location in the United Arab Emirates.'
+    return
+  }
+
   const displayLocation = buildReadableLocationFromComponents(placeDetails || {})
 
   setSelectedLocation(displayLocation || suggestion.description)
   closeLocationDialog()
 }
 
-function submitTypedLocation() {
+async function submitTypedLocation() {
   const location = locationSearchText.value.trim()
 
-  if (location) {
-    setSelectedLocation(location)
-    closeLocationDialog()
+  if (!location) {
+    return
   }
+
+  await initializePlaces()
+
+  if (!geocoder) {
+    locationError.value = 'Unable to search locations right now.'
+    return
+  }
+
+  geocoder.geocode(
+    {
+      address: location,
+      componentRestrictions: UAE_PLACE_RESTRICTIONS,
+      region: 'ae',
+    },
+    (results, status) => {
+      const geocodedResult = status === 'OK' ? pickPreferredGeocodedResult(results) : null
+
+      if (!geocodedResult || !isUnitedArabEmiratesPlace(geocodedResult)) {
+        locationError.value = 'Please select a location in the United Arab Emirates.'
+        return
+      }
+
+      const displayLocation = buildReadableLocationFromComponents(geocodedResult)
+
+      setSelectedLocation(displayLocation || normalizeDisplayedLocation(geocodedResult.formatted_address || location))
+      closeLocationDialog()
+    },
+  )
 }
 
 function promptForLocationOnHome() {
@@ -322,6 +364,9 @@ watch(locationSearchText, async (value) => {
     {
       input: keyword,
       sessionToken: placesSessionToken,
+      componentRestrictions: UAE_PLACE_RESTRICTIONS,
+      region: 'ae',
+      types: ['geocode'],
     },
     (predictions, status) => {
       if (status !== window.google.maps.places.PlacesServiceStatus.OK || !predictions) {
@@ -469,18 +514,6 @@ onMounted(() => {
           </span>
         </button>
 
-        <button
-          v-if="!locationSuggestions.length && locationSearchText"
-          class="location-suggestion"
-          type="button"
-          @click="submitTypedLocation"
-        >
-          <span class="suggestion-pin" aria-hidden="true">⌖</span>
-          <span>
-            <strong>{{ locationSearchText }}</strong>
-            <small>Use typed location</small>
-          </span>
-        </button>
       </div>
     </section>
   </div>

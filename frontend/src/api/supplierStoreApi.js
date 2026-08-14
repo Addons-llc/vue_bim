@@ -54,13 +54,26 @@ function mapSupplierStoreToBrand(store) {
     || store.custom_store_logo
     || store.custom_supplier_logo
   const storeBanner = store.banner_image
+    || store.banner
     || store.store_banner
     || store.store_banner_image
+    || store.store_cover
+    || store.store_cover_image
+    || store.cover_image
+    || store.cover_photo
+    || store.website_banner
+    || store.website_banner_image
     || store.supplier_banner
     || store.supplier_banner_image
     || store.custom_banner_image
     || store.custom_store_banner
     || store.custom_store_banner_image
+    || store.custom_store_cover
+    || store.custom_store_cover_image
+    || store.custom_cover_image
+    || store.custom_cover_photo
+    || store.custom_website_banner
+    || store.custom_website_banner_image
     || store.custom_supplier_banner
     || store.custom_supplier_banner_image
 

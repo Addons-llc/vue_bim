@@ -1345,33 +1345,73 @@
   text-align: left;
 }
 
-.supplier-ratings-panel {
+.supplier-store-overview {
   display: grid;
-  min-height: 360px;
-  padding: 10px 38px;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 340px);
+  align-items: start;
+  gap: 24px;
+  padding: 0 24px;
 }
 
-.supplier-ratings-panel h2 {
+.supplier-store-description {
+  display: grid;
+  gap: 8px;
+  text-align: left;
+}
+
+.supplier-store-description h2 {
   margin: 0;
-  border-bottom: 1px solid #e5e7eb;
-  padding-bottom: 18px;
   color: #374151;
   font-size: 20px;
 }
 
-.supplier-empty-ratings {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-direction: column;
-  min-height: 260px;
-  color: #98a2b3;
+.supplier-store-description p {
+  max-width: 760px;
+  margin: 0;
+  color: #4b5563;
   font-size: 14px;
+  font-weight: 650;
+  line-height: 1.55;
 }
 
-.supplier-empty-ratings span {
-  color: #d1d5db;
-  font-size: 26px;
+.supplier-ratings-panel {
+  display: grid;
+  gap: 12px;
+  justify-self: end;
+  width: 100%;
+  max-width: 340px;
+}
+
+.supplier-ratings-header {
+  display: flex;
+  justify-content: flex-end;
+  border-bottom: 1px solid #e5e7eb;
+  padding-bottom: 16px;
+}
+
+.supplier-rating-score {
+  display: grid;
+  justify-items: end;
+  gap: 3px;
+  color: #111827;
+  text-align: right;
+}
+
+.supplier-rating-score strong {
+  font-size: 34px;
+  line-height: 1;
+}
+
+.supplier-rating-score span {
+  color: #f59e0b;
+  font-size: 13px;
+  letter-spacing: 0;
+}
+
+.supplier-rating-score small {
+  color: #6b7280;
+  font-size: 12px;
+  font-weight: 800;
 }
 
 .supplier-products-panel {

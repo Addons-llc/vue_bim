@@ -976,6 +976,31 @@
     text-align: left;
   }
 
+  .supplier-store-overview {
+    grid-template-columns: 1fr;
+    gap: 14px;
+    padding: 0 12px;
+  }
+
+  .supplier-store-description h2 {
+    font-size: 18px;
+  }
+
+  .supplier-ratings-panel {
+    gap: 12px;
+    justify-self: stretch;
+    max-width: none;
+  }
+
+  .supplier-ratings-header {
+    justify-content: flex-start;
+  }
+
+  .supplier-rating-score {
+    justify-items: start;
+    text-align: left;
+  }
+
   .supplier-product-action-bar {
     display: grid;
     bottom: calc(64px + env(safe-area-inset-bottom, 0px));

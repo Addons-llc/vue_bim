@@ -39,7 +39,7 @@ const supplierDetails = computed(() => {
 const loadedProducts = ref([])
 const isLoadingSupplierProducts = ref(false)
 const supplierDisplayName = computed(() => supplierDetails.value.displayName || supplierName.value)
-const supplierBannerImage = computed(() => supplierDetails.value.bannerImage || supplierDetails.value.image || '')
+const supplierBannerImage = computed(() => supplierDetails.value.bannerImage || '')
 const supplierProductIds = computed(() => new Set(supplierStore.value?.productIds || []))
 const supplierMatchNames = computed(() =>
   new Set([
@@ -98,6 +98,7 @@ const supplierPhone = computed(() => supplierDetails.value.phone || '')
 const supplierEmail = computed(() => supplierDetails.value.email || '')
 const supplierWebsite = computed(() => supplierDetails.value.website || '')
 const supplierDescription = computed(() => supplierDetails.value.details || '')
+const supplierMainDescription = 'A trusted local store offering everyday essentials, fresh selections, and convenient delivery for nearby customers.'
 const supplierSince = computed(() => supplierDetails.value.sellerSince || '')
 const hasSupplierContact = computed(() =>
   Boolean(supplierPhone.value || supplierEmail.value || supplierWebsite.value),
@@ -105,6 +106,10 @@ const hasSupplierContact = computed(() =>
 const hasSupplierInfo = computed(() =>
   Boolean(storeName.value || storeSupplierName.value || supplierDescription.value || supplierWebsite.value),
 )
+const dummySupplierRating = {
+  score: '4.7',
+  reviewCount: 128,
+}
 
 function openProductDetails(product) {
   saveSelectedProduct(product)
@@ -115,12 +120,8 @@ function openProductDetails(product) {
   })
 }
 
-function showSupplierBannerFallback(event) {
-  if (!supplierDetails.value.image || event.target.src === supplierDetails.value.image) {
-    return
-  }
-
-  event.target.src = supplierDetails.value.image
+function hideBrokenSupplierBanner(event) {
+  event.target.hidden = true
 }
 
 async function loadSupplierProducts() {
@@ -237,7 +238,7 @@ watch(supplierName, () => {
           class="supplier-store-banner-image"
           :src="supplierBannerImage"
           :alt="`${supplierDisplayName} banner`"
-          @error="showSupplierBannerFallback"
+          @error="hideBrokenSupplierBanner"
         />
         <span class="supplier-banner-logo">
           <img
@@ -247,8 +248,25 @@ watch(supplierName, () => {
           />
           <span v-else>{{ supplierInitials }}</span>
         </span>
-        <strong>{{ supplierDescription || supplierDisplayName }}</strong>
+        <strong>{{ supplierDisplayName }}</strong>
       </div>
+
+      <section class="supplier-store-overview">
+        <div class="supplier-store-description" aria-label="Supplier description">
+          <h2>About {{ supplierDisplayName }}</h2>
+          <p>{{ supplierMainDescription }}</p>
+        </div>
+
+        <div class="supplier-ratings-panel" aria-label="Supplier ratings">
+          <div class="supplier-ratings-header">
+            <div class="supplier-rating-score">
+              <strong>{{ dummySupplierRating.score }}</strong>
+              <span>★★★★★</span>
+              <small>{{ dummySupplierRating.reviewCount }} reviews</small>
+            </div>
+          </div>
+        </div>
+      </section>
 
       <section class="supplier-products-panel">
         <h2>Products by {{ supplierDisplayName }}</h2>
