@@ -710,7 +710,8 @@ def _normalize_payment_schedule_dates(sales_order):
 
 
 def _upsert_sales_order(checkout_items, sales_order_name=None, submit=False, delivery_address=None):
-	customer = _get_or_create_customer_for_user(frappe.session.user)
+	checkout_user = frappe.session.user
+	customer = _get_or_create_customer_for_user(checkout_user)
 	company = _get_default_company()
 	order_date = nowdate()
 	delivery_date = order_date
@@ -725,7 +726,7 @@ def _upsert_sales_order(checkout_items, sales_order_name=None, submit=False, del
 			(sales_order_name,),
 			as_dict=True,
 		)
-		if not sales_order_owner or sales_order_owner[0].owner != frappe.session.user:
+		if not sales_order_owner or sales_order_owner[0].owner != checkout_user:
 			frappe.throw(_("The linked Sales Order is no longer editable."))
 
 		with _as_administrator():
@@ -749,13 +750,15 @@ def _upsert_sales_order(checkout_items, sales_order_name=None, submit=False, del
 	for item in order_items:
 		sales_order.append("items", item)
 
-	_apply_delivery_address_to_sales_order(sales_order, customer, delivery_address)
-	_normalize_payment_schedule_dates(sales_order)
+	with _as_administrator():
+		_apply_delivery_address_to_sales_order(sales_order, customer, delivery_address)
+		_normalize_payment_schedule_dates(sales_order)
 
-	if sales_order.is_new():
-		sales_order.insert(ignore_permissions=True)
-	else:
-		sales_order.save(ignore_permissions=True)
+		if sales_order.is_new():
+			sales_order.owner = checkout_user
+			sales_order.insert(ignore_permissions=True)
+		else:
+			sales_order.save(ignore_permissions=True)
 
 	if submit:
 		with _as_administrator():
