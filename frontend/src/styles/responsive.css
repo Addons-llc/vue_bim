@@ -133,7 +133,8 @@
   }
 
   .dashboard-hero {
-    min-height: 240px;
+    aspect-ratio: 16 / 9;
+    min-height: 0;
   }
 
   .hero-slide {
@@ -503,7 +504,7 @@
   }
 
   .dashboard-hero {
-    min-height: 156px;
+    min-height: 0;
   }
 
   .hero-slide {
@@ -531,10 +532,6 @@
     min-height: 30px;
     padding: 0 10px;
     font-size: 12px;
-  }
-
-  .hero-slide-dots {
-    display: inline-flex;
   }
 
   .home-copy {

@@ -9,6 +9,9 @@ import { useProducts } from '../composables/useProducts'
 import { saveSelectedProduct } from '../data/productSelectionStore'
 import { saveSelectedSupplier } from '../data/supplierSelectionStore'
 import { openCategoryOrProduct } from '../utils/categoryNavigation'
+import bannerImageOne from '../assets/images/Banner-1 (1).png'
+import bannerImageTwo from '../assets/images/Banner-2.png'
+import bannerImageThree from '../assets/images/Banner-3 (1).png'
 
 const props = defineProps({
   category: {
@@ -32,34 +35,16 @@ let heroSlideTimer = null
 
 const heroSlides = [
   {
-    label: 'Fresh market delivery',
-    title: 'Vegetables, fruits, grocery, meat, and fish delivered in minutes.',
-    primaryLabel: 'Start shopping',
-    primaryTo: '/',
-    secondaryLabel: 'Track order',
-    secondaryTo: '/cart',
-    image:
-      'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=1400&q=80',
+    title: 'Fresh market delivery',
+    image: bannerImageOne,
   },
   {
-    label: 'Daily essentials',
-    title: 'Top up groceries and pantry needs without waiting.',
-    primaryLabel: 'Shop grocery',
-    primaryTo: '/?category=Grocery',
-    secondaryLabel: 'View cart',
-    secondaryTo: '/cart',
-    image:
-      'https://images.unsplash.com/photo-1604719312566-8912e9227c6a?auto=format&fit=crop&w=1400&q=80',
+    title: 'Daily essentials',
+    image: bannerImageTwo,
   },
   {
-    label: 'Fresh cuts',
-    title: 'Cleaned meat and fish prepared for quick home cooking.',
-    primaryLabel: 'Browse meat',
-    primaryTo: '/?category=Meat',
-    secondaryLabel: 'Browse fish',
-    secondaryTo: '/?category=Fish',
-    image:
-      'https://images.unsplash.com/photo-1615937657715-bc7b4b7962c1?auto=format&fit=crop&w=1400&q=80',
+    title: 'Fresh cuts',
+    image: bannerImageThree,
   },
 ]
 
@@ -207,30 +192,18 @@ onUnmounted(() => {
         <img
           class="hero-slide-image"
           :src="slide.image"
-          alt=""
+          :alt="slide.title"
           :loading="index === 0 ? 'eager' : 'lazy'"
           decoding="async"
           @error="useHeroImageFallback"
         />
-        <div class="hero-content">
-          <p class="section-label">{{ slide.label }}</p>
-          <h1>{{ slide.title }}</h1>
-          <div class="hero-actions">
-            <RouterLink class="primary-link" :to="slide.primaryTo">
-              {{ slide.primaryLabel }}
-            </RouterLink>
-            <RouterLink class="secondary-link" :to="slide.secondaryTo">
-              {{ slide.secondaryLabel }}
-            </RouterLink>
-          </div>
-        </div>
       </div>
     </div>
 
     <div class="hero-slide-dots" aria-label="Banner slides">
       <button
         v-for="(slide, index) in heroSlides"
-        :key="slide.label"
+        :key="slide.title"
         class="hero-slide-dot"
         :class="{ 'is-active': activeHeroSlide === index }"
         type="button"
