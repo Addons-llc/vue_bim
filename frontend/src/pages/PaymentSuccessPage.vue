@@ -28,6 +28,12 @@ const stripeSessionId = computed(() => {
 const referenceValue = computed(() => route.query.sales_order || stripeSessionId.value || '')
 const finalizeError = ref('')
 const salesOrderName = ref(Array.isArray(route.query.sales_order) ? route.query.sales_order[0] : route.query.sales_order || '')
+const purchaseOrders = ref(
+  String(Array.isArray(route.query.purchase_orders) ? route.query.purchase_orders[0] : route.query.purchase_orders || '')
+    .split(',')
+    .map((purchaseOrder) => purchaseOrder.trim())
+    .filter(Boolean),
+)
 const orderedProducts = ref([])
 const orderedProductsError = ref('')
 const isLoadingOrderedProducts = ref(false)
@@ -71,6 +77,7 @@ onMounted(async () => {
     try {
       const response = await finalizeStripeCheckout(stripeSessionId.value)
       salesOrderName.value = response?.message?.sales_order || salesOrderName.value
+      purchaseOrders.value = response?.message?.purchase_orders || purchaseOrders.value
       orderedProducts.value = response?.message?.items || []
     } catch (error) {
       finalizeError.value = error.message
@@ -95,6 +102,9 @@ onMounted(async () => {
       </p>
       <p v-if="referenceValue && paymentMethod !== 'cod'" class="payment-session-id">
         {{ referenceLabel }} {{ referenceValue }}
+      </p>
+      <p v-if="purchaseOrders.length" class="payment-session-id">
+        Purchase order {{ purchaseOrders.join(', ') }}
       </p>
       <p v-if="finalizeError" class="form-message error-message">
         {{ finalizeError }}

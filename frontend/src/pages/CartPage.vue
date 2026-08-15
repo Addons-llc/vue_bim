@@ -1,9 +1,10 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { getCurrentUser } from '../api/authApi'
 import { createCashOnDeliveryOrder, createStripeCheckoutSession } from '../api/paymentApi'
 import { customerAddresses } from '../data/addressStore'
-import { currentUser, isAuthReady } from '../data/authStore'
+import { currentUser, isAuthReady, setCurrentUser } from '../data/authStore'
 import { clearCart } from '../data/cartStore'
 import {
   cartProducts,
@@ -22,6 +23,13 @@ const checkoutError = ref('')
 const isAddressRequired = ref(false)
 const LAST_COD_ORDER_ITEMS_STORAGE_KEY = 'buyInMinutesLastCodOrderItems'
 const canCheckout = computed(() => isAuthReady.value && Boolean(currentUser.value))
+const checkoutButtonLabel = computed(() => {
+  if (!isAuthReady.value) {
+    return 'Checking session...'
+  }
+
+  return canCheckout.value ? '' : 'Login to Proceed'
+})
 const hasDeliveryAddress = computed(() => customerAddresses.value.length > 0)
 const selectedDeliveryAddress = computed(() =>
   customerAddresses.value.find((address) => address.isDefault)
@@ -38,12 +46,39 @@ const itemSavings = computed(() =>
   }, 0),
 )
 
+async function refreshCurrentSession() {
+  try {
+    const response = await getCurrentUser()
+    const message = response?.message || {}
+
+    if (message.is_authenticated) {
+      setCurrentUser(message.user)
+    }
+  } catch (error) {
+    console.error('Unable to refresh checkout session', error)
+  }
+}
+
+async function ensureCheckoutSession() {
+  if (canCheckout.value) {
+    return true
+  }
+
+  await refreshCurrentSession()
+
+  if (canCheckout.value) {
+    return true
+  }
+
+  emit('login')
+  return false
+}
+
 async function startStripeCheckout() {
   checkoutError.value = ''
   isAddressRequired.value = false
 
-  if (!canCheckout.value) {
-    emit('login')
+  if (!(await ensureCheckoutSession())) {
     return
   }
 
@@ -75,8 +110,7 @@ async function placeCashOnDeliveryOrder() {
   checkoutError.value = ''
   isAddressRequired.value = false
 
-  if (!canCheckout.value) {
-    emit('login')
+  if (!(await ensureCheckoutSession())) {
     return
   }
 
@@ -91,6 +125,7 @@ async function placeCashOnDeliveryOrder() {
   try {
     const response = await createCashOnDeliveryOrder(cartProducts.value, '', selectedDeliveryAddress.value)
     const salesOrder = response?.message?.sales_order
+    const purchaseOrders = response?.message?.purchase_orders || []
     const orderedItems = cartProducts.value.map((item) => ({
       item_code: item.itemCode || item.id,
       item_name: item.name,
@@ -106,6 +141,7 @@ async function placeCashOnDeliveryOrder() {
       query: {
         method: 'cod',
         ...(salesOrder ? { sales_order: salesOrder } : {}),
+        ...(purchaseOrders.length ? { purchase_orders: purchaseOrders.join(',') } : {}),
       },
     })
   } catch (error) {
@@ -124,6 +160,21 @@ function goToAddAddress() {
     },
   })
 }
+
+function handleWindowFocus() {
+  refreshCurrentSession()
+}
+
+onMounted(() => {
+  refreshCurrentSession()
+  window.addEventListener('focus', handleWindowFocus)
+  window.addEventListener('pageshow', handleWindowFocus)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('focus', handleWindowFocus)
+  window.removeEventListener('pageshow', handleWindowFocus)
+})
 </script>
 
 <template>
@@ -216,18 +267,18 @@ function goToAddAddress() {
             <button
               class="cart-secondary-button"
               type="button"
-              :disabled="isPlacingCodOrder"
+              :disabled="isPlacingCodOrder || !isAuthReady"
               @click="placeCashOnDeliveryOrder"
             >
-              {{ canCheckout ? (isPlacingCodOrder ? 'PLACING ORDER...' : 'CASH ON DELIVERY') : 'Login to Proceed' }}
+              {{ canCheckout ? (isPlacingCodOrder ? 'PLACING ORDER...' : 'CASH ON DELIVERY') : checkoutButtonLabel }}
             </button>
             <button
               class="cart-login-button"
               type="button"
-              :disabled="isStartingCheckout"
+              :disabled="isStartingCheckout || !isAuthReady"
               @click="startStripeCheckout"
             >
-              {{ canCheckout ? (isStartingCheckout ? 'PAYING...' : 'PAY NOW') : 'Login to Proceed' }}
+              {{ canCheckout ? (isStartingCheckout ? 'PAYING...' : 'PAY NOW') : checkoutButtonLabel }}
               <span aria-hidden="true">›</span>
             </button>
           </div>

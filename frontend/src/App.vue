@@ -2,7 +2,7 @@
 import { onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { getCurrentUser, logout } from './api/authApi'
-import { clearCurrentUser, setCurrentUser } from './data/authStore'
+import { clearCurrentUser, currentUser, setCurrentUser } from './data/authStore'
 import DefaultLayout from './layouts/DefaultLayout.vue'
 
 const route = useRoute()
@@ -21,7 +21,9 @@ onMounted(async () => {
     console.error('Unable to load current user session', error)
   }
 
-  clearCurrentUser()
+  if (!currentUser.value) {
+    clearCurrentUser()
+  }
 })
 
 function navigateToLogin() {

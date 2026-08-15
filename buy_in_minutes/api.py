@@ -679,6 +679,16 @@ def _can_view_sales_order(sales_order):
 	return bool(sales_order.customer and sales_order.customer == _get_customer_for_user(frappe.session.user))
 
 
+def _get_purchase_order_names_for_sales_order(sales_order_name):
+	return frappe.get_all(
+		"Purchase Order Item",
+		filters={"sales_order": sales_order_name, "docstatus": ["<", 2]},
+		pluck="parent",
+		ignore_permissions=True,
+		order_by="creation asc",
+	)
+
+
 @frappe.whitelist(allow_guest=True)
 def get_sales_order(sales_order_name):
 	if frappe.session.user == "Guest":
@@ -723,6 +733,7 @@ def get_sales_order(sales_order_name):
 		"transaction_date": sales_order.transaction_date,
 		"grand_total": flt(sales_order.grand_total),
 		"currency": sales_order.currency or "AED",
+		"purchase_orders": list(dict.fromkeys(_get_purchase_order_names_for_sales_order(sales_order.name))),
 		"items": [
 			{
 				"item_code": row.item_code,

@@ -585,12 +585,20 @@ def _get_purchase_orders_for_sales_order(sales_order_name):
 		"Purchase Order Item",
 		filters={"sales_order": sales_order_name, "docstatus": ["<", 2]},
 		pluck="parent",
+		ignore_permissions=True,
 	)
 
 	return [
 		frappe.get_doc("Purchase Order", purchase_order_name)
 		for purchase_order_name in dict.fromkeys(purchase_order_names)
 		if purchase_order_name
+	]
+
+
+def _get_purchase_order_names_for_sales_order(sales_order_name):
+	return [
+		purchase_order.name
+		for purchase_order in _get_purchase_orders_for_sales_order(sales_order_name)
 	]
 
 
@@ -901,6 +909,7 @@ def finalize_stripe_checkout(session_id=None):
 	return {
 		"success": True,
 		"sales_order": sales_order.name,
+		"purchase_orders": _get_purchase_order_names_for_sales_order(sales_order.name),
 		"sales_order_status": sales_order.status,
 		"docstatus": sales_order.docstatus,
 		"payment_status": session.get("payment_status"),
