@@ -1,10 +1,29 @@
 import { defineConfig, loadEnv } from 'vite'
 import vue from '@vitejs/plugin-vue'
+import { existsSync, readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const frontendRoot = dirname(fileURLToPath(import.meta.url))
 const appRoot = resolve(frontendRoot, '..')
+const localCertDir = resolve(frontendRoot, '.cert')
+const localKeyPath = resolve(localCertDir, 'localhost-key.pem')
+const localCertPath = resolve(localCertDir, 'localhost-cert.pem')
+
+function getLocalHttpsConfig(env) {
+  if (env.VITE_DEV_HTTPS !== '1') {
+    return undefined
+  }
+
+  if (!existsSync(localKeyPath) || !existsSync(localCertPath)) {
+    return undefined
+  }
+
+  return {
+    key: readFileSync(localKeyPath),
+    cert: readFileSync(localCertPath),
+  }
+}
 
 // https://vite.dev/config/
 export default defineConfig(({ command, mode }) => {
@@ -26,6 +45,7 @@ export default defineConfig(({ command, mode }) => {
     ? { Authorization: frappeApiAuthHeader }
     : undefined
   const base = command === 'serve' ? '/' : '/assets/buy_in_minutes/buy-in-minutes/'
+  const https = command === 'serve' ? getLocalHttpsConfig(env) : undefined
   const clientEnv = Object.fromEntries(
     Object.entries(env)
       .filter(([key]) => key.startsWith('VITE_'))
@@ -42,6 +62,7 @@ export default defineConfig(({ command, mode }) => {
     },
     server: {
       host: true,
+      https,
       proxy: {
         '/api': {
           target: proxyTarget,

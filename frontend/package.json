@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:https": "node scripts/create-local-cert.mjs && VITE_DEV_HTTPS=1 vite --host 0.0.0.0",
     "build": "vite build",
     "postbuild": "node scripts/sync-frappe-page.mjs",
     "preview": "vite preview"

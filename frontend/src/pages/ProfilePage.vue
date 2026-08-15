@@ -22,6 +22,7 @@ const successMessage = ref('')
 const isSubmitting = ref(false)
 const isAddressFormOpen = ref(false)
 const isDetectingAddressLocation = ref(false)
+const isAddressLocationEditedManually = ref(false)
 const addressLocationError = ref('')
 const editingAddressId = ref('')
 const addressForm = ref({
@@ -80,6 +81,7 @@ function resetAddressForm() {
     isDefault: !customerAddresses.value.length,
   }
   editingAddressId.value = ''
+  isAddressLocationEditedManually.value = false
   addressLocationError.value = ''
 }
 
@@ -167,6 +169,7 @@ function editAddress(address) {
     isDefault: address.isDefault,
   }
   editingAddressId.value = address.id
+  isAddressLocationEditedManually.value = false
   isAddressFormOpen.value = true
   addressLocationError.value = ''
 }
@@ -174,6 +177,19 @@ function editAddress(address) {
 function cancelAddressForm() {
   isAddressFormOpen.value = false
   resetAddressForm()
+}
+
+function markAddressEditedManually() {
+  if (!addressForm.value.latitude && !addressForm.value.longitude) {
+    return
+  }
+
+  addressForm.value = {
+    ...addressForm.value,
+    latitude: '',
+    longitude: '',
+  }
+  isAddressLocationEditedManually.value = true
 }
 
 function saveAddress() {
@@ -213,6 +229,12 @@ function getAddressComponent(result = {}, type) {
   )
 
   return component?.long_name || ''
+}
+
+function getAddressComponentValues(result = {}, types = []) {
+  return types
+    .map((type) => getAddressComponent(result, type))
+    .filter(Boolean)
 }
 
 function isUnitedArabEmiratesPlace(result = {}) {
@@ -264,21 +286,32 @@ function buildAddressFieldsFromPlace(place = {}) {
   const streetAddress = [streetNumber, routeName].filter(Boolean).join(' ')
   const premise = getAddressComponent(place, 'premise')
   const subpremise = getAddressComponent(place, 'subpremise')
-  const area = [
-    getAddressComponent(place, 'neighborhood'),
-    getAddressComponent(place, 'sublocality_level_1'),
-    getAddressComponent(place, 'sublocality'),
-    getAddressComponent(place, 'locality'),
-    getAddressComponent(place, 'administrative_area_level_2'),
-    getAddressComponent(place, 'administrative_area_level_1'),
-  ].find(Boolean) || ''
-  const placeName = place.name && !isParkingLabel(place.name) ? place.name : ''
+  const area = getAddressComponentValues(place, [
+    'neighborhood',
+    'sublocality_level_2',
+    'sublocality_level_1',
+    'sublocality',
+    'locality',
+    'administrative_area_level_2',
+    'administrative_area_level_1',
+  ]).find((value) => !isParkingLabel(value)) || ''
+  const placeName = place.name && !isParkingLabel(place.name) && !isPlusCodeLabel(place.name)
+    ? place.name
+    : ''
+  const formattedAddress = normalizeDisplayedLocation(place.formatted_address || '')
+  const formattedAddressLead = formattedAddress.split(',').map((part) => part.trim()).find((part) => (
+    part
+    && part !== area
+    && !isPlusCodeLabel(part)
+    && !isParkingLabel(part)
+  )) || ''
   const building = [
     [subpremise, premise].filter(Boolean).join(', '),
     premise,
     subpremise,
     streetAddress,
     placeName,
+    formattedAddressLead,
     routeName,
   ].find((value) => (
     value
@@ -286,12 +319,11 @@ function buildAddressFieldsFromPlace(place = {}) {
     && !isPlusCodeLabel(value)
     && !isParkingLabel(value)
   )) || ''
-  const formattedAddress = normalizeDisplayedLocation(place.formatted_address || '')
 
   return {
     area,
     building,
-    landmark: [placeName, formattedAddress].find((value) => (
+    landmark: [placeName, routeName, formattedAddressLead, formattedAddress].find((value) => (
       value
       && value !== area
       && value !== building
@@ -317,6 +349,21 @@ function pickNearbyBuildingPlace(places = []) {
       && !isPlusCodeLabel(name)
       && !isParkingLabel(name)
       && !UNWANTED_RESULT_TYPES.some((type) => types.includes(type))
+    )
+  }) || null
+}
+
+function pickNearbyLandmarkPlace(places = [], excludedValues = []) {
+  return places.find((place) => {
+    const name = place.name || ''
+    const types = place.types || []
+
+    return (
+      name
+      && !excludedValues.includes(name)
+      && !isPlusCodeLabel(name)
+      && !isParkingLabel(name)
+      && !types.includes('parking')
     )
   }) || null
 }
@@ -363,7 +410,7 @@ async function getNearbyBuildingPlace(location) {
       fields: ['displayName', 'formattedAddress', 'location', 'types'],
       locationRestriction: {
         center: location,
-        radius: 40,
+        radius: 80,
       },
       rankPreference: addressPlaceApi.SearchNearbyRankPreference.DISTANCE,
     })
@@ -378,6 +425,50 @@ async function getNearbyBuildingPlace(location) {
   } catch {
     return null
   }
+}
+
+function searchNearbyPlacesWithService(location) {
+  return new Promise((resolve) => {
+    if (!window.google?.maps?.places?.PlacesService || !location) {
+      resolve([])
+      return
+    }
+
+    const placesService = new window.google.maps.places.PlacesService(document.createElement('div'))
+
+    placesService.nearbySearch(
+      {
+        location,
+        radius: 80,
+      },
+      (results, status) => {
+        if (status !== window.google.maps.places.PlacesServiceStatus.OK || !results) {
+          resolve([])
+          return
+        }
+
+        resolve(results.map((place) => ({
+          name: place.name,
+          formatted_address: place.vicinity,
+          location: place.geometry?.location,
+          types: place.types || [],
+        })))
+      },
+    )
+  })
+}
+
+async function getNearbyAddressPlaces(location) {
+  const places = []
+  const newPlacesResult = await getNearbyBuildingPlace(location)
+
+  if (newPlacesResult) {
+    places.push(newPlacesResult)
+  }
+
+  const servicePlaces = await searchNearbyPlacesWithService(location)
+
+  return [...places, ...servicePlaces]
 }
 
 async function initializeAddressLocationServices() {
@@ -443,41 +534,55 @@ async function fillAddressFromCurrentLocation() {
       }
 
       addressGeocoder.geocode({ location: currentPosition }, async (results, status) => {
-        const geocodedResult = status === 'OK' ? pickPreferredAddressResult(results) : null
-        const placeDetails = geocodedResult?.place_id
-          ? await getAddressPlaceDetails(geocodedResult.place_id)
-          : null
-        const preferredPlace = placeDetails || geocodedResult
+        try {
+          const geocodedResult = status === 'OK' ? pickPreferredAddressResult(results) : null
+          const placeDetails = geocodedResult?.place_id
+            ? await getAddressPlaceDetails(geocodedResult.place_id)
+            : null
+          const preferredPlace = placeDetails || geocodedResult
 
-        if (!preferredPlace) {
-          addressLocationError.value = 'Unable to resolve your exact address.'
+          if (!preferredPlace) {
+            addressLocationError.value = 'Unable to resolve your exact address.'
+            return
+          }
+
+          if (!isUnitedArabEmiratesPlace(preferredPlace)) {
+            addressLocationError.value = 'Please use a location in the United Arab Emirates.'
+            return
+          }
+
+          const detectedFields = buildAddressFieldsFromPlace(preferredPlace)
+          const nearbyPlaces = await getNearbyAddressPlaces(currentPosition)
+          const nearbyBuildingPlace = !detectedFields.building || isStreetOnlyBuilding(detectedFields.building, preferredPlace)
+            ? pickNearbyBuildingPlace(nearbyPlaces)
+            : null
+          const nearbyBuildingName = nearbyBuildingPlace?.name && !isParkingLabel(nearbyBuildingPlace.name)
+            ? nearbyBuildingPlace.name
+            : ''
+          const finalBuilding = nearbyBuildingName || detectedFields.building || addressForm.value.building
+          const nearbyLandmark = pickNearbyLandmarkPlace(nearbyPlaces, [
+            finalBuilding,
+            detectedFields.area,
+            detectedFields.landmark,
+          ])
+          const nearbyLandmarkName = nearbyLandmark?.name && !isParkingLabel(nearbyLandmark.name)
+            ? nearbyLandmark.name
+            : ''
+
+          addressForm.value = {
+            ...addressForm.value,
+            area: detectedFields.area || addressForm.value.area,
+            building: finalBuilding,
+            landmark: nearbyLandmarkName || detectedFields.landmark || addressForm.value.landmark,
+            latitude: String(currentPosition.lat),
+            longitude: String(currentPosition.lng),
+          }
+          isAddressLocationEditedManually.value = false
+        } catch (error) {
+          addressLocationError.value = error.message || 'Unable to resolve your exact address.'
+        } finally {
           isDetectingAddressLocation.value = false
-          return
         }
-
-        if (!isUnitedArabEmiratesPlace(preferredPlace)) {
-          addressLocationError.value = 'Please use a location in the United Arab Emirates.'
-          isDetectingAddressLocation.value = false
-          return
-        }
-
-        const detectedFields = buildAddressFieldsFromPlace(preferredPlace)
-        const nearbyBuildingPlace = !detectedFields.building || isStreetOnlyBuilding(detectedFields.building, preferredPlace)
-          ? await getNearbyBuildingPlace(currentPosition)
-          : null
-        const nearbyBuildingName = nearbyBuildingPlace?.name && !isParkingLabel(nearbyBuildingPlace.name)
-          ? nearbyBuildingPlace.name
-          : ''
-
-        addressForm.value = {
-          ...addressForm.value,
-          area: detectedFields.area || addressForm.value.area,
-          building: nearbyBuildingName || detectedFields.building || addressForm.value.building,
-          landmark: detectedFields.landmark || addressForm.value.landmark,
-          latitude: String(currentPosition.lat),
-          longitude: String(currentPosition.lng),
-        }
-        isDetectingAddressLocation.value = false
       })
     },
     (error) => {
@@ -610,6 +715,7 @@ async function fillAddressFromCurrentLocation() {
               type="text"
               placeholder="Dubai Marina, Al Nahda, Business Bay"
               required
+              @input="markAddressEditedManually"
             />
 
             <label class="field-label" for="address-building">Building / villa</label>
@@ -620,6 +726,7 @@ async function fillAddressFromCurrentLocation() {
               type="text"
               placeholder="Building, floor, apartment or villa number"
               required
+              @input="markAddressEditedManually"
             />
 
             <label class="field-label" for="address-landmark">Landmark</label>
@@ -629,10 +736,14 @@ async function fillAddressFromCurrentLocation() {
               class="form-input"
               type="text"
               placeholder="Nearby landmark"
+              @input="markAddressEditedManually"
             />
 
             <p v-if="addressForm.latitude && addressForm.longitude" class="profile-address-location-note">
               Location captured for this address.
+            </p>
+            <p v-else-if="isAddressLocationEditedManually" class="profile-address-location-note">
+              Manual address details will be saved.
             </p>
 
             <label class="profile-address-default">

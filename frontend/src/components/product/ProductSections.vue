@@ -144,7 +144,7 @@ onUnmounted(() => {
             type="button"
             @click="toggleSectionExpanded(section.id)"
           >
-            {{ isSectionExpanded(section.id) ? 'show less' : 'see all' }}
+            {{ isSectionExpanded(section.id) ? 'show less' : 'show more' }}
           </button>
         </div>
 

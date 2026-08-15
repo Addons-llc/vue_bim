@@ -92,7 +92,7 @@
 
   .header-actions {
     flex: 0 0 auto;
-    gap: 6px;
+    gap: 2px;
     margin-left: auto;
   }
 
@@ -392,14 +392,29 @@
     order: 2;
     display: inline-flex;
     flex: 0 0 auto;
-    gap: 0;
+    gap: 2px;
     margin-left: 0;
   }
 
   .header-actions .cart-link,
-  .header-actions .account-menu-wrap,
   .header-actions .language-toggle-button {
     display: none;
+  }
+
+  .header-actions .account-menu-wrap {
+    display: inline-flex;
+  }
+
+  .header-actions .logout-button {
+    min-width: 34px;
+    min-height: 34px;
+    border-radius: 999px;
+    background: #ffffff;
+    box-shadow: 0 1px 6px rgba(17, 24, 39, 0.06);
+  }
+
+  .header-actions .account-menu {
+    right: 0;
   }
 
   .header-actions .wishlist-link {

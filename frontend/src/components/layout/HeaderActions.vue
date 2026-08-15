@@ -114,6 +114,7 @@ function toggleLanguage() {
       <button
         class="logout-button"
         type="button"
+        :aria-label="isAuthenticated ? accountLabel : 'Login'"
         aria-haspopup="menu"
         :aria-expanded="isAuthenticated ? isAccountMenuOpen : undefined"
         @click="handleAccountAction"
