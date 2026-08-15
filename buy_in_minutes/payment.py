@@ -17,7 +17,6 @@ from erpnext.stock.doctype.item.item import get_item_defaults
 
 STRIPE_API_BASE_URL = "https://api.stripe.com/v1"
 DEFAULT_CURRENCY = "aed"
-HANDLING_FEE = 2
 DELIVERY_FEE = 6
 FREE_DELIVERY_MINIMUM = 60
 SELLING_PRICE_LIST = "Selling Price"
@@ -516,17 +515,6 @@ def _get_checkout_items(cart_items):
 		)
 
 	subtotal = sum(item["amount"] for item in checkout_items)
-	if checkout_items:
-		checkout_items.append(
-			{
-				"item_code": "handling-fee",
-				"item_name": _("Handling charge"),
-				"quantity": 1,
-				"rate": HANDLING_FEE,
-				"amount": HANDLING_FEE,
-			}
-		)
-
 	if checkout_items and subtotal < FREE_DELIVERY_MINIMUM:
 		checkout_items.append(
 			{

@@ -15,8 +15,7 @@ const emit = defineEmits(['continueShopping', 'login'])
 const router = useRouter()
 
 const deliveryFee = computed(() => (cartTotal.value >= 60 || !cartProducts.value.length ? 0 : 6))
-const handlingFee = computed(() => (cartProducts.value.length ? 2 : 0))
-const payableTotal = computed(() => cartTotal.value + deliveryFee.value + handlingFee.value)
+const payableTotal = computed(() => cartTotal.value + deliveryFee.value)
 const isStartingCheckout = ref(false)
 const isPlacingCodOrder = ref(false)
 const checkoutError = ref('')
@@ -195,10 +194,6 @@ function goToAddAddress() {
           <div class="cart-summary-row">
             <span>Delivery charge</span>
             <strong>{{ deliveryFee ? `AED ${deliveryFee}` : 'FREE' }}</strong>
-          </div>
-          <div class="cart-summary-row">
-            <span>Handling charge</span>
-            <strong>AED {{ handlingFee }}</strong>
           </div>
           <div class="cart-summary-total">
             <span>Grand total</span>
