@@ -12,6 +12,7 @@ const brandName = computed(() => String(route.params.brandName || 'Brand'))
 const brandRecord = ref(null)
 const loadedProducts = ref([])
 const isLoadingBrandProducts = ref(false)
+const failedBrandBannerImage = ref('')
 
 const brandDetails = computed(() => ({
   displayName: brandRecord.value?.name || brandName.value,
@@ -22,6 +23,11 @@ const brandDetails = computed(() => ({
 }))
 const brandDisplayName = computed(() => brandDetails.value.displayName || brandName.value)
 const brandBannerImage = computed(() => brandDetails.value.bannerImage || '')
+const visibleBrandBannerImage = computed(() =>
+  brandBannerImage.value && brandBannerImage.value !== failedBrandBannerImage.value
+    ? brandBannerImage.value
+    : '',
+)
 const brandDescription = computed(() => brandDetails.value.description || '')
 const brandInitials = computed(() => brandDisplayName.value.slice(0, 2).toUpperCase())
 const brandProducts = computed(() =>
@@ -44,8 +50,8 @@ function openProductDetails(product) {
   })
 }
 
-function hideBrokenBrandBanner(event) {
-  event.target.hidden = true
+function hideBrokenBrandBanner() {
+  failedBrandBannerImage.value = brandBannerImage.value
 }
 
 async function loadBrandProducts() {
@@ -75,6 +81,7 @@ onMounted(loadBrandProducts)
 watch(brandName, () => {
   brandRecord.value = null
   loadedProducts.value = []
+  failedBrandBannerImage.value = ''
   loadBrandProducts()
 })
 </script>
@@ -110,9 +117,10 @@ watch(brandName, () => {
     <main class="supplier-store-main">
       <div class="supplier-store-banner">
         <img
-          v-if="brandBannerImage"
+          v-if="visibleBrandBannerImage"
+          :key="visibleBrandBannerImage"
           class="supplier-store-banner-image"
-          :src="brandBannerImage"
+          :src="visibleBrandBannerImage"
           :alt="`${brandDisplayName} banner`"
           @error="hideBrokenBrandBanner"
         />

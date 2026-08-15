@@ -27,6 +27,7 @@ const initialCategory = computed(() => props.category)
 const activeHeroSlide = ref(0)
 const brands = ref([])
 const stores = ref([])
+const heroImageFallback = `${import.meta.env.BASE_URL}grocery-card-image-v3.svg?v=3`
 let heroSlideTimer = null
 
 const heroSlides = [
@@ -153,6 +154,14 @@ function selectHeroSlide(index) {
   activeHeroSlide.value = index
 }
 
+function useHeroImageFallback(event) {
+  if (event.target.src.includes('/grocery-card-image-v3.svg')) {
+    return
+  }
+
+  event.target.src = heroImageFallback
+}
+
 function stopHeroAutoplay() {
   if (heroSlideTimer) {
     clearInterval(heroSlideTimer)
@@ -194,8 +203,15 @@ onUnmounted(() => {
         :key="slide.title"
         class="hero-slide"
         :class="{ 'is-active': activeHeroSlide === index }"
-        :style="{ backgroundImage: `linear-gradient(90deg, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0.72) 36%, rgba(255, 255, 255, 0.18) 64%, rgba(255, 255, 255, 0)), url(${slide.image})` }"
       >
+        <img
+          class="hero-slide-image"
+          :src="slide.image"
+          alt=""
+          :loading="index === 0 ? 'eager' : 'lazy'"
+          decoding="async"
+          @error="useHeroImageFallback"
+        />
         <div class="hero-content">
           <p class="section-label">{{ slide.label }}</p>
           <h1>{{ slide.title }}</h1>

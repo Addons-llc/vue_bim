@@ -14,6 +14,7 @@ const supplierName = computed(() => String(route.params.supplierName || 'Supplie
 const selectedSupplier = computed(() => getSelectedSupplier(supplierName.value))
 const supplierRecord = ref(null)
 const supplierStore = ref(null)
+const failedSupplierBannerImage = ref('')
 const supplierDetails = computed(() => {
   const store = supplierStore.value
   const supplier = supplierRecord.value || {}
@@ -40,6 +41,11 @@ const loadedProducts = ref([])
 const isLoadingSupplierProducts = ref(false)
 const supplierDisplayName = computed(() => supplierDetails.value.displayName || supplierName.value)
 const supplierBannerImage = computed(() => supplierDetails.value.bannerImage || '')
+const visibleSupplierBannerImage = computed(() =>
+  supplierBannerImage.value && supplierBannerImage.value !== failedSupplierBannerImage.value
+    ? supplierBannerImage.value
+    : '',
+)
 const supplierProductIds = computed(() => new Set(supplierStore.value?.productIds || []))
 const supplierMatchNames = computed(() =>
   new Set([
@@ -120,8 +126,8 @@ function openProductDetails(product) {
   })
 }
 
-function hideBrokenSupplierBanner(event) {
-  event.target.hidden = true
+function hideBrokenSupplierBanner() {
+  failedSupplierBannerImage.value = supplierBannerImage.value
 }
 
 async function loadSupplierProducts() {
@@ -176,6 +182,7 @@ watch(supplierName, () => {
   supplierRecord.value = null
   supplierStore.value = null
   loadedProducts.value = []
+  failedSupplierBannerImage.value = ''
   loadSupplierProducts()
 })
 </script>
@@ -234,9 +241,10 @@ watch(supplierName, () => {
     <main class="supplier-store-main">
       <div class="supplier-store-banner">
         <img
-          v-if="supplierBannerImage"
+          v-if="visibleSupplierBannerImage"
+          :key="visibleSupplierBannerImage"
           class="supplier-store-banner-image"
-          :src="supplierBannerImage"
+          :src="visibleSupplierBannerImage"
           :alt="`${supplierDisplayName} banner`"
           @error="hideBrokenSupplierBanner"
         />
