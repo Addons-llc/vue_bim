@@ -13,6 +13,7 @@ const isAuthenticated = computed(() => Boolean(currentUser.value))
 const isHomeActive = computed(() => route.name === 'home')
 const isCategoriesActive = computed(() => ['categories', 'category-details'].includes(route.name))
 const isCartActive = computed(() => route.name === 'cart')
+const isOrdersActive = computed(() => route.name === 'orders')
 const isAccountActive = computed(() => route.name === 'profile')
 
 function goToAccount() {
@@ -100,6 +101,29 @@ function goToAccount() {
         </span>
       </span>
       <span class="mobile-nav-label">Cart</span>
+    </RouterLink>
+
+    <RouterLink
+      class="mobile-nav-item"
+      :class="{ 'is-active': isOrdersActive }"
+      :to="{ name: 'orders' }"
+    >
+      <svg
+        class="mobile-nav-icon"
+        aria-hidden="true"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
+        <path d="M7 3h10l2 4v14H5V7l2-4Z" />
+        <path d="M7 7h10" />
+        <path d="M9 12h6" />
+        <path d="M9 16h4" />
+      </svg>
+      <span class="mobile-nav-label">Orders</span>
     </RouterLink>
 
     <button

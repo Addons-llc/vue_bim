@@ -7,6 +7,7 @@ import CategoriesPage from '../pages/CategoriesPage.vue'
 import HomePage from '../pages/HomePage.vue'
 import LoginPage from '../pages/LoginPage.vue'
 import OtpPage from '../pages/OtpPage.vue'
+import OrdersPage from '../pages/OrdersPage.vue'
 import PaymentCancelPage from '../pages/PaymentCancelPage.vue'
 import PaymentSuccessPage from '../pages/PaymentSuccessPage.vue'
 import ProductDetailsPage from '../pages/ProductDetailsPage.vue'
@@ -83,6 +84,11 @@ const routes = [
     path: '/profile',
     name: 'profile',
     component: ProfilePage,
+  },
+  {
+    path: '/orders',
+    name: 'orders',
+    component: OrdersPage,
   },
   {
     path: '/payment/success',

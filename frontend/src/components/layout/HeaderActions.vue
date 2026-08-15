@@ -154,6 +154,14 @@ function toggleLanguage() {
         >
           View profile
         </RouterLink>
+        <RouterLink
+          class="account-menu-item"
+          :to="{ name: 'orders' }"
+          role="menuitem"
+          @click="closeAccountMenu"
+        >
+          Orders
+        </RouterLink>
         <button
           class="account-menu-item"
           type="button"

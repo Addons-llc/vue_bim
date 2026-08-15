@@ -750,6 +750,13 @@ def get_sales_order(sales_order_name):
 
 
 @frappe.whitelist()
+def get_order_history(limit_page_length=20):
+	from buy_in_minutes.buy_in_minutes.order_history import get_order_history as get_history
+
+	return get_history(limit_page_length=limit_page_length)
+
+
+@frappe.whitelist()
 def get_ordered_products(limit_page_length=40):
 	limit_page_length = frappe.utils.cint(limit_page_length) or 40
 	if frappe.session.user == "Guest":
