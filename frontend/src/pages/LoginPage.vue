@@ -1,7 +1,7 @@
 <script setup>
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { requestPhoneOtp, signInWithProvider } from '../api/authApi'
+import { requestPhoneOtp } from '../api/authApi'
 
 const phoneNumber = ref('')
 const errorMessage = ref('')
@@ -57,20 +57,6 @@ async function handlePhoneSignIn() {
   }
 }
 
-async function handleProviderSignIn(provider) {
-  errorMessage.value = ''
-  successMessage.value = ''
-
-  try {
-    console.log('Provider sign-in request', { provider })
-    const response = await signInWithProvider(provider.toLowerCase())
-    console.log('Provider sign-in response', response)
-  } catch (error) {
-    console.error('Provider sign-in failed', error)
-    errorMessage.value = error.message
-  }
-}
-
 function skipSignIn() {
   sessionStorage.setItem(AUTO_PROMPT_LOCATION_KEY, '1')
   router.push({ name: 'home' })
@@ -120,32 +106,6 @@ function skipSignIn() {
       <p v-if="errorMessage" class="form-message error-message">
         {{ errorMessage }}
       </p>
-
-      <div class="auth-divider">
-        <span></span>
-        <p>or sign in with</p>
-        <span></span>
-      </div>
-
-      <div class="provider-actions">
-        <button
-          class="provider-button"
-          type="button"
-          @click="handleProviderSignIn('Google')"
-        >
-          <span class="provider-icon google-icon" aria-hidden="true">G</span>
-          <span>Google</span>
-        </button>
-
-        <button
-          class="provider-button"
-          type="button"
-          @click="handleProviderSignIn('Apple')"
-        >
-          <span class="provider-icon apple-icon" aria-hidden="true"></span>
-          <span>Apple</span>
-        </button>
-      </div>
 
       <button class="skip-signin-button" type="button" @click="skipSignIn">
         Skip for now
