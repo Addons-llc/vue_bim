@@ -66,6 +66,10 @@ function handleSearch() {
   emit('search', searchText.value.trim())
 }
 
+function handleSearchFieldSearch() {
+  emit('search', searchText.value.trim())
+}
+
 onMounted(() => {
   scheduleSearchPlaceholderFrame()
 })
@@ -85,6 +89,7 @@ onUnmounted(() => {
       class="search-input"
       type="search"
       :placeholder="animatedSearchPlaceholder"
+      @search="handleSearchFieldSearch"
     />
     <button class="search-button" type="submit">Search</button>
     <p class="visually-hidden" aria-live="polite">{{ searchMessage }}</p>
