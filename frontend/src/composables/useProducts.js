@@ -22,6 +22,18 @@ export function useProducts(searchText, initialCategory, options = {}) {
   const isFilteredProducts = computed(() =>
     Boolean(activeCategory.value || unref(searchText).trim()),
   )
+  const publishedCategories = computed(() =>
+    categories.value.filter((category) => category.isPublished !== false),
+  )
+  const publishedCategoryNames = computed(() =>
+    new Set(publishedCategories.value.map((category) => category.itemGroup || category.name).filter(Boolean)),
+  )
+  const publishedProducts = computed(() =>
+    products.value.filter((product) =>
+      product.isPublished !== false
+        && (!publishedCategoryNames.value.size || publishedCategoryNames.value.has(product.category)),
+    ),
+  )
 
   const productSections = computed(() => {
     if (isFilteredProducts.value) {
@@ -29,12 +41,12 @@ export function useProducts(searchText, initialCategory, options = {}) {
         {
           id: 'filtered-products',
           title: activeCategory.value || 'Search results',
-          products: products.value,
+          products: publishedProducts.value,
         },
       ]
     }
 
-    const sectionMap = products.value.reduce((sections, product) => {
+    const sectionMap = publishedProducts.value.reduce((sections, product) => {
       const sectionName = product.category || 'Popular products'
 
       if (!sections.has(sectionName)) {
@@ -68,12 +80,12 @@ export function useProducts(searchText, initialCategory, options = {}) {
       {
         id: 'popular-products',
         title: 'Popular products',
-        products: products.value.slice(0, 8),
+        products: publishedProducts.value.slice(0, 8),
       },
     ]
   })
 
-  const orderedCategories = computed(() => categories.value)
+  const orderedCategories = computed(() => publishedCategories.value)
 
   async function loadCategories() {
     isLoadingCategories.value = !categories.value.length
@@ -209,7 +221,8 @@ export function useProducts(searchText, initialCategory, options = {}) {
     loadMoreProducts,
     loadProducts,
     productError,
-    products,
+      products,
+      publishedProducts,
     productSections,
     selectCategory,
     selectProductSection,

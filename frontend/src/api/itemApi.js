@@ -232,6 +232,7 @@ function mapItemGroupToCategory(itemGroup) {
         ?? itemGroup.total_products
         ?? itemGroup.total_items,
     ) || null,
+    isPublished: isPublishedItem(itemGroup),
     image,
   }
 }

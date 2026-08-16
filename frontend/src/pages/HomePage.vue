@@ -57,6 +57,7 @@ const {
   isLoadingProducts,
   loadMoreProducts,
   productError,
+  publishedProducts,
   products,
   productSections,
   selectProductSection,
@@ -77,7 +78,7 @@ function openProductDetails(product) {
     name: supplierName,
     details: product.supplierDetails,
     product,
-    products: products.value.filter((item) =>
+    products: publishedProducts.value.filter((item) =>
       (item.supplierName || item.supplier || 'Supplier not set') === supplierName,
     ),
   })
@@ -258,7 +259,7 @@ onUnmounted(() => {
     :is-loading-more="isLoadingMoreProducts"
     :has-more-products="hasMoreProducts"
     :product-error="productError"
-    :products="products"
+    :products="publishedProducts"
     :sections="productSections"
     @load-more="loadMoreProducts"
     @select-product="openProductDetails"
