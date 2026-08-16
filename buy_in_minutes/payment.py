@@ -3,7 +3,7 @@ import hashlib
 import hmac
 import json
 from contextlib import contextmanager
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlparse
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
@@ -477,6 +477,40 @@ def _get_or_create_customer_contact(customer, delivery_address):
 	return contact_doc.name
 
 
+def _get_checkout_return_origin(return_origin=None):
+	return_origin = _clean_text(return_origin)
+	request_origin = (getattr(frappe.local, "request", None) and frappe.local.request.host_url or "").rstrip("/")
+
+	if return_origin:
+		parsed_return_origin = urlparse(return_origin)
+		parsed_request_origin = urlparse(request_origin)
+		configured_origins = _get_conf_value("buy_in_minutes_checkout_return_origins")
+		if isinstance(configured_origins, str):
+			allowed_origins = {
+				origin.strip().rstrip("/")
+				for origin in configured_origins.split(",")
+				if origin.strip()
+			}
+		else:
+			allowed_origins = {
+				str(origin).strip().rstrip("/")
+				for origin in configured_origins or []
+				if str(origin).strip()
+			}
+
+		if (
+			parsed_return_origin.scheme in {"http", "https"}
+			and parsed_return_origin.netloc
+			and (
+				parsed_return_origin.netloc == parsed_request_origin.netloc
+				or return_origin.rstrip("/") in allowed_origins
+			)
+		):
+			return return_origin.rstrip("/")
+
+	return get_url("").rstrip("/")
+
+
 def _apply_delivery_address_to_sales_order(sales_order, customer, delivery_address):
 	if not delivery_address:
 		return
@@ -778,9 +812,10 @@ def _upsert_sales_order(checkout_items, sales_order_name=None, submit=False, del
 	return sales_order
 
 
-def _build_checkout_params(checkout_items, sales_order_name=None):
-	success_url = get_url("/buy-in-minutes#/payment/success?method=stripe&session_id={CHECKOUT_SESSION_ID}")
-	cancel_url = get_url("/buy-in-minutes#/payment/cancel")
+def _build_checkout_params(checkout_items, sales_order_name=None, return_origin=None):
+	return_origin = _get_checkout_return_origin(return_origin)
+	success_url = f"{return_origin}/buy-in-minutes#/payment/success?method=stripe&session_id={{CHECKOUT_SESSION_ID}}"
+	cancel_url = f"{return_origin}/buy-in-minutes#/payment/cancel"
 	stripe_currency = _get_stripe_settings().get("currency") or DEFAULT_CURRENCY
 	params = {
 		"mode": "payment",
@@ -948,7 +983,7 @@ def sync_cart_sales_order(cart_items=None, sales_order_name=None, delivery_addre
 
 
 @frappe.whitelist(methods=["POST"])
-def create_checkout_session(cart_items=None, sales_order_name=None, delivery_address=None):
+def create_checkout_session(cart_items=None, sales_order_name=None, delivery_address=None, return_origin=None):
 	_require_checkout_user()
 
 	checkout_items = _get_checkout_items(cart_items)
@@ -959,7 +994,7 @@ def create_checkout_session(cart_items=None, sales_order_name=None, delivery_add
 	)
 	session = _stripe_request(
 		"/checkout/sessions",
-		_build_checkout_params(checkout_items, sales_order.name),
+		_build_checkout_params(checkout_items, sales_order.name, return_origin=return_origin),
 	)
 
 	return {

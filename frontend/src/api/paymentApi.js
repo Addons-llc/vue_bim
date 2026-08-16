@@ -1,5 +1,9 @@
 import { apiRequest } from './http'
 
+function getCheckoutReturnOrigin() {
+  return window.location.origin
+}
+
 export function createStripeCheckoutSession(cartItems, salesOrderName = '', deliveryAddress = null) {
   return apiRequest('/method/buy_in_minutes.payment.create_checkout_session', {
     method: 'POST',
@@ -13,6 +17,7 @@ export function createStripeCheckoutSession(cartItems, salesOrderName = '', deli
       })),
       sales_order_name: salesOrderName,
       delivery_address: deliveryAddress,
+      return_origin: getCheckoutReturnOrigin(),
     }),
   })
 }
