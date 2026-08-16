@@ -28,6 +28,29 @@ function stripHtml(value = '') {
   return value.replace(/<[^>]*>/g, '').trim()
 }
 
+function getBrandProductCount(brand = {}) {
+  const productRows = [
+    brand.products,
+    brand.brand_products,
+    brand.items,
+    brand.brand_items,
+    brand.product_items,
+  ].find(Array.isArray)
+
+  if (productRows) {
+    return productRows.length
+  }
+
+  const count = brand.product_count
+    ?? brand.products_count
+    ?? brand.item_count
+    ?? brand.items_count
+    ?? brand.total_products
+    ?? brand.total_items
+
+  return Number.isFinite(Number(count)) ? Number(count) : null
+}
+
 function mapBrand(brand = {}) {
   const brandName = brand.brand || brand.name
   const bannerImage = getImageUrl(
@@ -63,6 +86,14 @@ function mapBrand(brand = {}) {
     description: stripHtml(brand.description || ''),
     image,
     bannerImage,
+    rating: brand.rating || brand.average_rating || brand.review_rating || '',
+    productCount: getBrandProductCount(brand),
+    offerBadge: brand.offer_badge
+      || brand.offer
+      || brand.discount_label
+      || brand.promo_label
+      || brand.brand_offer
+      || 'Offer',
   }
 }
 

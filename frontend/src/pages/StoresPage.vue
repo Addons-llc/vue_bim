@@ -54,6 +54,7 @@ onMounted(loadStores)
       v-if="stores.length"
       :categories="stores"
       horizontal
+      item-type="store"
       title="Store"
       @select="openCategoriesTab"
     />

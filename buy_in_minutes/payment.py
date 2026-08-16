@@ -18,6 +18,7 @@ from erpnext.stock.doctype.item.item import get_item_defaults
 STRIPE_API_BASE_URL = "https://api.stripe.com/v1"
 DEFAULT_CURRENCY = "aed"
 DELIVERY_FEE = 6
+DELIVERY_FEE_ITEM_CODE = "delivery-fee"
 FREE_DELIVERY_MINIMUM = 60
 SELLING_PRICE_LIST = "Selling Price"
 STRIPE_SETTINGS_DOCTYPE = "Stripe Settings"
@@ -518,7 +519,7 @@ def _get_checkout_items(cart_items):
 	if checkout_items and subtotal < FREE_DELIVERY_MINIMUM:
 		checkout_items.append(
 			{
-				"item_code": "delivery-fee",
+				"item_code": DELIVERY_FEE_ITEM_CODE,
 				"item_name": _("Delivery charge"),
 				"quantity": 1,
 				"rate": DELIVERY_FEE,
@@ -540,6 +541,12 @@ def _build_sales_order_item_rows(checkout_items, company):
 			company,
 			item.get("supplier"),
 		)
+		if not supplier and item["item_code"] != DELIVERY_FEE_ITEM_CODE:
+			frappe.throw(
+				_("Item {0} does not have a Supplier. Configure a default Supplier or Item Supplier before checkout.").format(
+					item["item_name"] or item["item_code"]
+				)
+			)
 
 		row = {
 			"item_code": item["item_code"],

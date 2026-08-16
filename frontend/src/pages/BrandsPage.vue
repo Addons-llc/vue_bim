@@ -62,6 +62,7 @@ onMounted(loadBrands)
       v-if="brands.length"
       :categories="brands"
       horizontal
+      item-type="brand"
       title="Brands"
       @select="openCategoriesTab"
     />

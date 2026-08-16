@@ -94,7 +94,12 @@ async function startStripeCheckout() {
   isStartingCheckout.value = true
 
   try {
+    console.log('Pay now checkout payload', {
+      cartItems: cartProducts.value,
+      deliveryAddress: selectedDeliveryAddress.value,
+    })
     const response = await createStripeCheckoutSession(cartProducts.value, '', selectedDeliveryAddress.value)
+    console.log('Pay now checkout response', response)
     const checkoutUrl = response?.message?.checkout_url
 
     if (!checkoutUrl) {
@@ -103,6 +108,7 @@ async function startStripeCheckout() {
 
     window.location.assign(checkoutUrl)
   } catch (error) {
+    console.error('Pay now checkout failed', error)
     checkoutError.value = error.message
   } finally {
     isStartingCheckout.value = false
@@ -126,7 +132,12 @@ async function placeCashOnDeliveryOrder() {
   isPlacingCodOrder.value = true
 
   try {
+    console.log('Cash on delivery order payload', {
+      cartItems: cartProducts.value,
+      deliveryAddress: selectedDeliveryAddress.value,
+    })
     const response = await createCashOnDeliveryOrder(cartProducts.value, '', selectedDeliveryAddress.value)
+    console.log('Cash on delivery order response', response)
     const salesOrder = response?.message?.sales_order
     const purchaseOrders = response?.message?.purchase_orders || []
     const orderedItems = cartProducts.value.map((item) => ({
@@ -148,6 +159,7 @@ async function placeCashOnDeliveryOrder() {
       },
     })
   } catch (error) {
+    console.error('Cash on delivery order failed', error)
     checkoutError.value = error.message
   } finally {
     isPlacingCodOrder.value = false

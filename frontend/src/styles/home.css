@@ -18,11 +18,11 @@
 .dashboard-hero {
   position: relative;
   order: 1;
-  aspect-ratio: 16 / 6;
+  aspect-ratio: 16 / 9;
   min-height: 0;
   overflow: hidden;
   border-radius: 10px;
-  background: #0f1f17;
+  background: #ffffff;
   color: #061022;
 }
 
@@ -64,14 +64,8 @@
   z-index: 0;
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
   object-position: center;
-}
-
-@media (min-width: 861px) {
-  .hero-slide-image {
-    object-fit: fill;
-  }
 }
 
 .hero-slide.is-active {

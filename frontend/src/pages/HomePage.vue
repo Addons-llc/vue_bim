@@ -220,6 +220,8 @@ onUnmounted(() => {
     section-id="brands"
     title="Brands"
     horizontal
+    item-type="brand"
+    show-brand-detail-fallbacks
     :view-all-to="brandsTabRoute"
     :categories="discoveryBrands"
     @select="openBrandItem"
@@ -231,6 +233,7 @@ onUnmounted(() => {
     section-id="shops"
     title="Store"
     horizontal
+    item-type="store"
     :view-all-to="storesTabRoute"
     :categories="discoveryStores"
     @select="openStoreItem"
@@ -242,6 +245,7 @@ onUnmounted(() => {
     section-id="categories"
     title="Categories"
     horizontal
+    item-type="category"
     :view-all-to="categoriesTabRoute"
     :active-category="activeCategory"
     :categories="discoveryCategories"

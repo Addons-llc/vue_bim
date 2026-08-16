@@ -223,6 +223,15 @@ function mapItemGroupToCategory(itemGroup) {
     itemGroup: itemGroupName,
     parentItemGroup,
     isGroup: isTruthyFlag(itemGroup.is_group),
+    rating: itemGroup.rating || itemGroup.average_rating || itemGroup.review_rating || '',
+    productCount: Number(
+      itemGroup.product_count
+        ?? itemGroup.products_count
+        ?? itemGroup.item_count
+        ?? itemGroup.items_count
+        ?? itemGroup.total_products
+        ?? itemGroup.total_items,
+    ) || null,
     image,
   }
 }

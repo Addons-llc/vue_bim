@@ -147,6 +147,7 @@ onMounted(loadCategories)
       v-if="visibleItems.length"
       :active-category="activeCategory"
       :categories="visibleItems"
+      :item-type="activeSourceType"
       :title="activeTabLabel"
       @select="openSelectedItem"
     />
