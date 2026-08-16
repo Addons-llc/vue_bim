@@ -59,7 +59,13 @@ def _get_stripe_settings():
 
 
 def _get_stripe_secret_key():
-	return _get_stripe_settings().get("secret_key")
+	secret_key = _get_stripe_settings().get("secret_key")
+	if secret_key and not str(secret_key).startswith(("sk_test_", "sk_live_")):
+		frappe.throw(
+			_("Stripe secret key is invalid. Use a key that starts with sk_test_ or sk_live_.")
+		)
+
+	return secret_key
 
 
 def _get_stripe_webhook_secret():
