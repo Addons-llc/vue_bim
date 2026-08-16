@@ -146,7 +146,7 @@ function handleDigitPaste(index, event) {
 }
 
 function getProfileCompletedFromResponse(response) {
-  const message = response?.message || {}
+  const message = getOtpResult(response)
 
   if (typeof message.needs_profile === 'boolean') {
     return !message.needs_profile
@@ -179,6 +179,12 @@ function getProfileCompletedFromResponse(response) {
   return null
 }
 
+function getOtpResult(response) {
+  return response?.message && typeof response.message === 'object'
+    ? response.message
+    : response || {}
+}
+
 async function handleOtpVerification() {
   if (isSubmitting.value) {
     return
@@ -194,9 +200,10 @@ async function handleOtpVerification() {
     })
     const response = await verifyPhoneOtp(phoneNumber.value, otp.value)
     console.log('Phone OTP verify response', response)
+    const otpResult = getOtpResult(response)
 
-    if (!response?.message?.success) {
-      throw new Error(response?.message?.message || 'Unable to verify OTP.')
+    if (!otpResult.success) {
+      throw new Error(otpResult.message || 'Unable to verify OTP.')
     }
 
     const profileCompleted = getProfileCompletedFromResponse(response)
@@ -204,7 +211,7 @@ async function handleOtpVerification() {
     successMessage.value = 'Signed in successfully.'
 
     if (profileCompleted) {
-      setCurrentUser(response.message.user || null)
+      setCurrentUser(otpResult.user || null)
       sessionStorage.setItem(AUTO_PROMPT_LOCATION_KEY, '1')
       await router.push({ name: 'home' })
       return
@@ -214,7 +221,7 @@ async function handleOtpVerification() {
       name: 'complete-profile',
       query: {
         phone: phoneNumber.value,
-        token: response.message.profile_token || '',
+        token: otpResult.profile_token || '',
       },
     })
   } catch (error) {

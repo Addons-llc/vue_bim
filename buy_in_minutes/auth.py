@@ -6,6 +6,7 @@ import frappe.sessions
 from frappe import _
 from frappe.auth import LoginManager
 from frappe.model.rename_doc import rename_doc
+from frappe.sessions import get_expiry_in_seconds
 from frappe.utils import validate_email_address
 from twilio.base.exceptions import TwilioRestException
 from twilio.rest import Client
@@ -20,6 +21,7 @@ DEFAULT_OTP_REQUEST_LIMIT = 100
 DEFAULT_OTP_VERIFY_LIMIT = 30
 DEFAULT_OTP_RATE_LIMIT_SECONDS = 10 * 60
 DEFAULT_OTP_REQUEST_COOLDOWN_SECONDS = 60
+DEFAULT_PHONE_LOGIN_SESSION_EXPIRY = "87600:00:00"
 OTP_RATE_LIMIT_CACHE_VERSION = "v2"
 PROFILE_TOKEN_TTL_SECONDS = 10 * 60
 
@@ -61,6 +63,32 @@ def _get_otp_verify_limit():
 
 def _get_otp_request_cooldown_seconds():
 	return _get_conf_int("phone_login_otp_request_cooldown_seconds", DEFAULT_OTP_REQUEST_COOLDOWN_SECONDS)
+
+
+def _get_phone_login_session_expiry():
+	session_expiry = _get_conf_value("phone_login_session_expiry") or DEFAULT_PHONE_LOGIN_SESSION_EXPIRY
+	session_expiry = str(session_expiry).strip()
+
+	if len(session_expiry.split(":")) == 2:
+		session_expiry = f"{session_expiry}:00"
+
+	try:
+		get_expiry_in_seconds(session_expiry)
+	except Exception:
+		return DEFAULT_PHONE_LOGIN_SESSION_EXPIRY
+
+	return session_expiry
+
+
+def _ensure_global_session_expiry(session_expiry):
+	current_expiry = frappe.defaults.get_global_default("session_expiry")
+	try:
+		if current_expiry and get_expiry_in_seconds(current_expiry) >= get_expiry_in_seconds(session_expiry):
+			return
+	except Exception:
+		pass
+
+	frappe.defaults.set_global_default("session_expiry", session_expiry)
 
 
 def _get_test_otp():
@@ -166,16 +194,26 @@ def _clear_phone_profile_token(profile_token):
 def _format_twilio_error(exc):
 	error_code = f" Twilio error code: {exc.code}." if exc.code else ""
 
-	if exc.status == 403:
+	if exc.code == 20003 or exc.status in {401, 403}:
 		return _(
-			"Twilio rejected the OTP request. Check the Verify service, SMS geo permissions, "
-			"trial account recipient verification, and account credentials."
+			"Twilio rejected the OTP request. Check the Account SID, Auth Token, Verify service, "
+			"SMS geo permissions, and trial account recipient verification."
 		) + error_code
 
 	if exc.status == 429:
 		return _("Too many OTP requests were sent to this phone number. Please wait a few minutes and try again.")
 
 	return _("Unable to send OTP. Please try again.") + error_code
+
+
+def _get_twilio_error_status(exc):
+	if exc.status == 429:
+		return 429
+
+	if exc.code == 20003 or exc.status in {401, 403}:
+		return 503
+
+	return exc.status or 400
 
 
 def _get_settings():
@@ -298,6 +336,17 @@ def _get_phone_user_payload(user, is_new_user):
 def _login_user(user_name):
 	frappe.local.login_manager = LoginManager()
 	frappe.local.login_manager.login_as(user_name)
+
+	session_expiry = _get_phone_login_session_expiry()
+	_ensure_global_session_expiry(session_expiry)
+	frappe.local.session_obj.data.data.session_expiry = session_expiry
+	frappe.local.session_obj.update(force=True)
+	frappe.local.cookie_manager.set_cookie(
+		"sid",
+		frappe.session.sid,
+		max_age=get_expiry_in_seconds(session_expiry),
+		httponly=True,
+	)
 	frappe.db.commit()
 
 
@@ -399,7 +448,7 @@ def request_phone_otp(phone_number=None, phoneNumber=None):
 			title="Twilio OTP Request Failed",
 			message=f"Twilio error {exc.code}: {exc.msg}",
 		)
-		return _error(_format_twilio_error(exc), exc.status or 400)
+		return _error(_format_twilio_error(exc), _get_twilio_error_status(exc))
 
 	_set_otp_request_cooldown(phone_number)
 
@@ -460,7 +509,7 @@ def verify_phone_otp(phone_number=None, otp=None, phoneNumber=None):
 			title="Twilio OTP Verification Failed",
 			message=f"Twilio error {exc.code}: {exc.msg}",
 		)
-		return _error(_("Unable to verify OTP. Please try again."), exc.status or 400)
+		return _error(_("Unable to verify OTP. Please try again."), _get_twilio_error_status(exc))
 
 	if check.status != "approved":
 		return _error(_("Invalid OTP."), 400)

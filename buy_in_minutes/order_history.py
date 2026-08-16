@@ -35,6 +35,24 @@ def _get_purchase_order_names_for_sales_order(sales_order_name):
 	)
 
 
+def _ensure_purchase_orders_for_sales_order(sales_order):
+	if not sales_order or sales_order.docstatus != 1:
+		return
+
+	if _get_purchase_order_names_for_sales_order(sales_order.name):
+		return
+
+	try:
+		from buy_in_minutes.payment import _create_purchase_orders_for_sales_order
+
+		_create_purchase_orders_for_sales_order(frappe.get_doc("Sales Order", sales_order.name))
+	except Exception:
+		frappe.log_error(
+			title="Purchase Order Ensure Failed",
+			message=f"Sales Order: {sales_order.name}\n\n{frappe.get_traceback()}",
+		)
+
+
 def _get_item_images(item_codes):
 	item_codes = [item_code for item_code in item_codes if item_code]
 	if not item_codes:
@@ -129,6 +147,9 @@ def get_order_history(limit_page_length=20):
 		return []
 
 	items_by_order = _get_order_items([sales_order.name for sales_order in sales_orders])
+	for sales_order in sales_orders:
+		if _can_view_sales_order(sales_order):
+			_ensure_purchase_orders_for_sales_order(sales_order)
 
 	return [
 		{

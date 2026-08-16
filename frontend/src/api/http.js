@@ -18,6 +18,12 @@ function getStoredCsrfToken() {
   return csrfToken && csrfToken !== 'None' ? csrfToken : ''
 }
 
+export function clearStoredCsrfToken() {
+  if (window.frappe) {
+    window.frappe.csrf_token = ''
+  }
+}
+
 async function fetchCsrfToken() {
   const response = await fetch(
     buildUrl('/method/buy_in_minutes.auth.get_csrf_token'),
@@ -107,6 +113,18 @@ function getFrappeErrorMessage(data) {
   return ''
 }
 
+function isLikelyCsrfFailure(method, response, message) {
+  if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
+    return false
+  }
+
+  if (![400, 403].includes(response.status)) {
+    return false
+  }
+
+  return /csrf|invalid request/i.test(message || '')
+}
+
 export async function apiRequest(path, options = {}) {
   const token = getAuthToken()
   const method = (options.method || 'GET').toUpperCase()
@@ -131,13 +149,33 @@ export async function apiRequest(path, options = {}) {
     headers['X-Frappe-CSRF-Token'] = csrfToken
   }
 
-  const response = await fetch(buildUrl(path), {
+  const requestUrl = buildUrl(path)
+  const requestOptions = {
     ...options,
     credentials: options.credentials || 'include',
     headers,
-  })
+  }
 
-  const data = await parseResponse(response)
+  let response = await fetch(requestUrl, requestOptions)
+  let data = await parseResponse(response)
+
+  if (!response.ok) {
+    const message =
+      getFrappeErrorMessage(data) ||
+      response.statusText ||
+      `API request failed (${response.status})`
+
+    if (needsCsrfToken && isLikelyCsrfFailure(method, response, message)) {
+      clearStoredCsrfToken()
+      const freshCsrfToken = await fetchCsrfToken()
+      requestOptions.headers = {
+        ...requestOptions.headers,
+        'X-Frappe-CSRF-Token': freshCsrfToken,
+      }
+      response = await fetch(requestUrl, requestOptions)
+      data = await parseResponse(response)
+    }
+  }
 
   if (!response.ok) {
     const message =

@@ -1,4 +1,4 @@
-import { apiRequest } from './http'
+import { apiRequest, clearStoredCsrfToken } from './http'
 import { clearCurrentUser } from '../data/authStore'
 
 export function requestPhoneOtp(phoneNumber) {
@@ -7,15 +7,21 @@ export function requestPhoneOtp(phoneNumber) {
   return apiRequest(`/method/buy_in_minutes.auth.request_phone_otp?${params.toString()}`)
 }
 
-export function verifyPhoneOtp(phoneNumber, otp) {
-  return apiRequest('/method/buy_in_minutes.auth.verify_phone_otp', {
+export async function verifyPhoneOtp(phoneNumber, otp) {
+  const response = await apiRequest('/method/buy_in_minutes.auth.verify_phone_otp', {
     method: 'POST',
     body: JSON.stringify({ phone_number: phoneNumber, otp }),
   })
+
+  if (response?.message?.success) {
+    clearStoredCsrfToken()
+  }
+
+  return response
 }
 
-export function createWebsiteUser({ email, fullName, phoneNumber, profileToken }) {
-  return apiRequest('/method/buy_in_minutes.auth.complete_phone_profile', {
+export async function createWebsiteUser({ email, fullName, phoneNumber, profileToken }) {
+  const response = await apiRequest('/method/buy_in_minutes.auth.complete_phone_profile', {
     method: 'POST',
     body: JSON.stringify({
       email: email.trim(),
@@ -24,6 +30,12 @@ export function createWebsiteUser({ email, fullName, phoneNumber, profileToken }
       profile_token: profileToken,
     }),
   })
+
+  if (response?.message?.success) {
+    clearStoredCsrfToken()
+  }
+
+  return response
 }
 
 export function getCurrentUser() {
@@ -40,6 +52,7 @@ export function logout() {
   })
 
   localStorage.removeItem('authToken')
+  clearStoredCsrfToken()
   clearCurrentUser()
   return request
 }

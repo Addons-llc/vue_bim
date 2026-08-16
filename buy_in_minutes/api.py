@@ -689,6 +689,24 @@ def _get_purchase_order_names_for_sales_order(sales_order_name):
 	)
 
 
+def _ensure_purchase_orders_for_sales_order(sales_order):
+	if not sales_order or sales_order.docstatus != 1:
+		return
+
+	if _get_purchase_order_names_for_sales_order(sales_order.name):
+		return
+
+	try:
+		from buy_in_minutes.payment import _create_purchase_orders_for_sales_order
+
+		_create_purchase_orders_for_sales_order(sales_order)
+	except Exception:
+		frappe.log_error(
+			title="Purchase Order Ensure Failed",
+			message=f"Sales Order: {sales_order.name}\n\n{frappe.get_traceback()}",
+		)
+
+
 @frappe.whitelist(allow_guest=True)
 def get_sales_order(sales_order_name):
 	if frappe.session.user == "Guest":
@@ -703,6 +721,8 @@ def get_sales_order(sales_order_name):
 	sales_order = frappe.get_doc("Sales Order", sales_order_name)
 	if not _can_view_sales_order(sales_order):
 		frappe.throw("You are not allowed to view this Sales Order.")
+
+	_ensure_purchase_orders_for_sales_order(sales_order)
 
 	item_codes = [row.item_code for row in sales_order.items if row.item_code]
 	item_images = {}

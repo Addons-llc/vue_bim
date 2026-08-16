@@ -3,7 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { getCurrentUser } from '../api/authApi'
 import { getOrderHistory } from '../api/orderHistoryApi'
-import { currentUser, setCurrentUser } from '../data/authStore'
+import { clearCurrentUser, currentUser, setCurrentUser } from '../data/authStore'
 
 const router = useRouter()
 const orders = ref([])
@@ -29,22 +29,22 @@ function formatCurrency(value, currency = 'AED') {
 }
 
 async function loadOrders() {
+  try {
+    const response = await getCurrentUser()
+    const message = response?.message || {}
+
+    if (message.is_authenticated) {
+      setCurrentUser(message.user)
+    } else {
+      clearCurrentUser()
+    }
+  } catch {
+    // The redirect below handles unauthenticated sessions.
+  }
+
   if (!currentUser.value) {
-    try {
-      const response = await getCurrentUser()
-      const message = response?.message || {}
-
-      if (message.is_authenticated) {
-        setCurrentUser(message.user)
-      }
-    } catch {
-      // The redirect below handles unauthenticated sessions.
-    }
-
-    if (!currentUser.value) {
-      router.replace({ name: 'login' })
-      return
-    }
+    router.replace({ name: 'login' })
+    return
   }
 
   isLoadingOrders.value = true

@@ -4,7 +4,7 @@ import { useRouter } from 'vue-router'
 import { getCurrentUser } from '../api/authApi'
 import { createCashOnDeliveryOrder, createStripeCheckoutSession } from '../api/paymentApi'
 import { customerAddresses } from '../data/addressStore'
-import { currentUser, isAuthReady, setCurrentUser } from '../data/authStore'
+import { clearCurrentUser, currentUser, isAuthReady, setCurrentUser } from '../data/authStore'
 import { clearCart } from '../data/cartStore'
 import {
   cartProducts,
@@ -53,7 +53,10 @@ async function refreshCurrentSession() {
 
     if (message.is_authenticated) {
       setCurrentUser(message.user)
+      return
     }
+
+    clearCurrentUser()
   } catch (error) {
     console.error('Unable to refresh checkout session', error)
   }

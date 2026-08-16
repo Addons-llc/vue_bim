@@ -973,10 +973,14 @@ def create_cash_on_delivery_order(cart_items=None, sales_order_name=None, delive
 	if purchase_orders is None:
 		purchase_orders = _get_purchase_orders_for_sales_order(sales_order.name)
 
+	purchase_order_names = _get_purchase_order_names_for_sales_order(sales_order.name)
+	if not purchase_order_names and purchase_orders:
+		purchase_order_names = [purchase_order.name for purchase_order in purchase_orders]
+
 	return {
 		"success": True,
 		"sales_order": sales_order.name,
-		"purchase_orders": [purchase_order.name for purchase_order in purchase_orders],
+		"purchase_orders": purchase_order_names,
 		"payment_method": "cod",
 	}
 

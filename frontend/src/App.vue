@@ -21,9 +21,7 @@ onMounted(async () => {
     console.error('Unable to load current user session', error)
   }
 
-  if (!currentUser.value) {
-    clearCurrentUser()
-  }
+  clearCurrentUser()
 })
 
 function navigateToLogin() {
