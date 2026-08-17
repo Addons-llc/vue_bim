@@ -221,6 +221,7 @@ async function placeCashOnDeliveryOrder() {
       qty: item.quantity,
       amount: item.price * item.quantity,
       image: item.image,
+      size: item.size || '',
     }))
 
     sessionStorage.setItem(LAST_COD_ORDER_ITEMS_STORAGE_KEY, JSON.stringify(orderedItems))
@@ -295,6 +296,7 @@ onUnmounted(() => {
 
           <div class="cart-page-item-info">
             <h2>{{ item.name }}</h2>
+            <p v-if="item.size" class="cart-page-item-size">Size: {{ item.size }}</p>
             <div class="cart-page-item-price">
               <strong>AED {{ item.price }}</strong>
               <span v-if="item.oldPrice">AED {{ item.oldPrice }}</span>

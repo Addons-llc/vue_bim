@@ -25,11 +25,15 @@ export const cartTotal = computed(() =>
 )
 
 export function addProductToCart(product) {
+  const selectedSize = String(product.selectedSize || product.size || '').trim()
   const existingItem = cartItems.value.find((item) => item.id === product.id)
   let cartItem
 
   if (existingItem) {
     existingItem.quantity += 1
+    if (selectedSize) {
+      existingItem.size = selectedSize
+    }
     cartItem = existingItem
   } else {
     cartItem = {
@@ -42,6 +46,7 @@ export function addProductToCart(product) {
       image: product.image,
       supplier: product.supplier || product.supplierDetails?.name || '',
       supplierName: product.supplierName,
+      size: selectedSize,
       quantity: 1,
     }
     cartItems.value.push(cartItem)

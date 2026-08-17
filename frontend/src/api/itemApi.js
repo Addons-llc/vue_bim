@@ -161,6 +161,16 @@ function getItemBannerImage(item) {
   )
 }
 
+function getItemSize(item) {
+  return stripHtml(
+    item.custom_size
+      || item.customSize
+      || item.custom_size_options
+      || item.custom_sizes
+      || '',
+  )
+}
+
 function mapItemToProduct(item) {
   const itemGroup = item.item_group || ''
   const categoryImage = getItemGroupImage(item)
@@ -168,6 +178,7 @@ function mapItemToProduct(item) {
   const image = getImageUrl(item.image || item.website_image || item.thumbnail)
     || getFallbackImage(itemGroup)
   const description = stripHtml(item.description || '')
+  const customSize = getItemSize(item)
   const itemCode = item.item_code || item.name
   const stockQuantity = getStockQuantity(item)
   const reviewCount = getReviewCount(item)
@@ -180,6 +191,7 @@ function mapItemToProduct(item) {
     category: itemGroup,
     brand: item.brand || '',
     description: description || 'Fresh item available for quick delivery.',
+    customSize,
     price: getItemSellingPrice(item),
     priceList: item.price_list || SELLING_PRICE_LIST,
     currency: item.currency || 'AED',

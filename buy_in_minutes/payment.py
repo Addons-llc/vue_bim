@@ -230,6 +230,12 @@ def _normalize_cart_items(cart_items):
 			cart_item.get("supplier"),
 			cart_item.get("supplier_name") or cart_item.get("supplierName"),
 		)
+		size = _clean_text(
+			cart_item.get("size")
+			or cart_item.get("selectedSize")
+			or cart_item.get("custom_size")
+			or cart_item.get("customSize")
+		)
 
 		if not item_code or quantity <= 0:
 			frappe.throw(_("Cart contains an invalid item."))
@@ -239,6 +245,7 @@ def _normalize_cart_items(cart_items):
 				"item_code": item_code,
 				"quantity": quantity,
 				"supplier": supplier,
+				"size": size,
 			}
 		)
 
@@ -628,6 +635,7 @@ def _get_checkout_items(cart_items):
 				"rate": rate,
 				"amount": rate * cart_item["quantity"],
 				"supplier": cart_item.get("supplier"),
+				"size": cart_item.get("size"),
 			}
 		)
 
@@ -648,6 +656,7 @@ def _get_checkout_items(cart_items):
 
 def _build_sales_order_item_rows(checkout_items, company):
 	order_items = []
+	sales_order_item_meta = frappe.get_meta("Sales Order Item")
 	for item in checkout_items:
 		if not frappe.db.exists("Item", item["item_code"]):
 			continue
@@ -671,9 +680,18 @@ def _build_sales_order_item_rows(checkout_items, company):
 			"rate": item["rate"],
 			"delivery_date": nowdate(),
 		}
+		if item.get("size"):
+			row["custom_size"] = item["size"]
+			row["size"] = item["size"]
 		if supplier:
 			row["supplier"] = supplier
 			row["delivered_by_supplier"] = 1
+
+		row = {
+			fieldname: value
+			for fieldname, value in row.items()
+			if sales_order_item_meta.has_field(fieldname)
+		}
 
 		order_items.append(row)
 
@@ -1123,6 +1141,7 @@ def _get_sales_order_item_summary(sales_order):
 			"qty": flt(row.qty),
 			"rate": flt(row.rate),
 			"amount": flt(row.amount),
+			"size": getattr(row, "custom_size", None) or getattr(row, "size", None),
 		}
 		for row in sales_order.items
 	]

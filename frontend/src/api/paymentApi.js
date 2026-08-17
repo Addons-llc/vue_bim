@@ -6,6 +6,17 @@ function getCheckoutReturnOrigin() {
   return window.location.origin
 }
 
+function serializeCartItems(cartItems) {
+  return cartItems.map((item) => ({
+    id: item.id,
+    item_code: item.itemCode || item.id,
+    quantity: item.quantity,
+    supplier: item.supplier || '',
+    supplier_name: item.supplierName || '',
+    size: item.size || item.selectedSize || '',
+  }))
+}
+
 export function storeCheckoutResumeToken(checkoutResumeToken) {
   if (!checkoutResumeToken) {
     return
@@ -45,13 +56,7 @@ export function createStripeCheckoutSession(cartItems, salesOrderName = '', deli
   return apiRequest('/method/buy_in_minutes.payment.create_checkout_session', {
     method: 'POST',
     body: JSON.stringify({
-      cart_items: cartItems.map((item) => ({
-        id: item.id,
-        item_code: item.itemCode || item.id,
-        quantity: item.quantity,
-        supplier: item.supplier || '',
-        supplier_name: item.supplierName || '',
-      })),
+      cart_items: serializeCartItems(cartItems),
       sales_order_name: salesOrderName,
       delivery_address: deliveryAddress,
       return_origin: getCheckoutReturnOrigin(),
@@ -63,13 +68,7 @@ export function createCashOnDeliveryOrder(cartItems, salesOrderName = '', delive
   return apiRequest('/method/buy_in_minutes.payment.create_cash_on_delivery_order', {
     method: 'POST',
     body: JSON.stringify({
-      cart_items: cartItems.map((item) => ({
-        id: item.id,
-        item_code: item.itemCode || item.id,
-        quantity: item.quantity,
-        supplier: item.supplier || '',
-        supplier_name: item.supplierName || '',
-      })),
+      cart_items: serializeCartItems(cartItems),
       sales_order_name: salesOrderName,
       delivery_address: deliveryAddress,
     }),

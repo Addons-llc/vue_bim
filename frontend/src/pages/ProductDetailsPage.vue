@@ -16,6 +16,8 @@ const isLoading = ref(false)
 const loadError = ref('')
 const hasProductDetailLoaded = ref(false)
 const activeImageIndex = ref(0)
+const isProductDescriptionExpanded = ref(false)
+const selectedProductSize = ref('')
 
 const productId = computed(() => String(route.params.productId || ''))
 const productQuantity = computed(() => {
@@ -39,6 +41,31 @@ const ratingStars = computed(() => {
 
   return '★'.repeat(Math.min(rating, 5)) || '★★★★★'
 })
+const productDescription = computed(() => product.value?.description || '')
+const isProductDescriptionLong = computed(() => productDescription.value.length > 120)
+const productSizeOptions = computed(() => {
+  const rawSize = product.value?.customSize || product.value?.custom_size || ''
+
+  if (Array.isArray(rawSize)) {
+    return rawSize.map((size) => String(size).trim()).filter(Boolean)
+  }
+
+  const sizeText = String(rawSize || '').trim()
+
+  if (!sizeText) {
+    return []
+  }
+
+  const splitSizes = sizeText
+    .split(/\r?\n|[|,;/]+/)
+    .map((size) => size.trim())
+    .filter(Boolean)
+
+  return splitSizes.length > 1 ? splitSizes : [sizeText]
+})
+const selectedProductSizeLabel = computed(() =>
+  selectedProductSize.value || productSizeOptions.value[0] || '',
+)
 
 function mergeProductDetails(cachedProduct, loadedProduct) {
   if (!cachedProduct) {
@@ -61,6 +88,7 @@ function mergeProductDetails(cachedProduct, loadedProduct) {
     reviewCount: loadedProduct.reviewCount || cachedProduct.reviewCount,
     stockQuantity: loadedProduct.stockQuantity || cachedProduct.stockQuantity,
     inStock: loadedProduct.inStock ?? cachedProduct.inStock,
+    customSize: loadedProduct.customSize || cachedProduct.customSize || loadedProduct.custom_size || cachedProduct.custom_size,
   }
 }
 
@@ -114,7 +142,13 @@ const productDetails = computed(() => {
   }
 
   if (product.value.details?.length) {
-    return product.value.details
+    const details = [...product.value.details]
+
+    if (selectedProductSizeLabel.value && !details.some((detail) => detail.label === 'Size')) {
+      details.push({ label: 'Size', value: selectedProductSizeLabel.value })
+    }
+
+    return details
   }
 
   return [
@@ -125,7 +159,9 @@ const productDetails = computed(() => {
     sourceListing.value?.storeCode
       ? { label: 'Store code', value: sourceListing.value.storeCode }
       : null,
-    { label: 'Pack size', value: product.value.description },
+    selectedProductSizeLabel.value
+      ? { label: 'Size', value: selectedProductSizeLabel.value }
+      : null,
     { label: 'Category', value: product.value.category },
     { label: 'Delivery', value: product.value.deliveryTime },
   ].filter((detail) => detail?.value)
@@ -153,6 +189,7 @@ async function loadProduct() {
 
     product.value = mergeProductDetails(cachedProduct, loadedProduct)
     activeImageIndex.value = 0
+    isProductDescriptionExpanded.value = false
     hasProductDetailLoaded.value = true
   } catch (error) {
     if (!cachedProduct) {
@@ -180,7 +217,10 @@ function moveProductDetailImage(direction) {
 
 function addSelectedProductToCart() {
   if (product.value) {
-    addProductToCart(product.value)
+    addProductToCart({
+      ...product.value,
+      selectedSize: selectedProductSizeLabel.value,
+    })
   }
 }
 
@@ -188,6 +228,14 @@ function decreaseSelectedProductQuantity() {
   if (product.value) {
     updateCartProductQuantity(product.value.id, productQuantity.value - 1)
   }
+}
+
+function selectProductSize(size) {
+  selectedProductSize.value = size
+}
+
+function toggleProductDescription() {
+  isProductDescriptionExpanded.value = !isProductDescriptionExpanded.value
 }
 
 function rememberSupplierSelection() {
@@ -199,6 +247,17 @@ function rememberSupplierSelection() {
 }
 
 watch(productId, loadProduct, { immediate: true })
+
+watch(productSizeOptions, (sizes) => {
+  if (!sizes.length) {
+    selectedProductSize.value = ''
+    return
+  }
+
+  if (!sizes.includes(selectedProductSize.value)) {
+    selectedProductSize.value = sizes[0]
+  }
+}, { immediate: true })
 </script>
 
 <template>
@@ -328,7 +387,36 @@ watch(productId, loadProduct, { immediate: true })
           </div>
         </section>
 
-        <p class="product-detail-description">{{ product.description }}</p>
+        <section v-if="productSizeOptions.length" class="product-detail-section product-size-section">
+          <h3>Size</h3>
+          <div class="product-size-options" role="group" aria-label="Choose product size">
+            <button
+              v-for="size in productSizeOptions"
+              :key="size"
+              class="product-size-option"
+              :class="{ 'is-selected': selectedProductSizeLabel === size }"
+              type="button"
+              @click="selectProductSize(size)"
+            >
+              {{ size }}
+            </button>
+          </div>
+        </section>
+
+        <p
+          class="product-detail-description"
+          :class="{ 'is-collapsed': !isProductDescriptionExpanded && isProductDescriptionLong }"
+        >
+          {{ productDescription }}
+        </p>
+        <button
+          v-if="isProductDescriptionLong"
+          class="product-description-toggle"
+          type="button"
+          @click="toggleProductDescription"
+        >
+          {{ isProductDescriptionExpanded ? 'Show less' : 'Show more' }}
+        </button>
 
         <dl v-if="productDetails.length" id="product-details" class="product-detail-list">
           <div

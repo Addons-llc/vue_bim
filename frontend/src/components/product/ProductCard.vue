@@ -30,6 +30,18 @@ const stockLabel = computed(() => (props.product.inStock === false ? 'Out of sto
 const supplierName = computed(() =>
   props.product.supplierName || props.product.supplier || '',
 )
+const defaultProductSize = computed(() => {
+  const rawSize = props.product.selectedSize || props.product.size || props.product.customSize || props.product.custom_size || ''
+
+  if (Array.isArray(rawSize)) {
+    return rawSize.map((size) => String(size).trim()).find(Boolean) || ''
+  }
+
+  return String(rawSize)
+    .split(/\r?\n|[|,;/]+/)
+    .map((size) => size.trim())
+    .find(Boolean) || String(rawSize).trim()
+})
 const reviewLabel = computed(() => {
   const reviewCount = props.product.reviewCount || 0
 
@@ -37,7 +49,10 @@ const reviewLabel = computed(() => {
 })
 
 function handleAddToCart() {
-  addProductToCart(props.product)
+  addProductToCart({
+    ...props.product,
+    selectedSize: defaultProductSize.value,
+  })
 }
 
 function decreaseCartQuantity() {

@@ -111,6 +111,14 @@
   text-decoration: line-through;
 }
 
+.cart-page-item-size {
+  margin: -4px 0 0;
+  color: #6b7280;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
 .cart-quantity {
   display: inline-flex;
   align-items: center;
