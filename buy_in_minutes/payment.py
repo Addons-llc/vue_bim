@@ -735,6 +735,113 @@ def _get_purchase_orderable_sales_order_items(sales_order):
 	]
 
 
+def _set_doc_value_if_field_exists(doc, fieldname, value):
+	if doc.meta.has_field(fieldname):
+		doc.set(fieldname, value)
+
+
+def _build_manual_purchase_orders_for_sales_order(sales_order, selected_items):
+	selected_pairs = {
+		(item.get("item_code"), item.get("supplier"))
+		for item in selected_items
+		if item.get("item_code") and item.get("supplier")
+	}
+	items_by_supplier = {}
+
+	for item in sales_order.items:
+		if (item.item_code, item.supplier) not in selected_pairs:
+			continue
+
+		qty = flt(item.qty) - (flt(item.ordered_qty) / (flt(item.conversion_factor) or 1))
+		if qty <= 0:
+			continue
+
+		items_by_supplier.setdefault(item.supplier, []).append((item, qty))
+
+	purchase_orders = []
+	purchase_order_item_meta = frappe.get_meta("Purchase Order Item")
+	for supplier, supplier_items in items_by_supplier.items():
+		purchase_order = frappe.new_doc("Purchase Order")
+		purchase_order.supplier = supplier
+		purchase_order.company = sales_order.company
+		purchase_order.transaction_date = nowdate()
+		_set_doc_value_if_field_exists(purchase_order, "schedule_date", sales_order.delivery_date or nowdate())
+
+		if any(item.delivered_by_supplier for item, _qty in supplier_items):
+			_set_doc_value_if_field_exists(purchase_order, "customer", sales_order.customer)
+			_set_doc_value_if_field_exists(purchase_order, "customer_name", sales_order.customer_name)
+			_set_doc_value_if_field_exists(
+				purchase_order,
+				"shipping_address",
+				sales_order.shipping_address_name or sales_order.customer_address,
+			)
+			_set_doc_value_if_field_exists(
+				purchase_order,
+				"shipping_address_display",
+				sales_order.shipping_address or sales_order.address_display,
+			)
+			_set_doc_value_if_field_exists(purchase_order, "customer_contact_person", sales_order.contact_person)
+			_set_doc_value_if_field_exists(purchase_order, "customer_contact_display", sales_order.contact_display)
+			_set_doc_value_if_field_exists(purchase_order, "customer_contact_mobile", sales_order.contact_mobile)
+			_set_doc_value_if_field_exists(purchase_order, "customer_contact_email", sales_order.contact_email)
+
+		for item, qty in supplier_items:
+			row = {
+				"item_code": item.item_code,
+				"item_name": item.item_name,
+				"description": item.description,
+				"qty": qty,
+				"schedule_date": item.delivery_date or sales_order.delivery_date or nowdate(),
+				"uom": item.uom,
+				"stock_uom": item.stock_uom,
+				"conversion_factor": item.conversion_factor or 1,
+				"rate": item.rate,
+				"sales_order": sales_order.name,
+				"sales_order_item": item.name,
+				"project": sales_order.project,
+			}
+			row = {
+				fieldname: value
+				for fieldname, value in row.items()
+				if purchase_order_item_meta.has_field(fieldname)
+			}
+			purchase_order.append("items", row)
+
+		purchase_order.flags.ignore_permissions = True
+		purchase_order.run_method("set_missing_values")
+		if hasattr(purchase_order, "append_taxes_from_item_tax_template") and not purchase_order.get("taxes"):
+			purchase_order.append_taxes_from_item_tax_template()
+		purchase_order.run_method("calculate_taxes_and_totals")
+		purchase_order.insert(ignore_permissions=True)
+		purchase_orders.append(purchase_order)
+
+	frappe.db.commit()
+	return purchase_orders
+
+
+def _make_purchase_orders_for_sales_order(sales_order, selected_items):
+	try:
+		from erpnext.selling.doctype.sales_order import sales_order as sales_order_module
+
+		make_purchase_order_for_default_supplier = getattr(
+			sales_order_module,
+			"make_purchase_order_for_default_supplier",
+			None,
+		)
+		if make_purchase_order_for_default_supplier:
+			return make_purchase_order_for_default_supplier(
+				sales_order.name,
+				selected_items=selected_items,
+			) or []
+	except ImportError:
+		pass
+
+	frappe.logger("buy_in_minutes.payment").info(
+		f"Using manual Purchase Order creation fallback for {sales_order.name}"
+	)
+	return _build_manual_purchase_orders_for_sales_order(sales_order, selected_items)
+
+
 def _create_purchase_orders_for_sales_order(sales_order):
 	if not sales_order or sales_order.docstatus != 1:
 		frappe.logger("buy_in_minutes.payment").info(
@@ -763,10 +870,8 @@ def _create_purchase_orders_for_sales_order(sales_order):
 		)
 		return linked_purchase_orders
 
-	from erpnext.selling.doctype.sales_order.sales_order import make_purchase_order_for_default_supplier
-
 	try:
-		purchase_orders = make_purchase_order_for_default_supplier(sales_order.name, selected_items=selected_items) or []
+		purchase_orders = _make_purchase_orders_for_sales_order(sales_order, selected_items)
 	except Exception:
 		frappe.log_error(
 			title="Purchase Order Creation Failed",
