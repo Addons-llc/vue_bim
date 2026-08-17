@@ -89,37 +89,6 @@ def _filter_published_records(records, publish_fields):
 	]
 
 
-def _get_published_item_group_names():
-	publish_fields = _get_item_group_publish_fields()
-	if not publish_fields:
-		return None
-
-	item_groups = frappe.get_all(
-		"Item Group",
-		fields=["name"] + publish_fields,
-		ignore_permissions=True,
-		limit_page_length=0,
-	)
-
-	return {
-		item_group.name
-		for item_group in item_groups
-		if item_group.name != "All Item Groups" and _record_has_publish_flag(item_group, publish_fields)
-	}
-
-
-def _filter_items_by_published_item_groups(items):
-	published_item_groups = _get_published_item_group_names()
-	if published_item_groups is None:
-		return items
-
-	return [
-		item
-		for item in items
-		if item.get("item_group") in published_item_groups
-	]
-
-
 def _get_item_group_order_fields():
 	return _get_existing_fields("Item Group", ("lft", "idx"))
 
@@ -635,7 +604,6 @@ def get_items(
 
 	if _is_truthy_flag(published):
 		items = _filter_published_records(items, publish_fields)
-		items = _filter_items_by_published_item_groups(items)
 
 	_apply_selling_prices(items)
 	_apply_item_group_images(items)
