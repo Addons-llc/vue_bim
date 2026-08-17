@@ -32,7 +32,12 @@ const supplierDetails = computed(() => {
     phone: store?.contactNumber || supplier.phone || selectedDetails.phone,
     email: store?.email || supplier.email || selectedDetails.email,
     website: store?.website || supplier.website || selectedDetails.website,
-    details: store?.description || store?.supplierDetails || supplier.details || selectedDetails.details,
+    details:
+      store?.shortDescription
+      || store?.description
+      || store?.supplierDetails
+      || supplier.details
+      || selectedDetails.details,
     sellerSince: store?.sellerSince || supplier.sellerSince || selectedDetails.sellerSince,
     primaryColour: store?.primaryColour || selectedDetails.primaryColour,
     secondaryColour: store?.secondaryColour || selectedDetails.secondaryColour,

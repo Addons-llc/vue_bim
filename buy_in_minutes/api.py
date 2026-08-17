@@ -490,6 +490,7 @@ def get_supplier_stores(limit_page_length=24, published=1):
 			"contact_email",
 			"website",
 			"store_website",
+			"short_description",
 			"description",
 			"store_details",
 			"about",

@@ -110,7 +110,8 @@ function mapSupplierStoreToBrand(store) {
       || store.custom_website
       || store.custom_store_website
       || '',
-    description: store.description || store.store_details || store.about || '',
+    shortDescription: store.short_description || '',
+    description: store.short_description || store.description || store.store_details || store.about || '',
     supplierDetails: store.supplier_details || '',
     sellerSince: store.seller_since || store.creation || '',
     productIds: getStoreProductIds(store),
