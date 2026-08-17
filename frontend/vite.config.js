@@ -56,6 +56,11 @@ export default defineConfig(({ command, mode }) => {
     base,
     plugins: [vue()],
     define: clientEnv,
+    resolve: {
+      alias: {
+        '@app-root': appRoot,
+      },
+    },
     build: {
       outDir: '../buy_in_minutes/public/buy-in-minutes',
       emptyOutDir: true,
@@ -63,6 +68,9 @@ export default defineConfig(({ command, mode }) => {
     server: {
       host: true,
       https,
+      fs: {
+        allow: [appRoot],
+      },
       proxy: {
         '/api': {
           target: proxyTarget,

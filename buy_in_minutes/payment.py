@@ -766,6 +766,8 @@ def _build_manual_purchase_orders_for_sales_order(sales_order, selected_items):
 		purchase_order.company = sales_order.company
 		purchase_order.transaction_date = nowdate()
 		_set_doc_value_if_field_exists(purchase_order, "schedule_date", sales_order.delivery_date or nowdate())
+		_set_doc_value_if_field_exists(purchase_order, "buying_price_list", "")
+		_set_doc_value_if_field_exists(purchase_order, "ignore_pricing_rule", 1)
 
 		if any(item.delivered_by_supplier for item, _qty in supplier_items):
 			_set_doc_value_if_field_exists(purchase_order, "customer", sales_order.customer)
@@ -786,6 +788,7 @@ def _build_manual_purchase_orders_for_sales_order(sales_order, selected_items):
 			_set_doc_value_if_field_exists(purchase_order, "customer_contact_email", sales_order.contact_email)
 
 		for item, qty in supplier_items:
+			amount = flt(qty) * flt(item.rate)
 			row = {
 				"item_code": item.item_code,
 				"item_name": item.item_name,
@@ -796,6 +799,10 @@ def _build_manual_purchase_orders_for_sales_order(sales_order, selected_items):
 				"stock_uom": item.stock_uom,
 				"conversion_factor": item.conversion_factor or 1,
 				"rate": item.rate,
+				"price_list_rate": item.rate,
+				"amount": amount,
+				"base_rate": item.rate,
+				"base_amount": amount,
 				"sales_order": sales_order.name,
 				"sales_order_item": item.name,
 				"project": sales_order.project,
@@ -807,12 +814,21 @@ def _build_manual_purchase_orders_for_sales_order(sales_order, selected_items):
 			}
 			purchase_order.append("items", row)
 
+		total_amount = sum(flt(item.amount) for item in purchase_order.items)
+		_set_doc_value_if_field_exists(purchase_order, "net_total", total_amount)
+		_set_doc_value_if_field_exists(purchase_order, "grand_total", total_amount)
+		_set_doc_value_if_field_exists(purchase_order, "base_net_total", total_amount)
+		_set_doc_value_if_field_exists(purchase_order, "base_grand_total", total_amount)
+		_set_doc_value_if_field_exists(purchase_order, "total", total_amount)
+		_set_doc_value_if_field_exists(purchase_order, "rounded_total", total_amount)
+		_set_doc_value_if_field_exists(purchase_order, "base_rounded_total", total_amount)
+
+		purchase_order.flags.ignore_validate = True
+		purchase_order.flags.ignore_mandatory = True
 		purchase_order.flags.ignore_permissions = True
-		purchase_order.run_method("set_missing_values")
-		if hasattr(purchase_order, "append_taxes_from_item_tax_template") and not purchase_order.get("taxes"):
-			purchase_order.append_taxes_from_item_tax_template()
-		purchase_order.run_method("calculate_taxes_and_totals")
 		purchase_order.insert(ignore_permissions=True)
+		purchase_order.flags.ignore_validate = True
+		purchase_order.flags.ignore_mandatory = True
 		purchase_orders.append(purchase_order)
 
 	frappe.db.commit()
