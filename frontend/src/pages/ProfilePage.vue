@@ -31,7 +31,9 @@ const addressForm = ref({
   phone: '',
   area: '',
   building: '',
+  street: '',
   landmark: '',
+  emirate: '',
   latitude: '',
   longitude: '',
   isDefault: false,
@@ -75,7 +77,9 @@ function resetAddressForm() {
     phone: profilePhone.value,
     area: '',
     building: '',
+    street: '',
     landmark: '',
+    emirate: '',
     latitude: '',
     longitude: '',
     isDefault: !customerAddresses.value.length,
@@ -163,7 +167,9 @@ function editAddress(address) {
     phone: address.phone,
     area: address.area,
     building: address.building,
+    street: address.street || '',
     landmark: address.landmark,
+    emirate: address.emirate || '',
     latitude: address.latitude || '',
     longitude: address.longitude || '',
     isDefault: address.isDefault,
@@ -237,6 +243,29 @@ function getAddressComponentValues(result = {}, types = []) {
     .filter(Boolean)
 }
 
+function getAddressComponentCandidates(result = {}, types = []) {
+  return (result.address_components || [])
+    .flatMap((component) => (
+      (component.types || []).some((type) => types.includes(type))
+        ? [component.long_name || '']
+        : []
+    ))
+    .filter(Boolean)
+}
+
+function pickMostSpecificAddressValue(values = []) {
+  return [...new Set(values.filter(Boolean))].sort((left, right) => {
+    const leftScore = [/\d/.test(left), left.length]
+    const rightScore = [/\d/.test(right), right.length]
+
+    if (leftScore[0] !== rightScore[0]) {
+      return Number(rightScore[0]) - Number(leftScore[0])
+    }
+
+    return rightScore[1] - leftScore[1]
+  })[0] || ''
+}
+
 function isUnitedArabEmiratesPlace(result = {}) {
   return (result.address_components || []).some((component) => (
     (component.types || []).includes('country')
@@ -286,15 +315,19 @@ function buildAddressFieldsFromPlace(place = {}) {
   const streetAddress = [streetNumber, routeName].filter(Boolean).join(' ')
   const premise = getAddressComponent(place, 'premise')
   const subpremise = getAddressComponent(place, 'subpremise')
-  const area = getAddressComponentValues(place, [
-    'neighborhood',
-    'sublocality_level_2',
-    'sublocality_level_1',
-    'sublocality',
-    'locality',
-    'administrative_area_level_2',
-    'administrative_area_level_1',
-  ]).find((value) => !isParkingLabel(value)) || ''
+  const emirate = getAddressComponent(place, 'administrative_area_level_1')
+  const area = pickMostSpecificAddressValue([
+    ...getAddressComponentCandidates(place, [
+      'neighborhood',
+      'sublocality_level_2',
+      'sublocality_level_1',
+      'sublocality',
+    ]),
+    ...getAddressComponentValues(place, [
+      'locality',
+      'administrative_area_level_2',
+    ]),
+  ]) || ''
   const placeName = place.name && !isParkingLabel(place.name) && !isPlusCodeLabel(place.name)
     ? place.name
     : ''
@@ -323,6 +356,8 @@ function buildAddressFieldsFromPlace(place = {}) {
   return {
     area,
     building,
+    street: streetAddress || routeName,
+    emirate,
     landmark: [placeName, routeName, formattedAddressLead, formattedAddress].find((value) => (
       value
       && value !== area
@@ -573,7 +608,9 @@ async function fillAddressFromCurrentLocation() {
             ...addressForm.value,
             area: detectedFields.area || addressForm.value.area,
             building: finalBuilding,
+            street: detectedFields.street || addressForm.value.street,
             landmark: nearbyLandmarkName || detectedFields.landmark || addressForm.value.landmark,
+            emirate: detectedFields.emirate || addressForm.value.emirate,
             latitude: String(currentPosition.lat),
             longitude: String(currentPosition.lng),
           }
@@ -648,7 +685,8 @@ async function fillAddressFromCurrentLocation() {
                 <span v-if="address.isDefault">Default</span>
               </header>
               <p>{{ address.contactName }} · {{ address.phone }}</p>
-              <p>{{ address.building }}, {{ address.area }}</p>
+              <p>{{ [address.street, address.building].filter(Boolean).join(', ') }}</p>
+              <p>{{ [address.area, address.emirate].filter(Boolean).join(', ') }}</p>
               <p v-if="address.landmark">{{ address.landmark }}</p>
               <div class="profile-address-actions">
                 <button
@@ -729,6 +767,16 @@ async function fillAddressFromCurrentLocation() {
               @input="markAddressEditedManually"
             />
 
+            <label class="field-label" for="address-street">Street</label>
+            <input
+              id="address-street"
+              v-model="addressForm.street"
+              class="form-input"
+              type="text"
+              placeholder="Street name"
+              @input="markAddressEditedManually"
+            />
+
             <label class="field-label" for="address-landmark">Landmark</label>
             <input
               id="address-landmark"
@@ -736,6 +784,16 @@ async function fillAddressFromCurrentLocation() {
               class="form-input"
               type="text"
               placeholder="Nearby landmark"
+              @input="markAddressEditedManually"
+            />
+
+            <label class="field-label" for="address-emirate">Emirate</label>
+            <input
+              id="address-emirate"
+              v-model="addressForm.emirate"
+              class="form-input"
+              type="text"
+              placeholder="Dubai, Abu Dhabi, Sharjah"
               @input="markAddressEditedManually"
             />
 
