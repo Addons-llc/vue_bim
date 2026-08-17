@@ -1360,6 +1360,28 @@
     position: static;
   }
 
+  .cart-delivery-options {
+    gap: 10px;
+  }
+
+  .cart-delivery-heading {
+    gap: 9px;
+  }
+
+  .cart-date-options {
+    gap: 8px;
+  }
+
+  .cart-date-option {
+    min-height: 72px;
+    padding: 9px 10px;
+  }
+
+  .cart-slot-option {
+    min-height: 44px;
+    font-size: 13px;
+  }
+
   .cart-page-item {
     grid-template-columns: 64px minmax(0, 1fr);
   }

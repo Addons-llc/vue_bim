@@ -1376,15 +1376,15 @@
 
 .supplier-store-overview {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(260px, 340px);
+  grid-template-columns: minmax(0, 1fr) max-content;
   align-items: start;
-  gap: 24px;
+  gap: 16px;
   padding: 0 24px;
 }
 
 .supplier-store-description {
   display: grid;
-  gap: 8px;
+  gap: 4px;
   text-align: left;
 }
 
@@ -1395,7 +1395,7 @@
 }
 
 .supplier-store-description p {
-  max-width: 760px;
+  max-width: none;
   margin: 0;
   color: #4b5563;
   font-size: 14px;
@@ -1403,12 +1403,42 @@
   line-height: 1.55;
 }
 
+.supplier-store-description p.is-collapsed {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.supplier-description-toggle {
+  justify-self: start;
+  min-height: 0;
+  border: 0;
+  border-radius: 6px;
+  padding: 0;
+  background: transparent;
+  color: #2563eb;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 900;
+  line-height: 1.3;
+}
+
+.supplier-description-toggle:hover,
+.supplier-description-toggle:focus-visible {
+  color: #1d4ed8;
+  outline: 0;
+  text-decoration: underline;
+}
+
 .supplier-ratings-panel {
   display: grid;
   gap: 12px;
   justify-self: end;
-  width: 100%;
-  max-width: 340px;
+  width: max-content;
+  min-width: 132px;
+  max-width: 160px;
 }
 
 .supplier-ratings-header {

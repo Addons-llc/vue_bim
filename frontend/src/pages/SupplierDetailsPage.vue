@@ -15,6 +15,7 @@ const selectedSupplier = computed(() => getSelectedSupplier(supplierName.value))
 const supplierRecord = ref(null)
 const supplierStore = ref(null)
 const failedSupplierBannerImage = ref('')
+const isSupplierDescriptionExpanded = ref(false)
 const supplierDetails = computed(() => {
   const store = supplierStore.value
   const supplier = supplierRecord.value || {}
@@ -103,14 +104,15 @@ const storeSupplierName = computed(() => supplierDetails.value.supplier || '')
 const supplierPhone = computed(() => supplierDetails.value.phone || '')
 const supplierEmail = computed(() => supplierDetails.value.email || '')
 const supplierWebsite = computed(() => supplierDetails.value.website || '')
-const supplierDescription = computed(() => supplierDetails.value.details || '')
-const supplierMainDescription = 'A trusted local store offering everyday essentials, fresh selections, and convenient delivery for nearby customers.'
+const supplierHardcodedDescription = 'This supplier offers a carefully selected range of daily essentials, grocery products, fresh items, packaged foods, and household needs for nearby customers. The store focuses on convenient ordering, reliable availability, and timely delivery so customers can shop comfortably from home. Products are handled with attention to quality, packed with care, and prepared for delivery through a simple checkout experience designed for regular family and business purchases.'
+const supplierDescription = computed(() => supplierDetails.value.details || supplierHardcodedDescription)
+const isSupplierDescriptionLong = computed(() => supplierDescription.value.length > 120)
 const supplierSince = computed(() => supplierDetails.value.sellerSince || '')
 const hasSupplierContact = computed(() =>
   Boolean(supplierPhone.value || supplierEmail.value || supplierWebsite.value),
 )
 const hasSupplierInfo = computed(() =>
-  Boolean(storeName.value || storeSupplierName.value || supplierDescription.value || supplierWebsite.value),
+  Boolean(storeName.value || storeSupplierName.value || supplierWebsite.value),
 )
 const dummySupplierRating = {
   score: '4.7',
@@ -128,6 +130,10 @@ function openProductDetails(product) {
 
 function hideBrokenSupplierBanner() {
   failedSupplierBannerImage.value = supplierBannerImage.value
+}
+
+function toggleSupplierDescription() {
+  isSupplierDescriptionExpanded.value = !isSupplierDescriptionExpanded.value
 }
 
 async function loadSupplierProducts() {
@@ -183,6 +189,7 @@ watch(supplierName, () => {
   supplierStore.value = null
   loadedProducts.value = []
   failedSupplierBannerImage.value = ''
+  isSupplierDescriptionExpanded.value = false
   loadSupplierProducts()
 })
 </script>
@@ -203,7 +210,6 @@ watch(supplierName, () => {
         </span>
         <h1>{{ supplierDisplayName }}</h1>
       </div>
-      <p v-if="supplierDescription" class="supplier-profile-summary">{{ supplierDescription }}</p>
       <div v-if="hasSupplierContact" class="supplier-profile-contact">
         <span v-if="supplierPhone">☏ {{ supplierPhone }}</span>
         <span v-if="supplierEmail">✉ {{ supplierEmail }}</span>
@@ -225,10 +231,6 @@ watch(supplierName, () => {
         <div v-if="storeSupplierName" class="supplier-profile-info-row">
           <span>Supplier</span>
           <p>{{ storeSupplierName }}</p>
-        </div>
-        <div v-if="supplierDescription" class="supplier-profile-info-row">
-          <span>Supplier Details</span>
-          <p>{{ supplierDescription }}</p>
         </div>
       </section>
 
@@ -260,9 +262,23 @@ watch(supplierName, () => {
       </div>
 
       <section class="supplier-store-overview">
-        <div class="supplier-store-description" aria-label="Supplier description">
+        <div
+          v-if="supplierDescription"
+          class="supplier-store-description"
+          aria-label="Supplier description"
+        >
           <h2>About {{ supplierDisplayName }}</h2>
-          <p>{{ supplierMainDescription }}</p>
+          <p :class="{ 'is-collapsed': !isSupplierDescriptionExpanded && isSupplierDescriptionLong }">
+            {{ supplierDescription }}
+          </p>
+          <button
+            v-if="isSupplierDescriptionLong"
+            class="supplier-description-toggle"
+            type="button"
+            @click="toggleSupplierDescription"
+          >
+            {{ isSupplierDescriptionExpanded ? 'Read less' : 'Read more' }}
+          </button>
         </div>
 
         <div class="supplier-ratings-panel" aria-label="Supplier ratings">

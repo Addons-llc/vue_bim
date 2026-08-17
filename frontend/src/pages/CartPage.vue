@@ -21,7 +21,45 @@ const isStartingCheckout = ref(false)
 const isPlacingCodOrder = ref(false)
 const checkoutError = ref('')
 const isAddressRequired = ref(false)
+const selectedDeliveryDate = ref('2026-08-26')
+const selectedDeliverySlot = ref('')
 const LAST_COD_ORDER_ITEMS_STORAGE_KEY = 'buyInMinutesLastCodOrderItems'
+const deliveryDateOptions = [
+  {
+    value: '2026-08-26',
+    day: 'Wed',
+    date: '26 Aug',
+    status: 'Available',
+    isAvailable: true,
+  },
+  {
+    value: '2026-08-27',
+    day: 'Thurs',
+    date: '27 Aug',
+    status: 'Full',
+    isAvailable: false,
+  },
+  {
+    value: '2026-08-28',
+    day: 'Fri',
+    date: '28 Aug',
+    status: 'Full',
+    isAvailable: false,
+  },
+  {
+    value: '2026-08-29',
+    day: 'Sat',
+    date: '29 Aug',
+    status: 'Full',
+    isAvailable: false,
+  },
+]
+const deliverySlots = [
+  '10 AM - 12 PM',
+  '12 PM - 2 PM',
+  '2 PM - 4 PM',
+  '4 PM - 6 PM',
+]
 const canCheckout = computed(() => isAuthReady.value && Boolean(currentUser.value))
 const checkoutButtonLabel = computed(() => {
   if (!isAuthReady.value) {
@@ -31,6 +69,10 @@ const checkoutButtonLabel = computed(() => {
   return canCheckout.value ? '' : 'Login to Proceed'
 })
 const hasDeliveryAddress = computed(() => customerAddresses.value.length > 0)
+const selectedDeliveryDateLabel = computed(() =>
+  deliveryDateOptions.find((dateOption) => dateOption.value === selectedDeliveryDate.value)?.day
+  || selectedDeliveryDate.value,
+)
 const selectedDeliveryAddress = computed(() =>
   customerAddresses.value.find((address) => address.isDefault)
   || customerAddresses.value[0]
@@ -45,6 +87,18 @@ const itemSavings = computed(() =>
     return total + (item.oldPrice - item.price) * item.quantity
   }, 0),
 )
+
+function selectDeliveryDate(dateOption) {
+  if (!dateOption.isAvailable) {
+    return
+  }
+
+  selectedDeliveryDate.value = dateOption.value
+}
+
+function selectDeliverySlot(slot) {
+  selectedDeliverySlot.value = slot
+}
 
 async function refreshCurrentSession() {
   try {
@@ -265,6 +319,79 @@ onUnmounted(() => {
             <span>Grand total</span>
             <strong>AED {{ payableTotal }}</strong>
           </div>
+
+          <section class="cart-delivery-options" aria-label="Delivery schedule">
+            <div class="cart-delivery-heading">
+              <span class="cart-delivery-step">1</span>
+              <div>
+                <h3>Choose delivery date</h3>
+                <p>Select when you want this order delivered.</p>
+              </div>
+            </div>
+
+            <div class="cart-date-options" role="group" aria-label="Choose delivery date">
+              <button
+                v-for="dateOption in deliveryDateOptions"
+                :key="dateOption.value"
+                class="cart-date-option"
+                :class="{
+                  'is-selected': selectedDeliveryDate === dateOption.value,
+                  'is-full': !dateOption.isAvailable,
+                }"
+                type="button"
+                :disabled="!dateOption.isAvailable"
+                @click="selectDeliveryDate(dateOption)"
+              >
+                <span>{{ dateOption.day }}</span>
+                <strong>{{ dateOption.date }}</strong>
+                <em>{{ dateOption.status }}</em>
+              </button>
+            </div>
+
+            <div class="cart-delivery-heading cart-slot-heading">
+              <span class="cart-delivery-step">2</span>
+              <div>
+                <h3>Choose delivery slot</h3>
+                <p>Pick the time window that works best.</p>
+              </div>
+            </div>
+
+            <div class="cart-slot-options" role="group" aria-label="Choose delivery slot">
+              <button
+                v-for="slot in deliverySlots"
+                :key="slot"
+                class="cart-slot-option"
+                :class="{ 'is-selected': selectedDeliverySlot === slot }"
+                type="button"
+                @click="selectDeliverySlot(slot)"
+              >
+                {{ slot }}
+              </button>
+            </div>
+
+            <p
+              v-if="selectedDeliveryDate && selectedDeliverySlot"
+              class="cart-delivery-selection"
+            >
+              Delivery selected for
+              <strong>{{ selectedDeliveryDateLabel }}</strong>
+              between <strong>{{ selectedDeliverySlot }}</strong>.
+            </p>
+            <label class="visually-hidden" for="cart-delivery-slot">
+              Choose Delivery Slot
+              <select id="cart-delivery-slot" v-model="selectedDeliverySlot" tabindex="-1">
+                <option value="" disabled>Choose Delivery Slot</option>
+                <option
+                  v-for="slot in deliverySlots"
+                  :key="`select-${slot}`"
+                  :value="slot"
+                >
+                  {{ slot }}
+                </option>
+              </select>
+            </label>
+          </section>
+
           <div v-if="checkoutError" class="cart-checkout-message">
             <p class="form-message error-message">
               {{ checkoutError }}
