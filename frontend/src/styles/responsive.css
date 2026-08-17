@@ -600,15 +600,15 @@
   .home-rail-brands .category-grid.is-manual-scroll .category-tile {
     flex-basis: auto;
     width: fit-content;
-    min-width: 210px;
-    max-width: 300px;
+    min-width: 232px;
+    max-width: 320px;
   }
 
   .home-rail-store .category-grid.is-manual-scroll .category-tile {
     flex-basis: auto;
     width: fit-content;
-    min-width: 210px;
-    max-width: 300px;
+    min-width: 232px;
+    max-width: 320px;
   }
 
   .app-footer {
@@ -752,6 +752,47 @@
     width: 88px;
     height: auto;
     max-width: 88px;
+  }
+
+  .home-rail-brands .category-image-wrap {
+    flex-basis: 104px;
+    width: 104px;
+    height: 104px;
+    max-width: 104px;
+  }
+
+  .dashboard-hero ~ .category-section.home-rail-brands .category-image-wrap,
+  .dashboard-hero ~ .category-section.home-rail-store .category-image-wrap {
+    flex-basis: 104px;
+    width: 104px;
+    height: 104px;
+    max-width: 104px;
+  }
+
+  .home-rail-brands .category-grid.is-manual-scroll .category-tile {
+    min-width: 240px;
+    max-width: 320px;
+    min-height: 118px;
+    align-items: center;
+    gap: 10px;
+    padding: 7px;
+  }
+
+  .home-rail-store .category-grid.is-manual-scroll .category-tile {
+    min-width: 240px;
+    max-width: 320px;
+    min-height: 118px;
+    align-items: center;
+    gap: 10px;
+    padding: 7px;
+  }
+
+  .home-rail-brands .category-copy,
+  .home-rail-store .category-copy {
+    align-self: stretch;
+    justify-content: flex-start;
+    min-width: 0;
+    padding-top: 2px;
   }
 
   .category-section--category .category-name {

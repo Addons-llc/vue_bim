@@ -393,16 +393,46 @@
   max-width: 320px;
 }
 
+.home-rail-brands .category-image-wrap {
+  flex: 0 0 124px;
+  width: 124px;
+  height: 124px;
+  max-width: 124px;
+  border-radius: 8px;
+  clip-path: none;
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+
+.dashboard-hero ~ .category-section.home-rail-brands .category-image-wrap,
+.dashboard-hero ~ .category-section.home-rail-store .category-image-wrap {
+  flex: 0 0 124px;
+  width: 124px;
+  height: 124px;
+  max-width: 124px;
+}
+
 .home-rail-brands .brand-card-details {
   flex-wrap: nowrap;
   align-items: flex-start;
 }
 
+.home-rail-store .category-image-wrap {
+  flex: 0 0 124px;
+  width: 124px;
+  height: 124px;
+  max-width: 124px;
+  border-radius: 8px;
+  clip-path: none;
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+
 .home-rail-store .category-grid.is-manual-scroll .category-tile {
   flex-basis: auto;
   width: fit-content;
-  min-width: 210px;
-  max-width: 320px;
+  min-width: 232px;
+  max-width: 340px;
 }
 
 .home-rail-store .item-card-details {
