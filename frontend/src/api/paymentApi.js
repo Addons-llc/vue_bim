@@ -1,7 +1,44 @@
 import { apiRequest } from './http'
 
+export const CHECKOUT_RESUME_TOKEN_STORAGE_KEY = 'buyInMinutesCheckoutResumeToken'
+
 function getCheckoutReturnOrigin() {
   return window.location.origin
+}
+
+export function storeCheckoutResumeToken(checkoutResumeToken) {
+  if (!checkoutResumeToken) {
+    return
+  }
+
+  sessionStorage.setItem(CHECKOUT_RESUME_TOKEN_STORAGE_KEY, checkoutResumeToken)
+}
+
+export function clearCheckoutResumeToken() {
+  sessionStorage.removeItem(CHECKOUT_RESUME_TOKEN_STORAGE_KEY)
+}
+
+export async function resumeCheckoutSession() {
+  const checkoutResumeToken = sessionStorage.getItem(CHECKOUT_RESUME_TOKEN_STORAGE_KEY)
+
+  if (!checkoutResumeToken) {
+    return null
+  }
+
+  try {
+    const response = await apiRequest('/method/buy_in_minutes.payment.resume_checkout_session', {
+      method: 'POST',
+      body: JSON.stringify({
+        checkout_resume_token: checkoutResumeToken,
+      }),
+    })
+
+    clearCheckoutResumeToken()
+    return response
+  } catch (error) {
+    clearCheckoutResumeToken()
+    throw error
+  }
 }
 
 export function createStripeCheckoutSession(cartItems, salesOrderName = '', deliveryAddress = null) {

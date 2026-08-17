@@ -2,7 +2,12 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { getCurrentUser } from '../api/authApi'
-import { createCashOnDeliveryOrder, createStripeCheckoutSession } from '../api/paymentApi'
+import {
+  createCashOnDeliveryOrder,
+  createStripeCheckoutSession,
+  resumeCheckoutSession,
+  storeCheckoutResumeToken,
+} from '../api/paymentApi'
 import { customerAddresses } from '../data/addressStore'
 import { clearCurrentUser, currentUser, isAuthReady, setCurrentUser } from '../data/authStore'
 import { clearCart } from '../data/cartStore'
@@ -102,6 +107,20 @@ function selectDeliverySlot(slot) {
 
 async function refreshCurrentSession() {
   try {
+    let checkoutResumeUser = null
+
+    try {
+      const checkoutResumeResponse = await resumeCheckoutSession()
+      checkoutResumeUser = checkoutResumeResponse?.message?.user
+    } catch (error) {
+      console.error('Unable to resume checkout session', error)
+    }
+
+    if (checkoutResumeUser) {
+      setCurrentUser(checkoutResumeUser)
+      return
+    }
+
     const response = await getCurrentUser()
     const message = response?.message || {}
 
@@ -155,11 +174,13 @@ async function startStripeCheckout() {
     const response = await createStripeCheckoutSession(cartProducts.value, '', selectedDeliveryAddress.value)
     console.log('Pay now checkout response', response)
     const checkoutUrl = response?.message?.checkout_url
+    const checkoutResumeToken = response?.message?.checkout_resume_token
 
     if (!checkoutUrl) {
       throw new Error(response?.message?.message || 'Unable to start checkout.')
     }
 
+    storeCheckoutResumeToken(checkoutResumeToken)
     window.location.assign(checkoutUrl)
   } catch (error) {
     console.error('Pay now checkout failed', error)

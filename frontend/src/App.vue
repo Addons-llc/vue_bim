@@ -2,6 +2,7 @@
 import { onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { getCurrentUser, logout } from './api/authApi'
+import { resumeCheckoutSession } from './api/paymentApi'
 import { clearCurrentUser, currentUser, setCurrentUser } from './data/authStore'
 import DefaultLayout from './layouts/DefaultLayout.vue'
 
@@ -10,6 +11,20 @@ const router = useRouter()
 
 onMounted(async () => {
   try {
+    let checkoutResumeUser = null
+
+    try {
+      const checkoutResumeResponse = await resumeCheckoutSession()
+      checkoutResumeUser = checkoutResumeResponse?.message?.user
+    } catch (error) {
+      console.error('Unable to resume checkout session', error)
+    }
+
+    if (checkoutResumeUser) {
+      setCurrentUser(checkoutResumeUser)
+      return
+    }
+
     const response = await getCurrentUser()
     const message = response?.message || {}
 

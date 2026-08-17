@@ -22,6 +22,9 @@ DELIVERY_FEE_ITEM_CODE = "delivery-fee"
 FREE_DELIVERY_MINIMUM = 60
 SELLING_PRICE_LIST = "Selling Price"
 STRIPE_SETTINGS_DOCTYPE = "Stripe Settings"
+CHECKOUT_RESUME_TOKEN_TTL_SECONDS = 3 * 60 * 60
+
+
 def _error(message, status_code=400):
 	frappe.local.response["http_status_code"] = status_code
 	return {"success": False, "message": message}
@@ -30,6 +33,79 @@ def _error(message, status_code=400):
 def _get_conf_value(key):
 	value = frappe.conf.get(key)
 	return value.strip() if isinstance(value, str) else value
+
+
+def _get_checkout_resume_token_key(checkout_resume_token):
+	return frappe.cache.make_key(f"buy_in_minutes:checkout_resume:{checkout_resume_token}")
+
+
+def _create_checkout_resume_token(user_name, sales_order_name):
+	checkout_resume_token = frappe.generate_hash(length=32)
+	frappe.cache.setex(
+		_get_checkout_resume_token_key(checkout_resume_token),
+		CHECKOUT_RESUME_TOKEN_TTL_SECONDS,
+		json.dumps(
+			{
+				"user": user_name,
+				"sales_order": sales_order_name,
+			}
+		),
+	)
+	return checkout_resume_token
+
+
+def _read_checkout_resume_token(checkout_resume_token):
+	checkout_resume_token = _clean_text(checkout_resume_token)
+	if not checkout_resume_token:
+		frappe.throw(_("Missing checkout resume token."), frappe.AuthenticationError)
+
+	cache_key = _get_checkout_resume_token_key(checkout_resume_token)
+	payload = frappe.cache.get_value(cache_key)
+	if isinstance(payload, bytes):
+		payload = payload.decode()
+
+	try:
+		payload = json.loads(payload or "{}")
+	except Exception:
+		payload = {}
+
+	if not payload.get("user") or not payload.get("sales_order"):
+		frappe.throw(_("Checkout session expired. Please sign in again."), frappe.AuthenticationError)
+
+	frappe.cache.delete_value(cache_key)
+	return payload
+
+
+def _get_user_payload(user_name):
+	user = frappe.get_doc("User", user_name)
+	return {
+		"name": user.name,
+		"email": user.email,
+		"mobile_no": user.mobile_no,
+		"full_name": user.full_name,
+		"user_type": user.user_type,
+		"user_image": user.user_image,
+	}
+
+
+def _restore_checkout_user(user_name, sales_order_name):
+	if not user_name or not sales_order_name:
+		frappe.throw(_("Unable to restore checkout session."), frappe.AuthenticationError)
+
+	if not frappe.db.exists("User", user_name):
+		frappe.throw(_("Checkout user was not found."), frappe.AuthenticationError)
+
+	if frappe.db.get_value("User", user_name, "enabled") != 1:
+		frappe.throw(_("Checkout user is disabled."), frappe.AuthenticationError)
+
+	sales_order_owner = frappe.db.get_value("Sales Order", sales_order_name, "owner")
+	if sales_order_owner != user_name:
+		frappe.throw(_("Checkout session does not match this order."), frappe.AuthenticationError)
+
+	from buy_in_minutes.auth import _login_user
+
+	_login_user(user_name)
+	return _get_user_payload(user_name)
 
 
 def _get_stripe_settings():
@@ -953,6 +1029,10 @@ def finalize_stripe_checkout(session_id=None):
 		)
 
 	sales_order = _submit_sales_order(sales_order_name)
+	restored_user = None
+	checkout_user = session.get("metadata", {}).get("user")
+	if frappe.session.user == "Guest" and checkout_user:
+		restored_user = _restore_checkout_user(checkout_user, sales_order.name)
 
 	return {
 		"success": True,
@@ -962,6 +1042,18 @@ def finalize_stripe_checkout(session_id=None):
 		"docstatus": sales_order.docstatus,
 		"payment_status": session.get("payment_status"),
 		"items": _get_sales_order_item_summary(sales_order),
+		"user": restored_user,
+	}
+
+
+@frappe.whitelist(allow_guest=True, methods=["POST"])
+def resume_checkout_session(checkout_resume_token=None):
+	payload = _read_checkout_resume_token(checkout_resume_token)
+	user = _restore_checkout_user(payload.get("user"), payload.get("sales_order"))
+
+	return {
+		"success": True,
+		"user": user,
 	}
 
 
@@ -1002,6 +1094,7 @@ def create_checkout_session(cart_items=None, sales_order_name=None, delivery_add
 		"checkout_url": session.get("url"),
 		"session_id": session.get("id"),
 		"sales_order": sales_order.name,
+		"checkout_resume_token": _create_checkout_resume_token(frappe.session.user, sales_order.name),
 	}
 
 
