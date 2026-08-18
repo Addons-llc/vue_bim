@@ -739,7 +739,7 @@ def _ensure_purchase_orders_for_sales_order(sales_order):
 		)
 
 
-@frappe.whitelist(allow_guest=True)
+@frappe.whitelist(allow_guest=True, methods=["GET"])
 def get_sales_order(sales_order_name):
 	if frappe.session.user == "Guest":
 		frappe.throw("Please sign in to view this Sales Order.", frappe.AuthenticationError)
