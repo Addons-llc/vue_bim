@@ -1,5 +1,7 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { LOCATION_UPDATED_EVENT, getEstimatedDeliveryTimeLabel } from '../../api/deliveryEta'
+import { customerAddresses } from '../../data/addressStore'
 import {
   addProductToCart,
   cartProducts,
@@ -47,6 +49,11 @@ const reviewLabel = computed(() => {
 
   return reviewCount === 1 ? '1 review' : `${reviewCount} reviews`
 })
+const deliveryTimeLabel = ref(props.product.deliveryTime || '')
+
+async function updateDeliveryTimeLabel() {
+  deliveryTimeLabel.value = await getEstimatedDeliveryTimeLabel(props.product)
+}
 
 function handleAddToCart() {
   addProductToCart({
@@ -74,6 +81,37 @@ function showPlaceholderImage(event) {
 
   event.target.src = productPlaceholderImage
 }
+
+onMounted(() => {
+  updateDeliveryTimeLabel()
+  window.addEventListener(LOCATION_UPDATED_EVENT, updateDeliveryTimeLabel)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener(LOCATION_UPDATED_EVENT, updateDeliveryTimeLabel)
+})
+
+watch(
+  () => [
+    props.product.id,
+    props.product.deliveryTime,
+    props.product.supplierAddress,
+    props.product.supplierDetails?.customGoogleAddress,
+    props.product.supplierDetails?.custom_google_address,
+  ],
+  () => {
+    updateDeliveryTimeLabel()
+  },
+  { immediate: true },
+)
+
+watch(
+  customerAddresses,
+  () => {
+    updateDeliveryTimeLabel()
+  },
+  { deep: true },
+)
 </script>
 
 <template>
@@ -119,7 +157,7 @@ function showPlaceholderImage(event) {
         :alt="product.name"
         @error="showPlaceholderImage"
       />
-      <span class="product-badge">{{ product.deliveryTime || '18 min' }}</span>
+      <span v-if="deliveryTimeLabel" class="product-badge">{{ deliveryTimeLabel }}</span>
     </div>
 
     <div class="product-info">

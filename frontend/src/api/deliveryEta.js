@@ -2,14 +2,16 @@ import { customerAddresses } from '../data/addressStore'
 import { loadGoogleMaps } from './googleMaps'
 
 const SELECTED_LOCATION_STORAGE_KEY = 'buyInMinutesSelectedLocation'
+const CURRENT_LOCATION_COORDS_STORAGE_KEY = 'buyInMinutesCurrentLocationCoords'
 const ETA_CACHE = new Map()
 const ETA_PROMISE_CACHE = new Map()
 const GEOCODE_CACHE = new Map()
 
-const DEFAULT_DELIVERY_TIME = '18 min'
 const MIN_DELIVERY_MINUTES = 8
 const AVERAGE_DELIVERY_SPEED_KMH = 24
 const ROAD_DISTANCE_MULTIPLIER = 1.22
+
+export const LOCATION_UPDATED_EVENT = 'buy-in-minutes:location-updated'
 
 function toFiniteNumber(value) {
   const numberValue = Number(value)
@@ -35,7 +37,66 @@ function getStoredSelectedLocation() {
   return normalizeLocationText(selectedLocation)
 }
 
+function getStoredCurrentLocationCoords() {
+  if (typeof window === 'undefined') {
+    return null
+  }
+
+  try {
+    const coords = JSON.parse(localStorage.getItem(CURRENT_LOCATION_COORDS_STORAGE_KEY) || 'null')
+    const lat = toFiniteNumber(coords?.lat)
+    const lng = toFiniteNumber(coords?.lng)
+
+    if (lat === null || lng === null) {
+      return null
+    }
+
+    return { lat, lng }
+  } catch {
+    return null
+  }
+}
+
+function dispatchLocationUpdated() {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent(LOCATION_UPDATED_EVENT))
+  }
+}
+
+export function storeCurrentLocationCoords(coords) {
+  const lat = toFiniteNumber(coords?.lat)
+  const lng = toFiniteNumber(coords?.lng)
+
+  if (typeof window === 'undefined' || lat === null || lng === null) {
+    return
+  }
+
+  localStorage.setItem(
+    CURRENT_LOCATION_COORDS_STORAGE_KEY,
+    JSON.stringify({ lat, lng }),
+  )
+  dispatchLocationUpdated()
+}
+
+export function clearCurrentLocationCoords() {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  localStorage.removeItem(CURRENT_LOCATION_COORDS_STORAGE_KEY)
+  dispatchLocationUpdated()
+}
+
 function getCustomerLocationSource() {
+  const storedCoords = getStoredCurrentLocationCoords()
+
+  if (storedCoords) {
+    return {
+      key: `current:${getLocationKey(storedCoords)}`,
+      coords: storedCoords,
+    }
+  }
+
   const defaultAddress = customerAddresses.value.find((address) => address.isDefault)
     || customerAddresses.value[0]
 
@@ -158,7 +219,7 @@ export async function getEstimatedDeliveryTimeLabel(product = {}) {
       || product?.supplierAddress
       || '',
   )
-  const fallbackDeliveryTime = normalizeLocationText(product?.deliveryTime || DEFAULT_DELIVERY_TIME)
+  const fallbackDeliveryTime = normalizeLocationText(product?.deliveryTime || '')
 
   if (!supplierAddress) {
     return fallbackDeliveryTime

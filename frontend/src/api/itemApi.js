@@ -186,7 +186,6 @@ async function mapItemToProduct(item) {
   const reviewCount = getReviewCount(item)
   const supplierDetails = getSupplierDetails(item)
   const deliveryTime = await getEstimatedDeliveryTimeLabel({
-    deliveryTime: '18 min',
     supplierDetails,
   })
 
