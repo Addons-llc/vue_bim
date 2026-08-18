@@ -1,7 +1,7 @@
 <script setup>
 import { onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { getCurrentUser, logout, restoreLoginSession } from './api/authApi'
+import { getCurrentUser, hasPersistedPhoneAuthState, logout, restoreLoginSession } from './api/authApi'
 import { resumeCheckoutSession } from './api/paymentApi'
 import { clearCurrentUser, currentUser, setCurrentUser } from './data/authStore'
 import DefaultLayout from './layouts/DefaultLayout.vue'
@@ -46,13 +46,17 @@ onMounted(async () => {
       return
     }
 
+    if (currentUser.value && hasPersistedPhoneAuthState()) {
+      return
+    }
+
     clearCurrentUser()
     return
   } catch (error) {
     console.error('Unable to load current user session', error)
   }
 
-  if (!currentUser.value) {
+  if (!currentUser.value && !hasPersistedPhoneAuthState()) {
     clearCurrentUser()
   }
 })

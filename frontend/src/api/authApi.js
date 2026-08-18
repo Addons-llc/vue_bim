@@ -2,6 +2,7 @@ import { apiRequest, clearStoredCsrfToken } from './http'
 import { clearCurrentUser } from '../data/authStore'
 
 export const AUTH_TOKEN_STORAGE_KEY = 'authToken'
+export const AUTH_FLOW_TOKEN_STORAGE_KEY = 'authFlowToken'
 
 function storeAuthToken(response) {
   const token = response?.message?.session_token || response?.message?.token || ''
@@ -11,16 +12,38 @@ function storeAuthToken(response) {
   }
 }
 
+function storeAuthFlowToken(response) {
+  const flowToken = response?.message?.auth_flow_token || ''
+
+  if (flowToken) {
+    localStorage.setItem(AUTH_FLOW_TOKEN_STORAGE_KEY, flowToken)
+  }
+}
+
+export function hasPersistedPhoneAuthState() {
+  return Boolean(
+    localStorage.getItem(AUTH_TOKEN_STORAGE_KEY)
+    || localStorage.getItem(AUTH_FLOW_TOKEN_STORAGE_KEY),
+  )
+}
+
 export function requestPhoneOtp(phoneNumber) {
   const params = new URLSearchParams({ phone_number: phoneNumber })
 
   return apiRequest(`/method/buy_in_minutes.auth.request_phone_otp?${params.toString()}`)
+    .then((response) => {
+      if (response?.message?.success) {
+        storeAuthFlowToken(response)
+      }
+
+      return response
+    })
 }
 
-export async function verifyPhoneOtp(phoneNumber, otp) {
+export async function verifyPhoneOtp(phoneNumber, otp, authFlowToken = '') {
   const response = await apiRequest('/method/buy_in_minutes.auth.verify_phone_otp', {
     method: 'POST',
-    body: JSON.stringify({ phone_number: phoneNumber, otp }),
+    body: JSON.stringify({ phone_number: phoneNumber, otp, auth_flow_token: authFlowToken }),
   })
 
   if (response?.message?.success) {
@@ -86,6 +109,7 @@ export function logout() {
   })
 
   localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY)
+  localStorage.removeItem(AUTH_FLOW_TOKEN_STORAGE_KEY)
   clearStoredCsrfToken()
   clearCurrentUser()
   return request

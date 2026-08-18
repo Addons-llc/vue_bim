@@ -47,6 +47,8 @@ async function handlePhoneSignIn() {
       name: 'login-otp',
       query: {
         phone: normalizedPhoneNumber.value,
+        flow: response?.message?.auth_flow_token || '',
+        mode: response?.message?.auth_mode || '',
       },
     })
   } catch (error) {

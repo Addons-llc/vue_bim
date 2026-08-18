@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { getCurrentUser, restoreLoginSession } from '../api/authApi'
+import { getCurrentUser, hasPersistedPhoneAuthState, restoreLoginSession } from '../api/authApi'
 import { getOrderHistory } from '../api/orderHistoryApi'
 import { clearCurrentUser, currentUser, setCurrentUser } from '../data/authStore'
 
@@ -41,12 +41,14 @@ async function loadOrders() {
 
       if (restoredUser) {
         setCurrentUser(restoredUser)
+      } else if (currentUser.value && hasPersistedPhoneAuthState()) {
+        // Keep the local website user while a persisted phone-auth state exists.
       } else {
         clearCurrentUser()
       }
     }
   } catch {
-    if (!currentUser.value) {
+    if (!currentUser.value && !hasPersistedPhoneAuthState()) {
       clearCurrentUser()
     }
   }

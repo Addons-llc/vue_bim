@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { getCurrentUser, restoreLoginSession } from '../api/authApi'
+import { getCurrentUser, hasPersistedPhoneAuthState, restoreLoginSession } from '../api/authApi'
 import {
   createCashOnDeliveryOrder,
   createStripeCheckoutSession,
@@ -137,12 +137,16 @@ async function refreshCurrentSession() {
       return true
     }
 
+    if (currentUser.value && hasPersistedPhoneAuthState()) {
+      return true
+    }
+
     clearCurrentUser()
     return false
   } catch (error) {
     console.error('Unable to refresh checkout session', error)
 
-    if (!currentUser.value) {
+    if (!currentUser.value && !hasPersistedPhoneAuthState()) {
       clearCurrentUser()
     }
 
@@ -218,7 +222,17 @@ async function startStripeCheckout() {
     console.error('Pay now checkout failed', error)
 
     if (isAuthenticationError(error)) {
-      clearCurrentUser()
+      const sessionRecovered = await refreshCurrentSession()
+
+      if (sessionRecovered && currentUser.value) {
+        checkoutError.value = 'Session restored. Please click Pay Now again.'
+        return
+      }
+
+      if (!hasPersistedPhoneAuthState()) {
+        clearCurrentUser()
+      }
+
       emit('login')
       return
     }
@@ -290,7 +304,17 @@ async function placeCashOnDeliveryOrder() {
     console.error('Cash on delivery order failed', error)
 
     if (isAuthenticationError(error)) {
-      clearCurrentUser()
+      const sessionRecovered = await refreshCurrentSession()
+
+      if (sessionRecovered && currentUser.value) {
+        checkoutError.value = 'Session restored. Please click Cash on Delivery again.'
+        return
+      }
+
+      if (!hasPersistedPhoneAuthState()) {
+        clearCurrentUser()
+      }
+
       emit('login')
       return
     }
