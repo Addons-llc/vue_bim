@@ -320,6 +320,63 @@ def _get_existing_website_user_by_phone(phone_number):
 	return None
 
 
+def _get_existing_user_by_phone(phone_number):
+	user_name = frappe.db.get_value("User", {"mobile_no": phone_number}, "name")
+	if not user_name:
+		user_name = frappe.db.get_value("User", {"phone": phone_number}, "name")
+
+	if not user_name:
+		return None
+
+	return frappe.get_doc("User", user_name)
+
+
+def _build_phone_login_email(phone_number):
+	phone_digits = re.sub(r"\D", "", phone_number or "")
+	if not phone_digits:
+		phone_digits = frappe.generate_hash(length=12).lower()
+
+	return f"{phone_digits}@{PHONE_USER_EMAIL_DOMAIN}"
+
+
+def _create_phone_website_user(phone_number):
+	existing_user = _get_existing_user_by_phone(phone_number)
+	if existing_user:
+		if existing_user.user_type != "Website User":
+			frappe.throw(_("This phone number is already linked to a non-website user account."))
+
+		if not existing_user.enabled:
+			frappe.throw(_("User disabled or missing"), frappe.AuthenticationError)
+
+		return existing_user
+
+	email = _build_phone_login_email(phone_number)
+	if frappe.db.exists("User", email):
+		email = f"{frappe.generate_hash(length=12).lower()}@{PHONE_USER_EMAIL_DOMAIN}"
+
+	user = frappe.get_doc(
+		{
+			"doctype": "User",
+			"email": email,
+			"first_name": _("Customer"),
+			"last_name": "",
+			"full_name": _("Customer"),
+			"enabled": 1,
+			"user_type": "Website User",
+			"send_welcome_email": 0,
+			"mobile_no": phone_number,
+			"phone": phone_number,
+		}
+	)
+
+	if frappe.db.exists("Role", "Customer"):
+		user.append("roles", {"role": "Customer"})
+
+	user.insert(ignore_permissions=True)
+	frappe.db.commit()
+	return user
+
+
 def _create_profile_website_user(full_name, email, phone_number):
 	if frappe.db.exists("User", email):
 		frappe.throw(_("A user with this email address already exists."))
@@ -518,21 +575,16 @@ def verify_phone_otp(phone_number=None, otp=None, phoneNumber=None):
 			return _error(_("Invalid OTP."), 400)
 
 		user = _get_existing_website_user_by_phone(phone_number)
+		is_new_user = not user
 		if not user:
-			return {
-				"success": True,
-				"is_new_user": True,
-				"website_user_created": False,
-				"website_user_exists": False,
-				"needs_profile": True,
-				"profile_completed": False,
-				"profile_token": _create_phone_profile_token(phone_number),
-				"message": _("OTP verified. Complete your profile to continue."),
-			}
+			user = _create_phone_website_user(phone_number)
 
 		_login_user(user.name)
 
-		return _get_login_response_payload(user)
+		return {
+			**_get_login_response_payload(user),
+			**_get_phone_user_payload(user, is_new_user),
+		}
 
 	client, service_sid = _get_twilio_client()
 
@@ -552,21 +604,16 @@ def verify_phone_otp(phone_number=None, otp=None, phoneNumber=None):
 		return _error(_("Invalid OTP."), 400)
 
 	user = _get_existing_website_user_by_phone(phone_number)
+	is_new_user = not user
 	if not user:
-		return {
-			"success": True,
-			"is_new_user": True,
-			"website_user_created": False,
-			"website_user_exists": False,
-			"needs_profile": True,
-			"profile_completed": False,
-			"profile_token": _create_phone_profile_token(phone_number),
-			"message": _("OTP verified. Complete your profile to continue."),
-		}
+		user = _create_phone_website_user(phone_number)
 
 	_login_user(user.name)
 
-	return _get_login_response_payload(user)
+	return {
+		**_get_login_response_payload(user),
+		**_get_phone_user_payload(user, is_new_user),
+	}
 
 
 @frappe.whitelist(allow_guest=True, methods=["POST"])

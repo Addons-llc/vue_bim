@@ -8,10 +8,6 @@ function buildUrl(path) {
   return `${API_BASE_URL}${path}`
 }
 
-function getAuthToken() {
-  return localStorage.getItem('authToken')
-}
-
 function getStoredCsrfToken() {
   const csrfToken = window.frappe?.csrf_token
 
@@ -126,7 +122,6 @@ function isLikelyCsrfFailure(method, response, message) {
 }
 
 export async function apiRequest(path, options = {}) {
-  const token = getAuthToken()
   const method = (options.method || 'GET').toUpperCase()
   const needsCsrfToken = !['GET', 'HEAD', 'OPTIONS'].includes(method)
   const csrfToken = needsCsrfToken
@@ -139,10 +134,6 @@ export async function apiRequest(path, options = {}) {
 
   if (options.body && !(options.body instanceof FormData)) {
     headers['Content-Type'] = 'application/json'
-  }
-
-  if (token) {
-    headers.Authorization = `Bearer ${token}`
   }
 
   if (csrfToken && needsCsrfToken) {
