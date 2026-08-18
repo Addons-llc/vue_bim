@@ -164,6 +164,11 @@ async function startStripeCheckout() {
     return
   }
 
+  if (!selectedDeliverySlot.value) {
+    checkoutError.value = 'Please choose a delivery slot before checkout.'
+    return
+  }
+
   isStartingCheckout.value = true
 
   try {
@@ -209,6 +214,11 @@ async function placeCashOnDeliveryOrder() {
   if (!hasDeliveryAddress.value) {
     checkoutError.value = 'Please add a delivery address before checkout.'
     isAddressRequired.value = true
+    return
+  }
+
+  if (!selectedDeliverySlot.value) {
+    checkoutError.value = 'Please choose a delivery slot before placing the order.'
     return
   }
 

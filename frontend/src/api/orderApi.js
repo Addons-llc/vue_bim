@@ -1,6 +1,12 @@
 import { apiRequest } from './http'
 
-export function syncCartSalesOrder(cartItems, salesOrderName = '') {
+export function syncCartSalesOrder(
+  cartItems,
+  salesOrderName = '',
+  deliveryAddress = null,
+  deliveryDate = '',
+  deliverySlot = '',
+) {
   return apiRequest('/method/buy_in_minutes.payment.sync_cart_sales_order', {
     method: 'POST',
     body: JSON.stringify({
@@ -10,6 +16,9 @@ export function syncCartSalesOrder(cartItems, salesOrderName = '') {
         quantity: item.quantity,
       })),
       sales_order_name: salesOrderName,
+      delivery_address: deliveryAddress,
+      delivery_date: deliveryDate,
+      delivery_slot: deliverySlot,
     }),
   })
 }

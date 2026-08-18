@@ -1053,8 +1053,7 @@ def _upsert_sales_order(
 			"order_type": "Sales",
 		}
 	)
-	if sales_order.meta.has_field("custom_delivery_slot"):
-		sales_order.custom_delivery_slot = delivery_slot or ""
+	_set_doc_value_if_field_exists(sales_order, "custom_delivery_slot", _clean_text(delivery_slot))
 	for item in order_items:
 		sales_order.append("items", item)
 
@@ -1252,7 +1251,13 @@ def resume_checkout_session(checkout_resume_token=None):
 
 
 @frappe.whitelist(methods=["POST"])
-def sync_cart_sales_order(cart_items=None, sales_order_name=None, delivery_address=None):
+def sync_cart_sales_order(
+	cart_items=None,
+	sales_order_name=None,
+	delivery_address=None,
+	delivery_date=None,
+	delivery_slot=None,
+):
 	_require_checkout_user()
 
 	checkout_items = _get_checkout_items(cart_items)
@@ -1260,6 +1265,8 @@ def sync_cart_sales_order(cart_items=None, sales_order_name=None, delivery_addre
 		checkout_items,
 		sales_order_name=sales_order_name,
 		delivery_address=delivery_address,
+		delivery_date=delivery_date,
+		delivery_slot=delivery_slot,
 	)
 
 	return {
