@@ -39,7 +39,9 @@ async function loadOrders() {
       clearCurrentUser()
     }
   } catch {
-    // The redirect below handles unauthenticated sessions.
+    if (!currentUser.value) {
+      clearCurrentUser()
+    }
   }
 
   if (!currentUser.value) {

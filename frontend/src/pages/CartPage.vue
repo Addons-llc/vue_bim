@@ -118,7 +118,7 @@ async function refreshCurrentSession() {
 
     if (checkoutResumeUser) {
       setCurrentUser(checkoutResumeUser)
-      return
+      return true
     }
 
     const response = await getCurrentUser()
@@ -126,23 +126,26 @@ async function refreshCurrentSession() {
 
     if (message.is_authenticated) {
       setCurrentUser(message.user)
-      return
+      return true
     }
 
     clearCurrentUser()
+    return false
   } catch (error) {
     console.error('Unable to refresh checkout session', error)
+
+    if (!currentUser.value) {
+      clearCurrentUser()
+    }
+
+    return false
   }
 }
 
 async function ensureCheckoutSession() {
-  if (canCheckout.value) {
-    return true
-  }
+  const sessionReady = await refreshCurrentSession()
 
-  await refreshCurrentSession()
-
-  if (canCheckout.value) {
+  if (sessionReady && canCheckout.value) {
     return true
   }
 

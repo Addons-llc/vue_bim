@@ -37,11 +37,16 @@ onMounted(async () => {
       setCurrentUser(message.user)
       return
     }
+
+    clearCurrentUser()
+    return
   } catch (error) {
     console.error('Unable to load current user session', error)
   }
 
-  clearCurrentUser()
+  if (!currentUser.value) {
+    clearCurrentUser()
+  }
 })
 
 function navigateToLogin() {
