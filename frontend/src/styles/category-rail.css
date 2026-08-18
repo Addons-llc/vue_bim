@@ -422,9 +422,6 @@
 .home-rail-categories .category-tile.is-stacked,
 .home-rail-store .category-tile.is-stacked {
   max-width: 140px;
-}
-
-.home-rail-categories .category-tile.is-stacked {
   border-radius: 14px;
 }
 
@@ -474,7 +471,8 @@
 }
 
 .home-rail-brands .category-tile.is-stacked .category-image-wrap,
-.home-rail-store .category-tile.is-stacked .category-image-wrap {
+.home-rail-store .category-tile.is-stacked .category-image-wrap,
+.home-rail-categories .category-tile.is-stacked .category-image-wrap {
   flex: none;
   width: 100%;
   height: auto;
@@ -486,21 +484,23 @@
   mask-image: none;
 }
 
-.home-rail-categories .category-tile.is-stacked .category-image-wrap {
-  border-radius: 8px;
-  clip-path: none;
-  -webkit-mask-image: none;
-  mask-image: none;
-}
-
-.home-rail-categories .category-tile.is-stacked .category-image-wrap {
+.home-rail-brands .category-tile.is-stacked .category-image-wrap,
+.home-rail-categories .category-tile.is-stacked .category-image-wrap,
+.home-rail-store .category-tile.is-stacked .category-image-wrap {
   border-radius: 50%;
+  clip-path: circle(50%);
+  -webkit-mask-image: radial-gradient(circle, #000 99%, transparent 100%);
+  mask-image: radial-gradient(circle, #000 99%, transparent 100%);
 }
 
-.home-rail-categories .category-tile.is-stacked .category-copy {
+.home-rail-brands .category-tile.is-stacked .category-copy,
+.home-rail-categories .category-tile.is-stacked .category-copy,
+.home-rail-store .category-tile.is-stacked .category-copy {
   align-items: center;
 }
 
-.home-rail-categories .category-tile.is-stacked .category-name {
+.home-rail-brands .category-tile.is-stacked .category-name,
+.home-rail-categories .category-tile.is-stacked .category-name,
+.home-rail-store .category-tile.is-stacked .category-name {
   text-align: center;
 }
