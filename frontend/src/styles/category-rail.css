@@ -474,8 +474,19 @@
 }
 
 .home-rail-brands .category-tile.is-stacked .category-image-wrap,
-.home-rail-categories .category-tile.is-stacked .category-image-wrap,
 .home-rail-store .category-tile.is-stacked .category-image-wrap {
+  flex: none;
+  width: 100%;
+  height: auto;
+  max-width: none;
+  aspect-ratio: 1;
+  border-radius: 8px;
+  clip-path: none;
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+
+.home-rail-categories .category-tile.is-stacked .category-image-wrap {
   border-radius: 8px;
   clip-path: none;
   -webkit-mask-image: none;
