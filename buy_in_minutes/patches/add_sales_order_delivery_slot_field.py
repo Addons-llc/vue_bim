@@ -12,6 +12,13 @@ def execute():
 					"fieldtype": "Data",
 					"insert_after": "delivery_date",
 					"allow_on_submit": 1,
+				},
+				{
+					"fieldname": "custom_customer_location",
+					"label": "Customer Location",
+					"fieldtype": "Data",
+					"insert_after": "custom_delivery_slot",
+					"allow_on_submit": 1,
 				}
 			]
 		},

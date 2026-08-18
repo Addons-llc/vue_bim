@@ -434,10 +434,43 @@ def _normalize_delivery_address(delivery_address):
 		"phone": _clean_text(delivery_address.get("phone")),
 		"area": _clean_text(delivery_address.get("area")),
 		"building": _clean_text(delivery_address.get("building")),
+		"street": _clean_text(delivery_address.get("street")),
 		"landmark": _clean_text(delivery_address.get("landmark")),
+		"emirate": _clean_text(delivery_address.get("emirate")),
 		"latitude": _clean_text(delivery_address.get("latitude")),
 		"longitude": _clean_text(delivery_address.get("longitude")),
 	}
+
+
+def _build_delivery_address_display(delivery_address):
+	address = _normalize_delivery_address(delivery_address)
+	if not address:
+		return ""
+
+	lines = []
+	if address.get("label"):
+		lines.append(address["label"])
+
+	contact_line = ", ".join(filter(None, [address.get("contact_name"), address.get("phone")]))
+	if contact_line:
+		lines.append(contact_line)
+
+	address_line = ", ".join(
+		filter(
+			None,
+			[
+				address.get("building"),
+				address.get("street"),
+				address.get("area"),
+				address.get("landmark"),
+				address.get("emirate"),
+			],
+		)
+	)
+	if address_line:
+		lines.append(address_line)
+
+	return "\n".join(lines)
 
 
 def _get_linked_customer_address(customer, address):
@@ -622,6 +655,11 @@ def _apply_delivery_address_to_sales_order(sales_order, customer, delivery_addre
 		sales_order.contact_person = contact_person
 
 	sales_order.set_missing_values()
+
+	address_display = _build_delivery_address_display(delivery_address)
+	if address_display:
+		_set_doc_value_if_field_exists(sales_order, "address_display", address_display)
+		_set_doc_value_if_field_exists(sales_order, "shipping_address", address_display)
 
 
 def _get_checkout_items(cart_items):
@@ -1015,6 +1053,7 @@ def _upsert_sales_order(
 	delivery_address=None,
 	delivery_date=None,
 	delivery_slot=None,
+	customer_location=None,
 ):
 	checkout_user = _normalize_user_name(frappe.session.user)
 	customer = _get_or_create_customer_for_user(checkout_user)
@@ -1054,6 +1093,7 @@ def _upsert_sales_order(
 		}
 	)
 	_set_doc_value_if_field_exists(sales_order, "custom_delivery_slot", _clean_text(delivery_slot))
+	_set_doc_value_if_field_exists(sales_order, "custom_customer_location", _clean_text(customer_location))
 	for item in order_items:
 		sales_order.append("items", item)
 
@@ -1257,6 +1297,7 @@ def sync_cart_sales_order(
 	delivery_address=None,
 	delivery_date=None,
 	delivery_slot=None,
+	customer_location=None,
 ):
 	_require_checkout_user()
 
@@ -1267,6 +1308,7 @@ def sync_cart_sales_order(
 		delivery_address=delivery_address,
 		delivery_date=delivery_date,
 		delivery_slot=delivery_slot,
+		customer_location=customer_location,
 	)
 
 	return {
@@ -1283,6 +1325,7 @@ def create_checkout_session(
 	return_origin=None,
 	delivery_date=None,
 	delivery_slot=None,
+	customer_location=None,
 ):
 	_require_checkout_user()
 
@@ -1293,6 +1336,7 @@ def create_checkout_session(
 		delivery_address=delivery_address,
 		delivery_date=delivery_date,
 		delivery_slot=delivery_slot,
+		customer_location=customer_location,
 	)
 	session = _stripe_request(
 		"/checkout/sessions",
@@ -1315,6 +1359,7 @@ def create_cash_on_delivery_order(
 	delivery_address=None,
 	delivery_date=None,
 	delivery_slot=None,
+	customer_location=None,
 ):
 	_require_checkout_user()
 
@@ -1326,6 +1371,7 @@ def create_cash_on_delivery_order(
 		delivery_address=delivery_address,
 		delivery_date=delivery_date,
 		delivery_slot=delivery_slot,
+		customer_location=customer_location,
 	)
 	purchase_orders = getattr(sales_order, "purchase_orders", None)
 

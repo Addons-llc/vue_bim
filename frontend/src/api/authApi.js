@@ -1,6 +1,16 @@
 import { apiRequest, clearStoredCsrfToken } from './http'
 import { clearCurrentUser } from '../data/authStore'
 
+export const AUTH_TOKEN_STORAGE_KEY = 'authToken'
+
+function storeAuthToken(response) {
+  const token = response?.message?.session_token || response?.message?.token || ''
+
+  if (token) {
+    localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, token)
+  }
+}
+
 export function requestPhoneOtp(phoneNumber) {
   const params = new URLSearchParams({ phone_number: phoneNumber })
 
@@ -14,6 +24,7 @@ export async function verifyPhoneOtp(phoneNumber, otp) {
   })
 
   if (response?.message?.success) {
+    storeAuthToken(response)
     clearStoredCsrfToken()
   }
 
@@ -32,6 +43,29 @@ export async function createWebsiteUser({ email, fullName, phoneNumber, profileT
   })
 
   if (response?.message?.success) {
+    storeAuthToken(response)
+    clearStoredCsrfToken()
+  }
+
+  return response
+}
+
+export async function restoreLoginSession() {
+  const sessionToken = localStorage.getItem(AUTH_TOKEN_STORAGE_KEY)
+
+  if (!sessionToken) {
+    return null
+  }
+
+  const response = await apiRequest('/method/buy_in_minutes.auth.restore_login_session', {
+    method: 'POST',
+    body: JSON.stringify({
+      session_token: sessionToken,
+    }),
+  })
+
+  if (response?.message?.success) {
+    storeAuthToken(response)
     clearStoredCsrfToken()
   }
 
@@ -51,7 +85,7 @@ export function logout() {
     method: 'POST',
   })
 
-  localStorage.removeItem('authToken')
+  localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY)
   clearStoredCsrfToken()
   clearCurrentUser()
   return request

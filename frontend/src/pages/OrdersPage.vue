@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { getCurrentUser } from '../api/authApi'
+import { getCurrentUser, restoreLoginSession } from '../api/authApi'
 import { getOrderHistory } from '../api/orderHistoryApi'
 import { clearCurrentUser, currentUser, setCurrentUser } from '../data/authStore'
 
@@ -36,7 +36,14 @@ async function loadOrders() {
     if (message.is_authenticated) {
       setCurrentUser(message.user)
     } else {
-      clearCurrentUser()
+      const restoredSession = await restoreLoginSession().catch(() => null)
+      const restoredUser = restoredSession?.message?.user
+
+      if (restoredUser) {
+        setCurrentUser(restoredUser)
+      } else {
+        clearCurrentUser()
+      }
     }
   } catch {
     if (!currentUser.value) {

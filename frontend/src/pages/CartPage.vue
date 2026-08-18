@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { getCurrentUser } from '../api/authApi'
+import { getCurrentUser, restoreLoginSession } from '../api/authApi'
 import {
   createCashOnDeliveryOrder,
   createStripeCheckoutSession,
@@ -129,6 +129,14 @@ async function refreshCurrentSession() {
       return true
     }
 
+    const restoredSession = await restoreLoginSession().catch(() => null)
+    const restoredUser = restoredSession?.message?.user
+
+    if (restoredUser) {
+      setCurrentUser(restoredUser)
+      return true
+    }
+
     clearCurrentUser()
     return false
   } catch (error) {
@@ -143,6 +151,10 @@ async function refreshCurrentSession() {
 }
 
 async function ensureCheckoutSession() {
+  if (canCheckout.value) {
+    return true
+  }
+
   const sessionReady = await refreshCurrentSession()
 
   if (sessionReady && canCheckout.value) {
@@ -151,6 +163,10 @@ async function ensureCheckoutSession() {
 
   emit('login')
   return false
+}
+
+function isAuthenticationError(error) {
+  return /please sign in|authentication|session|login/i.test(error?.message || '')
 }
 
 async function startStripeCheckout() {
@@ -200,6 +216,13 @@ async function startStripeCheckout() {
     window.location.assign(checkoutUrl)
   } catch (error) {
     console.error('Pay now checkout failed', error)
+
+    if (isAuthenticationError(error)) {
+      clearCurrentUser()
+      emit('login')
+      return
+    }
+
     checkoutError.value = error.message
   } finally {
     isStartingCheckout.value = false
@@ -265,6 +288,13 @@ async function placeCashOnDeliveryOrder() {
     })
   } catch (error) {
     console.error('Cash on delivery order failed', error)
+
+    if (isAuthenticationError(error)) {
+      clearCurrentUser()
+      emit('login')
+      return
+    }
+
     checkoutError.value = error.message
   } finally {
     isPlacingCodOrder.value = false

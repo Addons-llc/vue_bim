@@ -1,4 +1,5 @@
 import { apiRequest } from './http'
+import { loadGoogleMaps } from './googleMaps'
 
 export const CHECKOUT_RESUME_TOKEN_STORAGE_KEY = 'buyInMinutesCheckoutResumeToken'
 
@@ -15,6 +16,99 @@ function serializeCartItems(cartItems) {
     supplier_name: item.supplierName || '',
     size: item.size || item.selectedSize || '',
   }))
+}
+
+function getLiveCoordinates() {
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) {
+      reject(new Error('Current location is not supported in this browser.'))
+      return
+    }
+
+    if (!window.isSecureContext) {
+      reject(new Error('Location detection needs a secure (https://) connection.'))
+      return
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        resolve({
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+        })
+      },
+      (error) => {
+        if (error.code === error.PERMISSION_DENIED) {
+          reject(new Error('Location access is blocked. Allow location and try again.'))
+          return
+        }
+
+        if (error.code === error.POSITION_UNAVAILABLE) {
+          reject(new Error('Your device could not determine your current location.'))
+          return
+        }
+
+        if (error.code === error.TIMEOUT) {
+          reject(new Error('Detecting your current location took too long.'))
+          return
+        }
+
+        reject(new Error('Unable to access your current location.'))
+      },
+      { timeout: 10000 },
+    )
+  })
+}
+
+function buildLocationLabelFromResult(result, coords) {
+  const parts = new Map(
+    (result?.address_components || []).flatMap((component) =>
+      (component.types || []).map((type) => [type, component.long_name]),
+    ),
+  )
+  const route = parts.get('route') || ''
+  const locality = parts.get('locality')
+    || parts.get('sublocality')
+    || parts.get('administrative_area_level_1')
+    || ''
+  const label = [route, locality].filter(Boolean).join(', ')
+
+  return label || `${coords.lat.toFixed(5)}, ${coords.lng.toFixed(5)}`
+}
+
+function formatCoordinates(coords) {
+  return `${coords.lat.toFixed(5)}, ${coords.lng.toFixed(5)}`
+}
+
+async function getLiveCustomerLocationPayload() {
+  const coords = await getLiveCoordinates()
+  const coordinateLabel = formatCoordinates(coords)
+
+  try {
+    const maps = await loadGoogleMaps()
+    const geocoder = new maps.Geocoder()
+
+    const geocodedResult = await new Promise((resolve) => {
+      geocoder.geocode({ location: coords }, (results, status) => {
+        if (status === 'OK' && results?.length) {
+          resolve(results[0])
+          return
+        }
+
+        resolve(null)
+      })
+    })
+
+    const resolvedLabel = buildLocationLabelFromResult(geocodedResult, coords)
+
+    if (!resolvedLabel || resolvedLabel === coordinateLabel) {
+      return coordinateLabel
+    }
+
+    return `${resolvedLabel} (${coordinateLabel})`
+  } catch {
+    return coordinateLabel
+  }
 }
 
 export function storeCheckoutResumeToken(checkoutResumeToken) {
@@ -64,13 +158,15 @@ export function resumeCheckoutSession() {
   return promise
 }
 
-export function createStripeCheckoutSession(
+export async function createStripeCheckoutSession(
   cartItems,
   salesOrderName = '',
   deliveryAddress = null,
   deliveryDate = '',
   deliverySlot = '',
 ) {
+  const customerLocation = await getLiveCustomerLocationPayload()
+
   return apiRequest('/method/buy_in_minutes.payment.create_checkout_session', {
     method: 'POST',
     body: JSON.stringify({
@@ -79,18 +175,21 @@ export function createStripeCheckoutSession(
       delivery_address: deliveryAddress,
       delivery_date: deliveryDate,
       delivery_slot: deliverySlot,
+      customer_location: customerLocation,
       return_origin: getCheckoutReturnOrigin(),
     }),
   })
 }
 
-export function createCashOnDeliveryOrder(
+export async function createCashOnDeliveryOrder(
   cartItems,
   salesOrderName = '',
   deliveryAddress = null,
   deliveryDate = '',
   deliverySlot = '',
 ) {
+  const customerLocation = await getLiveCustomerLocationPayload()
+
   return apiRequest('/method/buy_in_minutes.payment.create_cash_on_delivery_order', {
     method: 'POST',
     body: JSON.stringify({
@@ -99,6 +198,7 @@ export function createCashOnDeliveryOrder(
       delivery_address: deliveryAddress,
       delivery_date: deliveryDate,
       delivery_slot: deliverySlot,
+      customer_location: customerLocation,
     }),
   })
 }

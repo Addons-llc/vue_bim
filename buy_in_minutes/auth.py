@@ -24,6 +24,7 @@ DEFAULT_OTP_REQUEST_COOLDOWN_SECONDS = 60
 DEFAULT_PHONE_LOGIN_SESSION_EXPIRY = "87600:00:00"
 OTP_RATE_LIMIT_CACHE_VERSION = "v2"
 PROFILE_TOKEN_TTL_SECONDS = 10 * 60
+WEBSITE_LOGIN_TOKEN_TTL_SECONDS = 30 * 24 * 60 * 60
 
 
 def _error(message, status_code=400):
@@ -133,6 +134,10 @@ def _get_phone_profile_token_key(profile_token):
 	return frappe.cache.make_key(f"phone-profile-token:{OTP_RATE_LIMIT_CACHE_VERSION}:{profile_token}")
 
 
+def _get_website_login_token_key(login_token):
+	return frappe.cache.make_key(f"website-login-token:{OTP_RATE_LIMIT_CACHE_VERSION}:{login_token}")
+
+
 def _check_otp_request_cooldown(phone_number):
 	cooldown_seconds = _get_otp_request_cooldown_seconds()
 	if cooldown_seconds <= 0:
@@ -189,6 +194,38 @@ def _validate_phone_profile_token(profile_token, phone_number):
 def _clear_phone_profile_token(profile_token):
 	if profile_token:
 		frappe.cache.delete_value(_get_phone_profile_token_key(profile_token))
+
+
+def _create_website_login_token(user_name):
+	user_name = _normalize_login_user_name(user_name)
+	login_token = frappe.generate_hash(length=32)
+	frappe.cache.setex(
+		_get_website_login_token_key(login_token),
+		WEBSITE_LOGIN_TOKEN_TTL_SECONDS,
+		user_name,
+	)
+	return login_token
+
+
+def _read_website_login_token(login_token):
+	login_token = (login_token or "").strip()
+	if not login_token:
+		frappe.throw(_("Missing login token."), frappe.AuthenticationError)
+
+	user_name = frappe.cache.get(_get_website_login_token_key(login_token))
+	if isinstance(user_name, bytes):
+		user_name = user_name.decode()
+
+	return _normalize_login_user_name(user_name)
+
+
+def _get_login_response_payload(user):
+	return {
+		"success": True,
+		**_get_phone_user_payload(user, False),
+		"session_token": _create_website_login_token(user.name),
+		"message": _("Logged in successfully."),
+	}
 
 
 def _format_twilio_error(exc):
@@ -343,19 +380,14 @@ def _normalize_login_user_name(user_name):
 
 def _login_user(user_name):
 	user_name = _normalize_login_user_name(user_name)
+	session_expiry = _get_phone_login_session_expiry()
+	_ensure_global_session_expiry(session_expiry)
+
 	frappe.local.login_manager = LoginManager()
 	frappe.local.login_manager.login_as(user_name)
 
-	session_expiry = _get_phone_login_session_expiry()
-	_ensure_global_session_expiry(session_expiry)
 	frappe.local.session_obj.data.data.session_expiry = session_expiry
 	frappe.local.session_obj.update(force=True)
-	frappe.local.cookie_manager.set_cookie(
-		"sid",
-		frappe.session.sid,
-		max_age=get_expiry_in_seconds(session_expiry),
-		httponly=True,
-	)
 	frappe.db.commit()
 
 
@@ -500,11 +532,7 @@ def verify_phone_otp(phone_number=None, otp=None, phoneNumber=None):
 
 		_login_user(user.name)
 
-		return {
-			"success": True,
-			**_get_phone_user_payload(user, False),
-			"message": _("Logged in successfully."),
-		}
+		return _get_login_response_payload(user)
 
 	client, service_sid = _get_twilio_client()
 
@@ -538,11 +566,7 @@ def verify_phone_otp(phone_number=None, otp=None, phoneNumber=None):
 
 	_login_user(user.name)
 
-	return {
-		"success": True,
-		**_get_phone_user_payload(user, False),
-		"message": _("Logged in successfully."),
-	}
+	return _get_login_response_payload(user)
 
 
 @frappe.whitelist(allow_guest=True, methods=["POST"])
@@ -570,6 +594,7 @@ def complete_phone_profile(full_name=None, email=None, phone_number=None, phoneN
 				"full_name": user.full_name,
 				"user_image": user.user_image,
 			},
+			"session_token": _create_website_login_token(user.name),
 			"message": _("Profile completed successfully."),
 		}
 
@@ -604,5 +629,33 @@ def complete_phone_profile(full_name=None, email=None, phone_number=None, phoneN
 			"full_name": user.full_name,
 			"user_image": user.user_image,
 		},
+		"session_token": _create_website_login_token(user.name),
 		"message": _("Profile completed successfully."),
+	}
+
+
+@frappe.whitelist(allow_guest=True, methods=["POST"])
+def restore_login_session(session_token=None):
+	user_name = _read_website_login_token(session_token)
+
+	if not frappe.db.exists("User", user_name):
+		frappe.throw(_("Login user was not found."), frappe.AuthenticationError)
+
+	if frappe.db.get_value("User", user_name, "enabled") != 1:
+		frappe.throw(_("Login user is disabled."), frappe.AuthenticationError)
+
+	_login_user(user_name)
+	user = frappe.get_doc("User", user_name)
+	return {
+		"success": True,
+		"user": {
+			"name": user.name,
+			"email": user.email,
+			"mobile_no": user.mobile_no,
+			"full_name": user.full_name,
+			"user_type": user.user_type,
+			"user_image": user.user_image,
+		},
+		"session_token": _create_website_login_token(user.name),
+		"message": _("Logged in successfully."),
 	}

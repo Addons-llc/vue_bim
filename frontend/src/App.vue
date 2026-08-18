@@ -1,7 +1,7 @@
 <script setup>
 import { onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { getCurrentUser, logout } from './api/authApi'
+import { getCurrentUser, logout, restoreLoginSession } from './api/authApi'
 import { resumeCheckoutSession } from './api/paymentApi'
 import { clearCurrentUser, currentUser, setCurrentUser } from './data/authStore'
 import DefaultLayout from './layouts/DefaultLayout.vue'
@@ -35,6 +35,14 @@ onMounted(async () => {
 
     if (message.is_authenticated) {
       setCurrentUser(message.user)
+      return
+    }
+
+    const restoredSession = await restoreLoginSession().catch(() => null)
+    const restoredUser = restoredSession?.message?.user
+
+    if (restoredUser) {
+      setCurrentUser(restoredUser)
       return
     }
 
