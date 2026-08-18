@@ -29,27 +29,39 @@ export function clearCheckoutResumeToken() {
   sessionStorage.removeItem(CHECKOUT_RESUME_TOKEN_STORAGE_KEY)
 }
 
-export async function resumeCheckoutSession() {
+let inFlightResume = null
+
+export function resumeCheckoutSession() {
   const checkoutResumeToken = sessionStorage.getItem(CHECKOUT_RESUME_TOKEN_STORAGE_KEY)
 
   if (!checkoutResumeToken) {
-    return null
+    inFlightResume = null
+    return Promise.resolve(null)
   }
 
-  try {
-    const response = await apiRequest('/method/buy_in_minutes.payment.resume_checkout_session', {
-      method: 'POST',
-      body: JSON.stringify({
-        checkout_resume_token: checkoutResumeToken,
-      }),
-    })
-
-    clearCheckoutResumeToken()
-    return response
-  } catch (error) {
-    clearCheckoutResumeToken()
-    throw error
+  if (inFlightResume && inFlightResume.token === checkoutResumeToken) {
+    return inFlightResume.promise
   }
+
+  const promise = (async () => {
+    try {
+      const response = await apiRequest('/method/buy_in_minutes.payment.resume_checkout_session', {
+        method: 'POST',
+        body: JSON.stringify({
+          checkout_resume_token: checkoutResumeToken,
+        }),
+      })
+
+      clearCheckoutResumeToken()
+      return response
+    } catch (error) {
+      clearCheckoutResumeToken()
+      throw error
+    }
+  })()
+
+  inFlightResume = { token: checkoutResumeToken, promise }
+  return promise
 }
 
 export function createStripeCheckoutSession(

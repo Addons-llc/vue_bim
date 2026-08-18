@@ -102,9 +102,11 @@ def _restore_checkout_user(user_name, sales_order_name):
 	if sales_order_owner != user_name:
 		frappe.throw(_("Checkout session does not match this order."), frappe.AuthenticationError)
 
-	from buy_in_minutes.auth import _login_user
+	if frappe.session.user != user_name:
+		from buy_in_minutes.auth import _login_user
 
-	_login_user(user_name)
+		_login_user(user_name)
+
 	return _get_user_payload(user_name)
 
 

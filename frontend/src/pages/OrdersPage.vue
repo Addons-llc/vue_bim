@@ -80,7 +80,15 @@ onMounted(loadOrders)
     <p v-if="ordersError" class="form-message error-message">{{ ordersError }}</p>
 
     <section v-if="hasOrders" class="orders-list" aria-label="Order history">
-      <article v-for="order in orders" :key="order.name" class="order-history-card">
+      <article
+        v-for="order in orders"
+        :key="order.name"
+        class="order-history-card is-clickable"
+        role="button"
+        tabindex="0"
+        @click="router.push({ name: 'order-details', params: { orderName: order.name } })"
+        @keydown.enter="router.push({ name: 'order-details', params: { orderName: order.name } })"
+      >
         <header class="order-history-header">
           <div>
             <strong>{{ order.name }}</strong>

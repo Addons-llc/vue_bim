@@ -13,11 +13,16 @@ onMounted(async () => {
   try {
     let checkoutResumeUser = null
 
-    try {
-      const checkoutResumeResponse = await resumeCheckoutSession()
-      checkoutResumeUser = checkoutResumeResponse?.message?.user
-    } catch (error) {
-      console.error('Unable to resume checkout session', error)
+    // The success page restores the session itself via finalizeStripeCheckout
+    // (using the Stripe session id); resuming here too would race it and can
+    // spuriously log the user out if this attempt loses the race.
+    if (route.name !== 'payment-success') {
+      try {
+        const checkoutResumeResponse = await resumeCheckoutSession()
+        checkoutResumeUser = checkoutResumeResponse?.message?.user
+      } catch (error) {
+        console.error('Unable to resume checkout session', error)
+      }
     }
 
     if (checkoutResumeUser) {

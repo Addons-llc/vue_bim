@@ -7,6 +7,7 @@ import CategoriesPage from '../pages/CategoriesPage.vue'
 import HomePage from '../pages/HomePage.vue'
 import LoginPage from '../pages/LoginPage.vue'
 import OtpPage from '../pages/OtpPage.vue'
+import OrderDetailsPage from '../pages/OrderDetailsPage.vue'
 import OrdersPage from '../pages/OrdersPage.vue'
 import PaymentCancelPage from '../pages/PaymentCancelPage.vue'
 import PaymentSuccessPage from '../pages/PaymentSuccessPage.vue'
@@ -89,6 +90,11 @@ const routes = [
     path: '/orders',
     name: 'orders',
     component: OrdersPage,
+  },
+  {
+    path: '/orders/:orderName',
+    name: 'order-details',
+    component: OrderDetailsPage,
   },
   {
     path: '/payment/success',

@@ -753,8 +753,16 @@ def get_sales_order(sales_order_name):
 		"name": sales_order.name,
 		"status": sales_order.status,
 		"transaction_date": sales_order.transaction_date,
+		"delivery_date": sales_order.delivery_date,
+		"delivery_slot": getattr(sales_order, "custom_delivery_slot", "") or "",
+		"net_total": flt(sales_order.net_total),
+		"total_taxes_and_charges": flt(sales_order.total_taxes_and_charges),
 		"grand_total": flt(sales_order.grand_total),
 		"currency": sales_order.currency or "AED",
+		"customer_name": sales_order.customer_name or sales_order.customer,
+		"shipping_address": sales_order.shipping_address or sales_order.address_display or "",
+		"contact_display": sales_order.contact_display or "",
+		"contact_mobile": sales_order.contact_mobile or "",
 		"purchase_orders": list(dict.fromkeys(_get_purchase_order_names_for_sales_order(sales_order.name))),
 		"items": [
 			{
@@ -773,7 +781,7 @@ def get_sales_order(sales_order_name):
 
 @frappe.whitelist()
 def get_order_history(limit_page_length=20):
-	from buy_in_minutes.buy_in_minutes.order_history import get_order_history as get_history
+	from buy_in_minutes.order_history import get_order_history as get_history
 
 	return get_history(limit_page_length=limit_page_length)
 
