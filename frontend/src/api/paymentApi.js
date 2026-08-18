@@ -52,25 +52,41 @@ export async function resumeCheckoutSession() {
   }
 }
 
-export function createStripeCheckoutSession(cartItems, salesOrderName = '', deliveryAddress = null) {
+export function createStripeCheckoutSession(
+  cartItems,
+  salesOrderName = '',
+  deliveryAddress = null,
+  deliveryDate = '',
+  deliverySlot = '',
+) {
   return apiRequest('/method/buy_in_minutes.payment.create_checkout_session', {
     method: 'POST',
     body: JSON.stringify({
       cart_items: serializeCartItems(cartItems),
       sales_order_name: salesOrderName,
       delivery_address: deliveryAddress,
+      delivery_date: deliveryDate,
+      delivery_slot: deliverySlot,
       return_origin: getCheckoutReturnOrigin(),
     }),
   })
 }
 
-export function createCashOnDeliveryOrder(cartItems, salesOrderName = '', deliveryAddress = null) {
+export function createCashOnDeliveryOrder(
+  cartItems,
+  salesOrderName = '',
+  deliveryAddress = null,
+  deliveryDate = '',
+  deliverySlot = '',
+) {
   return apiRequest('/method/buy_in_minutes.payment.create_cash_on_delivery_order', {
     method: 'POST',
     body: JSON.stringify({
       cart_items: serializeCartItems(cartItems),
       sales_order_name: salesOrderName,
       delivery_address: deliveryAddress,
+      delivery_date: deliveryDate,
+      delivery_slot: deliverySlot,
     }),
   })
 }

@@ -423,6 +423,10 @@
   max-width: 140px;
 }
 
+.home-rail-categories .category-tile.is-stacked {
+  border-radius: 14px;
+}
+
 .home-rail-brands .category-image-wrap {
   flex: 0 0 124px;
   width: 124px;
@@ -476,4 +480,16 @@
   clip-path: none;
   -webkit-mask-image: none;
   mask-image: none;
+}
+
+.home-rail-categories .category-tile.is-stacked .category-image-wrap {
+  border-radius: 50%;
+}
+
+.home-rail-categories .category-tile.is-stacked .category-copy {
+  align-items: center;
+}
+
+.home-rail-categories .category-tile.is-stacked .category-name {
+  text-align: center;
 }

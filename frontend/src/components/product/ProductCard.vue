@@ -119,7 +119,7 @@ function showPlaceholderImage(event) {
         :alt="product.name"
         @error="showPlaceholderImage"
       />
-      <span class="product-badge">{{ product.deliveryTime }}</span>
+      <span class="product-badge">{{ product.deliveryTime || '18 min' }}</span>
     </div>
 
     <div class="product-info">

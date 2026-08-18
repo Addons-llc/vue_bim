@@ -39,6 +39,7 @@ SUPPLIER_DETAIL_FIELDS = (
 	"custom_supplier_image",
 	"custom_supplier_banner",
 	"custom_supplier_banner_image",
+	"custom_google_address",
 	"custom_seller_since",
 )
 

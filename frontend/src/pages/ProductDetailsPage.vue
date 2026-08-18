@@ -163,7 +163,7 @@ const productDetails = computed(() => {
       ? { label: 'Size', value: selectedProductSizeLabel.value }
       : null,
     { label: 'Category', value: product.value.category },
-    { label: 'Delivery', value: product.value.deliveryTime },
+    { label: 'Delivery', value: product.value.deliveryTime || '18 min' },
   ].filter((detail) => detail?.value)
 })
 

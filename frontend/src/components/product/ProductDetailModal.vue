@@ -86,7 +86,7 @@ const productDetails = computed(() => {
   return [
     { label: 'Pack size', value: props.product.description },
     { label: 'Category', value: props.product.category },
-    { label: 'Delivery', value: props.product.deliveryTime },
+    { label: 'Delivery', value: props.product.deliveryTime || '18 min' },
   ].filter((detail) => detail.value)
 })
 
@@ -201,7 +201,7 @@ watch(
 
         <div class="product-detail-meta">
           <span>★ {{ product.rating }}</span>
-          <span>{{ product.deliveryTime }}</span>
+          <span>{{ product.deliveryTime || '18 min' }}</span>
           <span>{{ product.category }}</span>
         </div>
 

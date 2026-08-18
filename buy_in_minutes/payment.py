@@ -654,8 +654,9 @@ def _get_checkout_items(cart_items):
 	return checkout_items
 
 
-def _build_sales_order_item_rows(checkout_items, company):
+def _build_sales_order_item_rows(checkout_items, company, delivery_date=None):
 	order_items = []
+	delivery_date = delivery_date or nowdate()
 	sales_order_item_meta = frappe.get_meta("Sales Order Item")
 	for item in checkout_items:
 		if not frappe.db.exists("Item", item["item_code"]):
@@ -678,7 +679,7 @@ def _build_sales_order_item_rows(checkout_items, company):
 			"item_name": item["item_name"],
 			"qty": item["quantity"],
 			"rate": item["rate"],
-			"delivery_date": nowdate(),
+			"delivery_date": delivery_date,
 		}
 		if item.get("size"):
 			row["custom_size"] = item["size"]
@@ -994,13 +995,20 @@ def _normalize_payment_schedule_dates(sales_order):
 			payment_row.due_date = transaction_date
 
 
-def _upsert_sales_order(checkout_items, sales_order_name=None, submit=False, delivery_address=None):
+def _upsert_sales_order(
+	checkout_items,
+	sales_order_name=None,
+	submit=False,
+	delivery_address=None,
+	delivery_date=None,
+	delivery_slot=None,
+):
 	checkout_user = frappe.session.user
 	customer = _get_or_create_customer_for_user(checkout_user)
 	company = _get_default_company()
 	order_date = nowdate()
-	delivery_date = order_date
-	order_items = _build_sales_order_item_rows(checkout_items, company)
+	delivery_date = delivery_date or order_date
+	order_items = _build_sales_order_item_rows(checkout_items, company, delivery_date)
 
 	if not order_items:
 		frappe.throw(_("Cart does not contain orderable items."))
@@ -1032,6 +1040,8 @@ def _upsert_sales_order(checkout_items, sales_order_name=None, submit=False, del
 			"order_type": "Sales",
 		}
 	)
+	if sales_order.meta.has_field("custom_delivery_slot"):
+		sales_order.custom_delivery_slot = delivery_slot or ""
 	for item in order_items:
 		sales_order.append("items", item)
 
@@ -1245,7 +1255,14 @@ def sync_cart_sales_order(cart_items=None, sales_order_name=None, delivery_addre
 
 
 @frappe.whitelist(methods=["POST"])
-def create_checkout_session(cart_items=None, sales_order_name=None, delivery_address=None, return_origin=None):
+def create_checkout_session(
+	cart_items=None,
+	sales_order_name=None,
+	delivery_address=None,
+	return_origin=None,
+	delivery_date=None,
+	delivery_slot=None,
+):
 	_require_checkout_user()
 
 	checkout_items = _get_checkout_items(cart_items)
@@ -1253,6 +1270,8 @@ def create_checkout_session(cart_items=None, sales_order_name=None, delivery_add
 		checkout_items,
 		sales_order_name=sales_order_name,
 		delivery_address=delivery_address,
+		delivery_date=delivery_date,
+		delivery_slot=delivery_slot,
 	)
 	session = _stripe_request(
 		"/checkout/sessions",
@@ -1269,7 +1288,13 @@ def create_checkout_session(cart_items=None, sales_order_name=None, delivery_add
 
 
 @frappe.whitelist(methods=["POST"])
-def create_cash_on_delivery_order(cart_items=None, sales_order_name=None, delivery_address=None):
+def create_cash_on_delivery_order(
+	cart_items=None,
+	sales_order_name=None,
+	delivery_address=None,
+	delivery_date=None,
+	delivery_slot=None,
+):
 	_require_checkout_user()
 
 	checkout_items = _get_checkout_items(cart_items)
@@ -1278,6 +1303,8 @@ def create_cash_on_delivery_order(cart_items=None, sales_order_name=None, delive
 		sales_order_name=sales_order_name,
 		submit=True,
 		delivery_address=delivery_address,
+		delivery_date=delivery_date,
+		delivery_slot=delivery_slot,
 	)
 	purchase_orders = getattr(sales_order, "purchase_orders", None)
 

@@ -168,7 +168,11 @@ fixtures = [
 				],
 			]
 		],
-	}
+	},
+	{
+		"dt": "Custom Field",
+		"filters": [["name", "in", ["Sales Order-custom_delivery_slot"]]],
+	},
 ]
 
 # Scheduled Tasks

@@ -4,6 +4,7 @@ import {
   SELLING_PRICE_LIST,
   SITE_BASE_URL,
 } from './config'
+import { getEstimatedDeliveryTimeLabel } from './deliveryEta'
 import { getDocTypeByName } from './frappeResource'
 import { apiRequest } from './http'
 
@@ -60,6 +61,7 @@ function getSupplierDetails(item) {
         || item.custom_supplier_image
         || item.custom_supplier_logo,
     ),
+    customGoogleAddress: item.custom_google_address || item.customGoogleAddress || '',
     bannerImage: getImageUrl(
       item.supplier_banner
         || item.supplier_banner_image
@@ -171,7 +173,7 @@ function getItemSize(item) {
   )
 }
 
-function mapItemToProduct(item) {
+async function mapItemToProduct(item) {
   const itemGroup = item.item_group || ''
   const categoryImage = getItemGroupImage(item)
   const bannerImage = getItemBannerImage(item)
@@ -183,6 +185,10 @@ function mapItemToProduct(item) {
   const stockQuantity = getStockQuantity(item)
   const reviewCount = getReviewCount(item)
   const supplierDetails = getSupplierDetails(item)
+  const deliveryTime = await getEstimatedDeliveryTimeLabel({
+    deliveryTime: '18 min',
+    supplierDetails,
+  })
 
   return {
     id: item.name,
@@ -204,7 +210,7 @@ function mapItemToProduct(item) {
     stockQuantity,
     inStock: stockQuantity > 0 || item.disabled === 0,
     isPublished: isPublishedItem(item),
-    deliveryTime: '18 min',
+    deliveryTime,
     image,
     bannerImage,
     categoryImage,
@@ -286,9 +292,11 @@ export async function getItemMasterItems(params = {}) {
   const response = await apiRequest(`${PRODUCT_API_PATH}?${query.toString()}`)
   const items = response.message || []
 
-  return items
-    .filter(isPublishedItem)
-    .map(mapItemToProduct)
+  return Promise.all(
+    items
+      .filter(isPublishedItem)
+      .map(mapItemToProduct),
+  )
 }
 
 export async function getItemMasterItem(itemName) {

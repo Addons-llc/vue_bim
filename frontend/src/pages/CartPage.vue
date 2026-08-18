@@ -170,8 +170,16 @@ async function startStripeCheckout() {
     console.log('Pay now checkout payload', {
       cartItems: cartProducts.value,
       deliveryAddress: selectedDeliveryAddress.value,
+      deliveryDate: selectedDeliveryDate.value,
+      deliverySlot: selectedDeliverySlot.value,
     })
-    const response = await createStripeCheckoutSession(cartProducts.value, '', selectedDeliveryAddress.value)
+    const response = await createStripeCheckoutSession(
+      cartProducts.value,
+      '',
+      selectedDeliveryAddress.value,
+      selectedDeliveryDate.value,
+      selectedDeliverySlot.value,
+    )
     console.log('Pay now checkout response', response)
     const checkoutUrl = response?.message?.checkout_url
     const checkoutResumeToken = response?.message?.checkout_resume_token
@@ -210,8 +218,16 @@ async function placeCashOnDeliveryOrder() {
     console.log('Cash on delivery order payload', {
       cartItems: cartProducts.value,
       deliveryAddress: selectedDeliveryAddress.value,
+      deliveryDate: selectedDeliveryDate.value,
+      deliverySlot: selectedDeliverySlot.value,
     })
-    const response = await createCashOnDeliveryOrder(cartProducts.value, '', selectedDeliveryAddress.value)
+    const response = await createCashOnDeliveryOrder(
+      cartProducts.value,
+      '',
+      selectedDeliveryAddress.value,
+      selectedDeliveryDate.value,
+      selectedDeliverySlot.value,
+    )
     console.log('Cash on delivery order response', response)
     const salesOrder = response?.message?.sales_order
     const purchaseOrders = response?.message?.purchase_orders || []
