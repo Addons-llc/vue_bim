@@ -227,6 +227,7 @@ onUnmounted(() => {
     title="Brands"
     horizontal
     item-type="brand"
+    stacked-tile
     show-brand-detail-fallbacks
     :view-all-to="brandsTabRoute"
     :categories="discoveryBrands"
@@ -252,6 +253,7 @@ onUnmounted(() => {
     title="Categories"
     horizontal
     item-type="category"
+    stacked-tile
     :view-all-to="categoriesTabRoute"
     :active-category="activeCategory"
     :categories="discoveryCategories"

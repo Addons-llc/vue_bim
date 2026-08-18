@@ -795,6 +795,23 @@
     padding-top: 2px;
   }
 
+  .home-rail-brands .category-tile.is-stacked,
+  .home-rail-categories .category-tile.is-stacked {
+    min-width: 118px;
+    max-width: 128px;
+    min-height: 0;
+    align-items: stretch;
+    gap: 8px;
+    padding: 7px;
+  }
+
+  .home-rail-brands .category-tile.is-stacked .category-image-wrap,
+  .home-rail-categories .category-tile.is-stacked .category-image-wrap {
+    width: 100%;
+    height: auto;
+    max-width: none;
+  }
+
   .category-section--category .category-name {
     min-height: 30px;
     max-width: 92px;

@@ -743,12 +743,39 @@ def _get_purchase_order_names_for_sales_order(sales_order_name):
 	]
 
 
+def _get_purchased_sales_order_item_names(sales_order_name):
+	if not frappe.get_meta("Purchase Order Item").has_field("sales_order_item"):
+		return set()
+
+	return set(
+		filter(
+			None,
+			frappe.get_all(
+				"Purchase Order Item",
+				filters={
+					"sales_order": sales_order_name,
+					"docstatus": ["<", 2],
+				},
+				pluck="sales_order_item",
+				ignore_permissions=True,
+			),
+		)
+	)
+
+
 def _get_purchase_orderable_sales_order_items(sales_order):
+	purchased_sales_order_items = _get_purchased_sales_order_item_names(sales_order.name)
+
 	return [
-		{"item_code": item.item_code, "supplier": item.supplier}
+		{
+			"item_code": item.item_code,
+			"sales_order_item": item.name,
+			"supplier": item.supplier,
+		}
 		for item in sales_order.items
 		if item.item_code
 		and item.supplier
+		and item.name not in purchased_sales_order_items
 		and flt(item.ordered_qty) < flt(item.stock_qty)
 	]
 
@@ -759,15 +786,15 @@ def _set_doc_value_if_field_exists(doc, fieldname, value):
 
 
 def _build_manual_purchase_orders_for_sales_order(sales_order, selected_items):
-	selected_pairs = {
-		(item.get("item_code"), item.get("supplier"))
+	selected_item_names = {
+		item.get("sales_order_item")
 		for item in selected_items
-		if item.get("item_code") and item.get("supplier")
+		if item.get("sales_order_item")
 	}
 	items_by_supplier = {}
 
 	for item in sales_order.items:
-		if (item.item_code, item.supplier) not in selected_pairs:
+		if item.name not in selected_item_names:
 			continue
 
 		qty = flt(item.qty) - (flt(item.ordered_qty) / (flt(item.conversion_factor) or 1))
@@ -1022,7 +1049,7 @@ def _upsert_sales_order(checkout_items, sales_order_name=None, submit=False, del
 		with _as_administrator():
 			sales_order.flags.ignore_permissions = True
 			sales_order.submit()
-			sales_order.purchase_orders = _create_purchase_orders_for_sales_order(sales_order)
+			sales_order.purchase_orders = _get_purchase_orders_for_sales_order(sales_order.name)
 
 	return sales_order
 
@@ -1084,13 +1111,16 @@ def _submit_sales_order(sales_order_name):
 				_("Sales Order {0} is cancelled.").format(sales_order_name)
 			)
 
+		was_draft = sales_order.docstatus == 0
+
 		# Submit the Sales Order after successful Stripe payment
 		if sales_order.docstatus == 0:
 			sales_order.flags.ignore_permissions = True
 			sales_order.submit()
 
-		# Create Purchase Orders first
-		_create_purchase_orders_for_sales_order(sales_order)
+		# Submitted orders may come from a previous callback, so keep this path idempotent.
+		if not was_draft:
+			_create_purchase_orders_for_sales_order(sales_order)
 
 		# Force the status after ERPNext completes its submit processing
 		if sales_order.docstatus == 1:
