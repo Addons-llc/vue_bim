@@ -5,7 +5,7 @@ import {
   SITE_BASE_URL,
 } from './config'
 import { getEstimatedDeliveryTimeLabel } from './deliveryEta'
-import { getDocTypeByName } from './frappeResource'
+import { getDocTypeByName, getDocTypeList } from './frappeResource'
 import { apiRequest } from './http'
 
 const categoryPlaceholderImage = `${import.meta.env.BASE_URL}grocery-card-image-v3.svg?v=3`
@@ -323,6 +323,25 @@ export async function getItemMasterItem(itemName) {
 
 export async function getItemMasterCategories() {
   try {
+    const itemGroups = await getDocTypeList('Item Group', {
+      fields: [
+        'name',
+        'item_group_name',
+        'parent_item_group',
+        'is_group',
+        'image',
+      ],
+      filters: [
+        ['Item Group', 'name', '!=', 'All Item Groups'],
+      ],
+      order_by: 'lft asc',
+      limit_page_length: 5000,
+    })
+
+    return itemGroups
+      .filter(isPublishedItem)
+      .map(mapItemGroupToCategory)
+  } catch (error) {
     const query = new URLSearchParams({
       limit_page_length: 5000,
       published: 1,
@@ -333,8 +352,6 @@ export async function getItemMasterCategories() {
     return itemGroups
       .filter(isPublishedItem)
       .map(mapItemGroupToCategory)
-  } catch (error) {
-    return []
   }
 }
 

@@ -89,7 +89,9 @@ def _get_user_payload(user_name):
 
 
 def _restore_checkout_user(user_name, sales_order_name):
-	if not user_name or not sales_order_name:
+	user_name = _normalize_user_name(user_name)
+	sales_order_name = _clean_text(sales_order_name)
+	if user_name == "Guest" or not sales_order_name:
 		frappe.throw(_("Unable to restore checkout session."), frappe.AuthenticationError)
 
 	if not frappe.db.exists("User", user_name):
@@ -102,7 +104,7 @@ def _restore_checkout_user(user_name, sales_order_name):
 	if sales_order_owner != user_name:
 		frappe.throw(_("Checkout session does not match this order."), frappe.AuthenticationError)
 
-	if frappe.session.user != user_name:
+	if _normalize_user_name(frappe.session.user) != user_name:
 		from buy_in_minutes.auth import _login_user
 
 		_login_user(user_name)
@@ -274,6 +276,14 @@ def _clean_text(value):
 	return str(value or "").strip()
 
 
+def _normalize_user_name(user_name, default="Guest"):
+	user_name = _clean_text(user_name)
+	if not user_name or user_name.lower() in {"guest", "none", "null"}:
+		return default
+
+	return user_name
+
+
 def _get_item_selling_price(item_code, fallback_rate=0):
 	price_record = frappe.db.get_value(
 		"Item Price",
@@ -369,8 +379,8 @@ def _get_default_supplier_for_item(item_code, company, preferred_supplier=None):
 
 
 def _is_guest_user(user_name=None):
-	user_name = user_name if user_name is not None else frappe.session.user
-	return not user_name or user_name == "Guest"
+	user_name = frappe.session.user if user_name is None else user_name
+	return _normalize_user_name(user_name) == "Guest"
 
 
 def _require_checkout_user():
@@ -381,6 +391,7 @@ def _require_checkout_user():
 
 
 def _get_or_create_customer_for_user(user_name):
+	user_name = _normalize_user_name(user_name)
 	if _is_guest_user(user_name):
 		frappe.throw(_("Please sign in before checkout."), frappe.AuthenticationError)
 
@@ -980,7 +991,7 @@ def on_sales_order_submit(doc, method=None):
 
 @contextmanager
 def _as_administrator():
-	previous_user = frappe.session.user or "Guest"
+	previous_user = _normalize_user_name(getattr(frappe.session, "user", None))
 	frappe.set_user("Administrator")
 	try:
 		yield
@@ -1005,7 +1016,7 @@ def _upsert_sales_order(
 	delivery_date=None,
 	delivery_slot=None,
 ):
-	checkout_user = frappe.session.user
+	checkout_user = _normalize_user_name(frappe.session.user)
 	customer = _get_or_create_customer_for_user(checkout_user)
 	company = _get_default_company()
 	order_date = nowdate()
@@ -1071,12 +1082,13 @@ def _build_checkout_params(checkout_items, sales_order_name=None, return_origin=
 	success_url = f"{return_origin}/buy-in-minutes#/payment/success?method=stripe&session_id={{CHECKOUT_SESSION_ID}}"
 	cancel_url = f"{return_origin}/buy-in-minutes#/payment/cancel"
 	stripe_currency = _get_stripe_settings().get("currency") or DEFAULT_CURRENCY
+	checkout_user = _normalize_user_name(frappe.session.user)
 	params = {
 		"mode": "payment",
 		"success_url": success_url,
 		"cancel_url": cancel_url,
-		"client_reference_id": frappe.session.user,
-		"metadata[user]": frappe.session.user,
+		"client_reference_id": checkout_user,
+		"metadata[user]": checkout_user,
 		"metadata[payment_method]": "stripe",
 	}
 	if sales_order_name:

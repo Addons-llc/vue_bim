@@ -333,7 +333,16 @@ def _get_phone_user_payload(user, is_new_user):
 	}
 
 
+def _normalize_login_user_name(user_name):
+	user_name = str(user_name or "").strip()
+	if not user_name or user_name.lower() in {"guest", "none", "null"}:
+		frappe.throw(_("Unable to restore your session. Please sign in again."), frappe.AuthenticationError)
+
+	return user_name
+
+
 def _login_user(user_name):
+	user_name = _normalize_login_user_name(user_name)
 	frappe.local.login_manager = LoginManager()
 	frappe.local.login_manager.login_as(user_name)
 

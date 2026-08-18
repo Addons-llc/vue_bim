@@ -658,27 +658,8 @@ def get_item_groups(limit_page_length=5000, published=1):
 	]
 
 
-def _get_customer_for_user(user_name):
-	if not user_name or user_name == "Guest":
-		return None
-
-	user = frappe.get_cached_doc("User", user_name)
-	if user.email:
-		customer = frappe.db.get_value("Customer", {"email_id": user.email}, "name")
-		if customer:
-			return customer
-
-	if user.mobile_no:
-		return frappe.db.get_value("Customer", {"mobile_no": user.mobile_no}, "name")
-
-	return None
-
-
 def _can_view_sales_order(sales_order):
-	if frappe.session.user == "Administrator" or sales_order.owner == frappe.session.user:
-		return True
-
-	return bool(sales_order.customer and sales_order.customer == _get_customer_for_user(frappe.session.user))
+	return frappe.session.user == "Administrator" or sales_order.owner == frappe.session.user
 
 
 def _get_purchase_order_names_for_sales_order(sales_order_name):

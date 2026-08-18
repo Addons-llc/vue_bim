@@ -241,6 +241,7 @@ onUnmounted(() => {
     title="Store"
     horizontal
     item-type="store"
+    stacked-tile
     :view-all-to="storesTabRoute"
     :categories="discoveryStores"
     @select="openStoreItem"
