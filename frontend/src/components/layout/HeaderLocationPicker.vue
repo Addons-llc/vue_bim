@@ -1,6 +1,7 @@
 <script setup>
 import { onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
+import { clearCurrentLocationCoords, storeCurrentLocationCoords } from '../../api/deliveryEta'
 import { loadGoogleMaps } from '../../api/googleMaps'
 
 const route = useRoute()
@@ -30,6 +31,7 @@ function setSelectedLocation(location) {
     localStorage.setItem(LOCATION_STORAGE_KEY, location)
   } else {
     localStorage.removeItem(LOCATION_STORAGE_KEY)
+    clearCurrentLocationCoords()
   }
 }
 
@@ -255,6 +257,7 @@ function detectCurrentLocation() {
         lat: position.coords.latitude,
         lng: position.coords.longitude,
       }
+      storeCurrentLocationCoords(currentPosition)
 
       if (!geocoder) {
         locationError.value = 'Unable to resolve your exact address.'
@@ -295,6 +298,7 @@ function detectCurrentLocation() {
 
 async function selectSuggestion(suggestion) {
   await initializePlaces()
+  clearCurrentLocationCoords()
 
   const placeDetails = await getPlaceDetails(suggestion.id)
 
@@ -317,6 +321,7 @@ async function submitTypedLocation() {
   }
 
   await initializePlaces()
+  clearCurrentLocationCoords()
 
   if (!geocoder) {
     locationError.value = 'Unable to search locations right now.'

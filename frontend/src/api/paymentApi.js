@@ -1,40 +1,204 @@
 import { apiRequest } from './http'
+import { loadGoogleMaps } from './googleMaps'
+
+export const CHECKOUT_RESUME_TOKEN_STORAGE_KEY = 'buyInMinutesCheckoutResumeToken'
 
 function getCheckoutReturnOrigin() {
   return window.location.origin
 }
 
-export function createStripeCheckoutSession(cartItems, salesOrderName = '', deliveryAddress = null) {
+function serializeCartItems(cartItems) {
+  return cartItems.map((item) => ({
+    id: item.id,
+    item_code: item.itemCode || item.id,
+    quantity: item.quantity,
+    supplier: item.supplier || '',
+    supplier_name: item.supplierName || '',
+    size: item.size || item.selectedSize || '',
+  }))
+}
+
+function getLiveCoordinates() {
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) {
+      reject(new Error('Current location is not supported in this browser.'))
+      return
+    }
+
+    if (!window.isSecureContext) {
+      reject(new Error('Location detection needs a secure (https://) connection.'))
+      return
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        resolve({
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+        })
+      },
+      (error) => {
+        if (error.code === error.PERMISSION_DENIED) {
+          reject(new Error('Location access is blocked. Allow location and try again.'))
+          return
+        }
+
+        if (error.code === error.POSITION_UNAVAILABLE) {
+          reject(new Error('Your device could not determine your current location.'))
+          return
+        }
+
+        if (error.code === error.TIMEOUT) {
+          reject(new Error('Detecting your current location took too long.'))
+          return
+        }
+
+        reject(new Error('Unable to access your current location.'))
+      },
+      { timeout: 10000 },
+    )
+  })
+}
+
+function buildLocationLabelFromResult(result, coords) {
+  const parts = new Map(
+    (result?.address_components || []).flatMap((component) =>
+      (component.types || []).map((type) => [type, component.long_name]),
+    ),
+  )
+  const route = parts.get('route') || ''
+  const locality = parts.get('locality')
+    || parts.get('sublocality')
+    || parts.get('administrative_area_level_1')
+    || ''
+  const label = [route, locality].filter(Boolean).join(', ')
+
+  return label || `${coords.lat.toFixed(5)}, ${coords.lng.toFixed(5)}`
+}
+
+function formatCoordinates(coords) {
+  return `${coords.lat.toFixed(5)}, ${coords.lng.toFixed(5)}`
+}
+
+async function getLiveCustomerLocationPayload() {
+  const coords = await getLiveCoordinates()
+  const coordinateLabel = formatCoordinates(coords)
+
+  try {
+    const maps = await loadGoogleMaps()
+    const geocoder = new maps.Geocoder()
+
+    const geocodedResult = await new Promise((resolve) => {
+      geocoder.geocode({ location: coords }, (results, status) => {
+        if (status === 'OK' && results?.length) {
+          resolve(results[0])
+          return
+        }
+
+        resolve(null)
+      })
+    })
+
+    const resolvedLabel = buildLocationLabelFromResult(geocodedResult, coords)
+
+    if (!resolvedLabel || resolvedLabel === coordinateLabel) {
+      return coordinateLabel
+    }
+
+    return `${resolvedLabel} (${coordinateLabel})`
+  } catch {
+    return coordinateLabel
+  }
+}
+
+export function storeCheckoutResumeToken(checkoutResumeToken) {
+  if (!checkoutResumeToken) {
+    return
+  }
+
+  sessionStorage.setItem(CHECKOUT_RESUME_TOKEN_STORAGE_KEY, checkoutResumeToken)
+}
+
+export function clearCheckoutResumeToken() {
+  sessionStorage.removeItem(CHECKOUT_RESUME_TOKEN_STORAGE_KEY)
+}
+
+let inFlightResume = null
+
+export function resumeCheckoutSession() {
+  const checkoutResumeToken = sessionStorage.getItem(CHECKOUT_RESUME_TOKEN_STORAGE_KEY)
+
+  if (!checkoutResumeToken) {
+    inFlightResume = null
+    return Promise.resolve(null)
+  }
+
+  if (inFlightResume && inFlightResume.token === checkoutResumeToken) {
+    return inFlightResume.promise
+  }
+
+  const promise = (async () => {
+    try {
+      const response = await apiRequest('/method/buy_in_minutes.payment.resume_checkout_session', {
+        method: 'POST',
+        body: JSON.stringify({
+          checkout_resume_token: checkoutResumeToken,
+        }),
+      })
+
+      clearCheckoutResumeToken()
+      return response
+    } catch (error) {
+      clearCheckoutResumeToken()
+      throw error
+    }
+  })()
+
+  inFlightResume = { token: checkoutResumeToken, promise }
+  return promise
+}
+
+export async function createStripeCheckoutSession(
+  cartItems,
+  salesOrderName = '',
+  deliveryAddress = null,
+  deliveryDate = '',
+  deliverySlot = '',
+) {
+  const customerLocation = await getLiveCustomerLocationPayload()
+
   return apiRequest('/method/buy_in_minutes.payment.create_checkout_session', {
     method: 'POST',
     body: JSON.stringify({
-      cart_items: cartItems.map((item) => ({
-        id: item.id,
-        item_code: item.itemCode || item.id,
-        quantity: item.quantity,
-        supplier: item.supplier || '',
-        supplier_name: item.supplierName || '',
-      })),
+      cart_items: serializeCartItems(cartItems),
       sales_order_name: salesOrderName,
       delivery_address: deliveryAddress,
+      delivery_date: deliveryDate,
+      delivery_slot: deliverySlot,
+      customer_location: customerLocation,
       return_origin: getCheckoutReturnOrigin(),
     }),
   })
 }
 
-export function createCashOnDeliveryOrder(cartItems, salesOrderName = '', deliveryAddress = null) {
+export async function createCashOnDeliveryOrder(
+  cartItems,
+  salesOrderName = '',
+  deliveryAddress = null,
+  deliveryDate = '',
+  deliverySlot = '',
+) {
+  const customerLocation = await getLiveCustomerLocationPayload()
+
   return apiRequest('/method/buy_in_minutes.payment.create_cash_on_delivery_order', {
     method: 'POST',
     body: JSON.stringify({
-      cart_items: cartItems.map((item) => ({
-        id: item.id,
-        item_code: item.itemCode || item.id,
-        quantity: item.quantity,
-        supplier: item.supplier || '',
-        supplier_name: item.supplierName || '',
-      })),
+      cart_items: serializeCartItems(cartItems),
       sales_order_name: salesOrderName,
       delivery_address: deliveryAddress,
+      delivery_date: deliveryDate,
+      delivery_slot: deliverySlot,
+      customer_location: customerLocation,
     }),
   })
 }

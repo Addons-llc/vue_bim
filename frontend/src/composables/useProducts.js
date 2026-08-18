@@ -25,13 +25,9 @@ export function useProducts(searchText, initialCategory, options = {}) {
   const publishedCategories = computed(() =>
     categories.value.filter((category) => category.isPublished !== false),
   )
-  const publishedCategoryNames = computed(() =>
-    new Set(publishedCategories.value.map((category) => category.itemGroup || category.name).filter(Boolean)),
-  )
   const publishedProducts = computed(() =>
     products.value.filter((product) =>
-      product.isPublished !== false
-        && (!publishedCategoryNames.value.size || publishedCategoryNames.value.has(product.category)),
+      product.isPublished !== false,
     ),
   )
 

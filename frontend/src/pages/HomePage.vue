@@ -12,6 +12,7 @@ import { openCategoryOrProduct } from '../utils/categoryNavigation'
 import bannerImageOne from '../assets/images/Banner-1 (1).png'
 import bannerImageTwo from '../assets/images/Banner-2.png'
 import bannerImageThree from '../assets/images/Banner-3 (1).png'
+import bannerImageFour from '@app-root/meesakaran.png'
 
 const props = defineProps({
   category: {
@@ -45,6 +46,10 @@ const heroSlides = [
   {
     title: 'Fresh cuts',
     image: bannerImageThree,
+  },
+  {
+    title: 'Meesakaran',
+    image: bannerImageFour,
   },
 ]
 
@@ -222,6 +227,7 @@ onUnmounted(() => {
     title="Brands"
     horizontal
     item-type="brand"
+    stacked-tile
     show-brand-detail-fallbacks
     :view-all-to="brandsTabRoute"
     :categories="discoveryBrands"
@@ -235,6 +241,7 @@ onUnmounted(() => {
     title="Store"
     horizontal
     item-type="store"
+    stacked-tile
     :view-all-to="storesTabRoute"
     :categories="discoveryStores"
     @select="openStoreItem"
@@ -247,6 +254,7 @@ onUnmounted(() => {
     title="Categories"
     horizontal
     item-type="category"
+    stacked-tile
     :view-all-to="categoriesTabRoute"
     :active-category="activeCategory"
     :categories="discoveryCategories"

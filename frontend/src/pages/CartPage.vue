@@ -1,8 +1,13 @@
 <script setup>
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { getCurrentUser } from '../api/authApi'
-import { createCashOnDeliveryOrder, createStripeCheckoutSession } from '../api/paymentApi'
+import { getCurrentUser, hasPersistedPhoneAuthState, restoreLoginSession } from '../api/authApi'
+import {
+  createCashOnDeliveryOrder,
+  createStripeCheckoutSession,
+  resumeCheckoutSession,
+  storeCheckoutResumeToken,
+} from '../api/paymentApi'
 import { customerAddresses } from '../data/addressStore'
 import { clearCurrentUser, currentUser, isAuthReady, setCurrentUser } from '../data/authStore'
 import { clearCart } from '../data/cartStore'
@@ -21,7 +26,45 @@ const isStartingCheckout = ref(false)
 const isPlacingCodOrder = ref(false)
 const checkoutError = ref('')
 const isAddressRequired = ref(false)
+const selectedDeliveryDate = ref('2026-08-26')
+const selectedDeliverySlot = ref('')
 const LAST_COD_ORDER_ITEMS_STORAGE_KEY = 'buyInMinutesLastCodOrderItems'
+const deliveryDateOptions = [
+  {
+    value: '2026-08-26',
+    day: 'Wed',
+    date: '26 Aug',
+    status: 'Available',
+    isAvailable: true,
+  },
+  {
+    value: '2026-08-27',
+    day: 'Thurs',
+    date: '27 Aug',
+    status: 'Full',
+    isAvailable: false,
+  },
+  {
+    value: '2026-08-28',
+    day: 'Fri',
+    date: '28 Aug',
+    status: 'Full',
+    isAvailable: false,
+  },
+  {
+    value: '2026-08-29',
+    day: 'Sat',
+    date: '29 Aug',
+    status: 'Full',
+    isAvailable: false,
+  },
+]
+const deliverySlots = [
+  '10 AM - 12 PM',
+  '12 PM - 2 PM',
+  '2 PM - 4 PM',
+  '4 PM - 6 PM',
+]
 const canCheckout = computed(() => isAuthReady.value && Boolean(currentUser.value))
 const checkoutButtonLabel = computed(() => {
   if (!isAuthReady.value) {
@@ -31,6 +74,10 @@ const checkoutButtonLabel = computed(() => {
   return canCheckout.value ? '' : 'Login to Proceed'
 })
 const hasDeliveryAddress = computed(() => customerAddresses.value.length > 0)
+const selectedDeliveryDateLabel = computed(() =>
+  deliveryDateOptions.find((dateOption) => dateOption.value === selectedDeliveryDate.value)?.day
+  || selectedDeliveryDate.value,
+)
 const selectedDeliveryAddress = computed(() =>
   customerAddresses.value.find((address) => address.isDefault)
   || customerAddresses.value[0]
@@ -46,19 +93,64 @@ const itemSavings = computed(() =>
   }, 0),
 )
 
+function selectDeliveryDate(dateOption) {
+  if (!dateOption.isAvailable) {
+    return
+  }
+
+  selectedDeliveryDate.value = dateOption.value
+}
+
+function selectDeliverySlot(slot) {
+  selectedDeliverySlot.value = slot
+}
+
 async function refreshCurrentSession() {
   try {
+    let checkoutResumeUser = null
+
+    try {
+      const checkoutResumeResponse = await resumeCheckoutSession()
+      checkoutResumeUser = checkoutResumeResponse?.message?.user
+    } catch (error) {
+      console.error('Unable to resume checkout session', error)
+    }
+
+    if (checkoutResumeUser) {
+      setCurrentUser(checkoutResumeUser)
+      return true
+    }
+
     const response = await getCurrentUser()
     const message = response?.message || {}
 
     if (message.is_authenticated) {
       setCurrentUser(message.user)
-      return
+      return true
+    }
+
+    const restoredSession = await restoreLoginSession().catch(() => null)
+    const restoredUser = restoredSession?.message?.user
+
+    if (restoredUser) {
+      setCurrentUser(restoredUser)
+      return true
+    }
+
+    if (currentUser.value && hasPersistedPhoneAuthState()) {
+      return true
     }
 
     clearCurrentUser()
+    return false
   } catch (error) {
     console.error('Unable to refresh checkout session', error)
+
+    if (!currentUser.value && !hasPersistedPhoneAuthState()) {
+      clearCurrentUser()
+    }
+
+    return false
   }
 }
 
@@ -67,14 +159,18 @@ async function ensureCheckoutSession() {
     return true
   }
 
-  await refreshCurrentSession()
+  const sessionReady = await refreshCurrentSession()
 
-  if (canCheckout.value) {
+  if (sessionReady && canCheckout.value) {
     return true
   }
 
   emit('login')
   return false
+}
+
+function isAuthenticationError(error) {
+  return /please sign in|authentication|session|login/i.test(error?.message || '')
 }
 
 async function startStripeCheckout() {
@@ -91,24 +187,56 @@ async function startStripeCheckout() {
     return
   }
 
+  if (!selectedDeliverySlot.value) {
+    checkoutError.value = 'Please choose a delivery slot before checkout.'
+    return
+  }
+
   isStartingCheckout.value = true
 
   try {
     console.log('Pay now checkout payload', {
       cartItems: cartProducts.value,
       deliveryAddress: selectedDeliveryAddress.value,
+      deliveryDate: selectedDeliveryDate.value,
+      deliverySlot: selectedDeliverySlot.value,
     })
-    const response = await createStripeCheckoutSession(cartProducts.value, '', selectedDeliveryAddress.value)
+    const response = await createStripeCheckoutSession(
+      cartProducts.value,
+      '',
+      selectedDeliveryAddress.value,
+      selectedDeliveryDate.value,
+      selectedDeliverySlot.value,
+    )
     console.log('Pay now checkout response', response)
     const checkoutUrl = response?.message?.checkout_url
+    const checkoutResumeToken = response?.message?.checkout_resume_token
 
     if (!checkoutUrl) {
       throw new Error(response?.message?.message || 'Unable to start checkout.')
     }
 
+    storeCheckoutResumeToken(checkoutResumeToken)
     window.location.assign(checkoutUrl)
   } catch (error) {
     console.error('Pay now checkout failed', error)
+
+    if (isAuthenticationError(error)) {
+      const sessionRecovered = await refreshCurrentSession()
+
+      if (sessionRecovered && currentUser.value) {
+        checkoutError.value = 'Session restored. Please click Pay Now again.'
+        return
+      }
+
+      if (!hasPersistedPhoneAuthState()) {
+        clearCurrentUser()
+      }
+
+      emit('login')
+      return
+    }
+
     checkoutError.value = error.message
   } finally {
     isStartingCheckout.value = false
@@ -129,14 +257,27 @@ async function placeCashOnDeliveryOrder() {
     return
   }
 
+  if (!selectedDeliverySlot.value) {
+    checkoutError.value = 'Please choose a delivery slot before placing the order.'
+    return
+  }
+
   isPlacingCodOrder.value = true
 
   try {
     console.log('Cash on delivery order payload', {
       cartItems: cartProducts.value,
       deliveryAddress: selectedDeliveryAddress.value,
+      deliveryDate: selectedDeliveryDate.value,
+      deliverySlot: selectedDeliverySlot.value,
     })
-    const response = await createCashOnDeliveryOrder(cartProducts.value, '', selectedDeliveryAddress.value)
+    const response = await createCashOnDeliveryOrder(
+      cartProducts.value,
+      '',
+      selectedDeliveryAddress.value,
+      selectedDeliveryDate.value,
+      selectedDeliverySlot.value,
+    )
     console.log('Cash on delivery order response', response)
     const salesOrder = response?.message?.sales_order
     const purchaseOrders = response?.message?.purchase_orders || []
@@ -146,6 +287,7 @@ async function placeCashOnDeliveryOrder() {
       qty: item.quantity,
       amount: item.price * item.quantity,
       image: item.image,
+      size: item.size || '',
     }))
 
     sessionStorage.setItem(LAST_COD_ORDER_ITEMS_STORAGE_KEY, JSON.stringify(orderedItems))
@@ -160,6 +302,23 @@ async function placeCashOnDeliveryOrder() {
     })
   } catch (error) {
     console.error('Cash on delivery order failed', error)
+
+    if (isAuthenticationError(error)) {
+      const sessionRecovered = await refreshCurrentSession()
+
+      if (sessionRecovered && currentUser.value) {
+        checkoutError.value = 'Session restored. Please click Cash on Delivery again.'
+        return
+      }
+
+      if (!hasPersistedPhoneAuthState()) {
+        clearCurrentUser()
+      }
+
+      emit('login')
+      return
+    }
+
     checkoutError.value = error.message
   } finally {
     isPlacingCodOrder.value = false
@@ -220,6 +379,7 @@ onUnmounted(() => {
 
           <div class="cart-page-item-info">
             <h2>{{ item.name }}</h2>
+            <p v-if="item.size" class="cart-page-item-size">Size: {{ item.size }}</p>
             <div class="cart-page-item-price">
               <strong>AED {{ item.price }}</strong>
               <span v-if="item.oldPrice">AED {{ item.oldPrice }}</span>
@@ -265,6 +425,79 @@ onUnmounted(() => {
             <span>Grand total</span>
             <strong>AED {{ payableTotal }}</strong>
           </div>
+
+          <section class="cart-delivery-options" aria-label="Delivery schedule">
+            <div class="cart-delivery-heading">
+              <span class="cart-delivery-step">1</span>
+              <div>
+                <h3>Choose delivery date</h3>
+                <p>Select when you want this order delivered.</p>
+              </div>
+            </div>
+
+            <div class="cart-date-options" role="group" aria-label="Choose delivery date">
+              <button
+                v-for="dateOption in deliveryDateOptions"
+                :key="dateOption.value"
+                class="cart-date-option"
+                :class="{
+                  'is-selected': selectedDeliveryDate === dateOption.value,
+                  'is-full': !dateOption.isAvailable,
+                }"
+                type="button"
+                :disabled="!dateOption.isAvailable"
+                @click="selectDeliveryDate(dateOption)"
+              >
+                <span>{{ dateOption.day }}</span>
+                <strong>{{ dateOption.date }}</strong>
+                <em>{{ dateOption.status }}</em>
+              </button>
+            </div>
+
+            <div class="cart-delivery-heading cart-slot-heading">
+              <span class="cart-delivery-step">2</span>
+              <div>
+                <h3>Choose delivery slot</h3>
+                <p>Pick the time window that works best.</p>
+              </div>
+            </div>
+
+            <div class="cart-slot-options" role="group" aria-label="Choose delivery slot">
+              <button
+                v-for="slot in deliverySlots"
+                :key="slot"
+                class="cart-slot-option"
+                :class="{ 'is-selected': selectedDeliverySlot === slot }"
+                type="button"
+                @click="selectDeliverySlot(slot)"
+              >
+                {{ slot }}
+              </button>
+            </div>
+
+            <p
+              v-if="selectedDeliveryDate && selectedDeliverySlot"
+              class="cart-delivery-selection"
+            >
+              Delivery selected for
+              <strong>{{ selectedDeliveryDateLabel }}</strong>
+              between <strong>{{ selectedDeliverySlot }}</strong>.
+            </p>
+            <label class="visually-hidden" for="cart-delivery-slot">
+              Choose Delivery Slot
+              <select id="cart-delivery-slot" v-model="selectedDeliverySlot" tabindex="-1">
+                <option value="" disabled>Choose Delivery Slot</option>
+                <option
+                  v-for="slot in deliverySlots"
+                  :key="`select-${slot}`"
+                  :value="slot"
+                >
+                  {{ slot }}
+                </option>
+              </select>
+            </label>
+          </section>
+
           <div v-if="checkoutError" class="cart-checkout-message">
             <p class="form-message error-message">
               {{ checkoutError }}

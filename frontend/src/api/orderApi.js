@@ -1,6 +1,35 @@
 import { apiRequest } from './http'
 
-export function syncCartSalesOrder(cartItems, salesOrderName = '') {
+const SELECTED_LOCATION_STORAGE_KEY = 'buyInMinutesSelectedLocation'
+const CURRENT_LOCATION_COORDS_STORAGE_KEY = 'buyInMinutesCurrentLocationCoords'
+
+function getCustomerLocationPayload() {
+  const selectedLocation = (localStorage.getItem(SELECTED_LOCATION_STORAGE_KEY) || '').trim()
+
+  try {
+    const currentCoords = JSON.parse(localStorage.getItem(CURRENT_LOCATION_COORDS_STORAGE_KEY) || 'null')
+    const lat = Number(currentCoords?.lat)
+    const lng = Number(currentCoords?.lng)
+
+    if (Number.isFinite(lat) && Number.isFinite(lng)) {
+      return selectedLocation
+        ? `${selectedLocation} (${lat.toFixed(5)}, ${lng.toFixed(5)})`
+        : `${lat.toFixed(5)}, ${lng.toFixed(5)}`
+    }
+  } catch {
+    // Ignore malformed stored coordinates and fall back to the selected location label.
+  }
+
+  return selectedLocation
+}
+
+export function syncCartSalesOrder(
+  cartItems,
+  salesOrderName = '',
+  deliveryAddress = null,
+  deliveryDate = '',
+  deliverySlot = '',
+) {
   return apiRequest('/method/buy_in_minutes.payment.sync_cart_sales_order', {
     method: 'POST',
     body: JSON.stringify({
@@ -10,6 +39,10 @@ export function syncCartSalesOrder(cartItems, salesOrderName = '') {
         quantity: item.quantity,
       })),
       sales_order_name: salesOrderName,
+      delivery_address: deliveryAddress,
+      delivery_date: deliveryDate,
+      delivery_slot: deliverySlot,
+      customer_location: getCustomerLocationPayload(),
     }),
   })
 }

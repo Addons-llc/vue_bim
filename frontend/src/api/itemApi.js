@@ -4,7 +4,8 @@ import {
   SELLING_PRICE_LIST,
   SITE_BASE_URL,
 } from './config'
-import { getDocTypeByName } from './frappeResource'
+import { getEstimatedDeliveryTimeLabel } from './deliveryEta'
+import { getDocTypeByName, getDocTypeList } from './frappeResource'
 import { apiRequest } from './http'
 
 const categoryPlaceholderImage = `${import.meta.env.BASE_URL}grocery-card-image-v3.svg?v=3`
@@ -60,6 +61,7 @@ function getSupplierDetails(item) {
         || item.custom_supplier_image
         || item.custom_supplier_logo,
     ),
+    customGoogleAddress: item.custom_google_address || item.customGoogleAddress || '',
     bannerImage: getImageUrl(
       item.supplier_banner
         || item.supplier_banner_image
@@ -161,17 +163,31 @@ function getItemBannerImage(item) {
   )
 }
 
-function mapItemToProduct(item) {
+function getItemSize(item) {
+  return stripHtml(
+    item.custom_size
+      || item.customSize
+      || item.custom_size_options
+      || item.custom_sizes
+      || '',
+  )
+}
+
+async function mapItemToProduct(item) {
   const itemGroup = item.item_group || ''
   const categoryImage = getItemGroupImage(item)
   const bannerImage = getItemBannerImage(item)
   const image = getImageUrl(item.image || item.website_image || item.thumbnail)
     || getFallbackImage(itemGroup)
   const description = stripHtml(item.description || '')
+  const customSize = getItemSize(item)
   const itemCode = item.item_code || item.name
   const stockQuantity = getStockQuantity(item)
   const reviewCount = getReviewCount(item)
   const supplierDetails = getSupplierDetails(item)
+  const deliveryTime = await getEstimatedDeliveryTimeLabel({
+    supplierDetails,
+  })
 
   return {
     id: item.name,
@@ -180,6 +196,7 @@ function mapItemToProduct(item) {
     category: itemGroup,
     brand: item.brand || '',
     description: description || 'Fresh item available for quick delivery.',
+    customSize,
     price: getItemSellingPrice(item),
     priceList: item.price_list || SELLING_PRICE_LIST,
     currency: item.currency || 'AED',
@@ -192,7 +209,7 @@ function mapItemToProduct(item) {
     stockQuantity,
     inStock: stockQuantity > 0 || item.disabled === 0,
     isPublished: isPublishedItem(item),
-    deliveryTime: '18 min',
+    deliveryTime,
     image,
     bannerImage,
     categoryImage,
@@ -274,9 +291,11 @@ export async function getItemMasterItems(params = {}) {
   const response = await apiRequest(`${PRODUCT_API_PATH}?${query.toString()}`)
   const items = response.message || []
 
-  return items
-    .filter(isPublishedItem)
-    .map(mapItemToProduct)
+  return Promise.all(
+    items
+      .filter(isPublishedItem)
+      .map(mapItemToProduct),
+  )
 }
 
 export async function getItemMasterItem(itemName) {
@@ -303,6 +322,25 @@ export async function getItemMasterItem(itemName) {
 
 export async function getItemMasterCategories() {
   try {
+    const itemGroups = await getDocTypeList('Item Group', {
+      fields: [
+        'name',
+        'item_group_name',
+        'parent_item_group',
+        'is_group',
+        'image',
+      ],
+      filters: [
+        ['Item Group', 'name', '!=', 'All Item Groups'],
+      ],
+      order_by: 'lft asc',
+      limit_page_length: 5000,
+    })
+
+    return itemGroups
+      .filter(isPublishedItem)
+      .map(mapItemGroupToCategory)
+  } catch (error) {
     const query = new URLSearchParams({
       limit_page_length: 5000,
       published: 1,
@@ -313,8 +351,6 @@ export async function getItemMasterCategories() {
     return itemGroups
       .filter(isPublishedItem)
       .map(mapItemGroupToCategory)
-  } catch (error) {
-    return []
   }
 }
 

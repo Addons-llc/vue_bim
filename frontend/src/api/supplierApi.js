@@ -43,6 +43,7 @@ function mapSupplierDetails(supplier = {}) {
         || supplier.custom_supplier_logo
         || supplier.custom_supplier_image,
     ),
+    customGoogleAddress: supplier.custom_google_address || supplier.customGoogleAddress || '',
     bannerImage: getImageUrl(
       supplier.supplier_banner
         || supplier.supplier_banner_image

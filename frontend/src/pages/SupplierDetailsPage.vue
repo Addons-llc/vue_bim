@@ -15,6 +15,7 @@ const selectedSupplier = computed(() => getSelectedSupplier(supplierName.value))
 const supplierRecord = ref(null)
 const supplierStore = ref(null)
 const failedSupplierBannerImage = ref('')
+const isSupplierDescriptionExpanded = ref(false)
 const supplierDetails = computed(() => {
   const store = supplierStore.value
   const supplier = supplierRecord.value || {}
@@ -31,7 +32,12 @@ const supplierDetails = computed(() => {
     phone: store?.contactNumber || supplier.phone || selectedDetails.phone,
     email: store?.email || supplier.email || selectedDetails.email,
     website: store?.website || supplier.website || selectedDetails.website,
-    details: store?.description || store?.supplierDetails || supplier.details || selectedDetails.details,
+    details:
+      store?.shortDescription
+      || store?.description
+      || store?.supplierDetails
+      || supplier.details
+      || selectedDetails.details,
     sellerSince: store?.sellerSince || supplier.sellerSince || selectedDetails.sellerSince,
     primaryColour: store?.primaryColour || selectedDetails.primaryColour,
     secondaryColour: store?.secondaryColour || selectedDetails.secondaryColour,
@@ -104,13 +110,13 @@ const supplierPhone = computed(() => supplierDetails.value.phone || '')
 const supplierEmail = computed(() => supplierDetails.value.email || '')
 const supplierWebsite = computed(() => supplierDetails.value.website || '')
 const supplierDescription = computed(() => supplierDetails.value.details || '')
-const supplierMainDescription = 'A trusted local store offering everyday essentials, fresh selections, and convenient delivery for nearby customers.'
+const isSupplierDescriptionLong = computed(() => supplierDescription.value.length > 120)
 const supplierSince = computed(() => supplierDetails.value.sellerSince || '')
 const hasSupplierContact = computed(() =>
   Boolean(supplierPhone.value || supplierEmail.value || supplierWebsite.value),
 )
 const hasSupplierInfo = computed(() =>
-  Boolean(storeName.value || storeSupplierName.value || supplierDescription.value || supplierWebsite.value),
+  Boolean(storeName.value || storeSupplierName.value || supplierWebsite.value),
 )
 const dummySupplierRating = {
   score: '4.7',
@@ -128,6 +134,10 @@ function openProductDetails(product) {
 
 function hideBrokenSupplierBanner() {
   failedSupplierBannerImage.value = supplierBannerImage.value
+}
+
+function toggleSupplierDescription() {
+  isSupplierDescriptionExpanded.value = !isSupplierDescriptionExpanded.value
 }
 
 async function loadSupplierProducts() {
@@ -183,6 +193,7 @@ watch(supplierName, () => {
   supplierStore.value = null
   loadedProducts.value = []
   failedSupplierBannerImage.value = ''
+  isSupplierDescriptionExpanded.value = false
   loadSupplierProducts()
 })
 </script>
@@ -203,7 +214,6 @@ watch(supplierName, () => {
         </span>
         <h1>{{ supplierDisplayName }}</h1>
       </div>
-      <p v-if="supplierDescription" class="supplier-profile-summary">{{ supplierDescription }}</p>
       <div v-if="hasSupplierContact" class="supplier-profile-contact">
         <span v-if="supplierPhone">☏ {{ supplierPhone }}</span>
         <span v-if="supplierEmail">✉ {{ supplierEmail }}</span>
@@ -225,10 +235,6 @@ watch(supplierName, () => {
         <div v-if="storeSupplierName" class="supplier-profile-info-row">
           <span>Supplier</span>
           <p>{{ storeSupplierName }}</p>
-        </div>
-        <div v-if="supplierDescription" class="supplier-profile-info-row">
-          <span>Supplier Details</span>
-          <p>{{ supplierDescription }}</p>
         </div>
       </section>
 
@@ -260,9 +266,23 @@ watch(supplierName, () => {
       </div>
 
       <section class="supplier-store-overview">
-        <div class="supplier-store-description" aria-label="Supplier description">
+        <div
+          v-if="supplierDescription"
+          class="supplier-store-description"
+          aria-label="Supplier description"
+        >
           <h2>About {{ supplierDisplayName }}</h2>
-          <p>{{ supplierMainDescription }}</p>
+          <p :class="{ 'is-collapsed': !isSupplierDescriptionExpanded && isSupplierDescriptionLong }">
+            {{ supplierDescription }}
+          </p>
+          <button
+            v-if="isSupplierDescriptionLong"
+            class="supplier-description-toggle"
+            type="button"
+            @click="toggleSupplierDescription"
+          >
+            {{ isSupplierDescriptionExpanded ? 'Read less' : 'Read more' }}
+          </button>
         </div>
 
         <div class="supplier-ratings-panel" aria-label="Supplier ratings">

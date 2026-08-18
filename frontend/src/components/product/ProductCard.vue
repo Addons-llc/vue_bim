@@ -1,5 +1,7 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { LOCATION_UPDATED_EVENT, getEstimatedDeliveryTimeLabel } from '../../api/deliveryEta'
+import { customerAddresses } from '../../data/addressStore'
 import {
   addProductToCart,
   cartProducts,
@@ -30,14 +32,34 @@ const stockLabel = computed(() => (props.product.inStock === false ? 'Out of sto
 const supplierName = computed(() =>
   props.product.supplierName || props.product.supplier || '',
 )
+const defaultProductSize = computed(() => {
+  const rawSize = props.product.selectedSize || props.product.size || props.product.customSize || props.product.custom_size || ''
+
+  if (Array.isArray(rawSize)) {
+    return rawSize.map((size) => String(size).trim()).find(Boolean) || ''
+  }
+
+  return String(rawSize)
+    .split(/\r?\n|[|,;/]+/)
+    .map((size) => size.trim())
+    .find(Boolean) || String(rawSize).trim()
+})
 const reviewLabel = computed(() => {
   const reviewCount = props.product.reviewCount || 0
 
   return reviewCount === 1 ? '1 review' : `${reviewCount} reviews`
 })
+const deliveryTimeLabel = ref(props.product.deliveryTime || '')
+
+async function updateDeliveryTimeLabel() {
+  deliveryTimeLabel.value = await getEstimatedDeliveryTimeLabel(props.product)
+}
 
 function handleAddToCart() {
-  addProductToCart(props.product)
+  addProductToCart({
+    ...props.product,
+    selectedSize: defaultProductSize.value,
+  })
 }
 
 function decreaseCartQuantity() {
@@ -59,6 +81,37 @@ function showPlaceholderImage(event) {
 
   event.target.src = productPlaceholderImage
 }
+
+onMounted(() => {
+  updateDeliveryTimeLabel()
+  window.addEventListener(LOCATION_UPDATED_EVENT, updateDeliveryTimeLabel)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener(LOCATION_UPDATED_EVENT, updateDeliveryTimeLabel)
+})
+
+watch(
+  () => [
+    props.product.id,
+    props.product.deliveryTime,
+    props.product.supplierAddress,
+    props.product.supplierDetails?.customGoogleAddress,
+    props.product.supplierDetails?.custom_google_address,
+  ],
+  () => {
+    updateDeliveryTimeLabel()
+  },
+  { immediate: true },
+)
+
+watch(
+  customerAddresses,
+  () => {
+    updateDeliveryTimeLabel()
+  },
+  { deep: true },
+)
 </script>
 
 <template>
@@ -104,7 +157,7 @@ function showPlaceholderImage(event) {
         :alt="product.name"
         @error="showPlaceholderImage"
       />
-      <span class="product-badge">{{ product.deliveryTime }}</span>
+      <span v-if="deliveryTimeLabel" class="product-badge">{{ deliveryTimeLabel }}</span>
     </div>
 
     <div class="product-info">

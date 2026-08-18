@@ -22,6 +22,9 @@ DELIVERY_FEE_ITEM_CODE = "delivery-fee"
 FREE_DELIVERY_MINIMUM = 60
 SELLING_PRICE_LIST = "Selling Price"
 STRIPE_SETTINGS_DOCTYPE = "Stripe Settings"
+CHECKOUT_RESUME_TOKEN_TTL_SECONDS = 3 * 60 * 60
+
+
 def _error(message, status_code=400):
 	frappe.local.response["http_status_code"] = status_code
 	return {"success": False, "message": message}
@@ -30,6 +33,83 @@ def _error(message, status_code=400):
 def _get_conf_value(key):
 	value = frappe.conf.get(key)
 	return value.strip() if isinstance(value, str) else value
+
+
+def _get_checkout_resume_token_key(checkout_resume_token):
+	return frappe.cache.make_key(f"buy_in_minutes:checkout_resume:{checkout_resume_token}")
+
+
+def _create_checkout_resume_token(user_name, sales_order_name):
+	checkout_resume_token = frappe.generate_hash(length=32)
+	frappe.cache.setex(
+		_get_checkout_resume_token_key(checkout_resume_token),
+		CHECKOUT_RESUME_TOKEN_TTL_SECONDS,
+		json.dumps(
+			{
+				"user": user_name,
+				"sales_order": sales_order_name,
+			}
+		),
+	)
+	return checkout_resume_token
+
+
+def _read_checkout_resume_token(checkout_resume_token):
+	checkout_resume_token = _clean_text(checkout_resume_token)
+	if not checkout_resume_token:
+		frappe.throw(_("Missing checkout resume token."), frappe.AuthenticationError)
+
+	cache_key = _get_checkout_resume_token_key(checkout_resume_token)
+	payload = frappe.cache.get_value(cache_key)
+	if isinstance(payload, bytes):
+		payload = payload.decode()
+
+	try:
+		payload = json.loads(payload or "{}")
+	except Exception:
+		payload = {}
+
+	if not payload.get("user") or not payload.get("sales_order"):
+		frappe.throw(_("Checkout session expired. Please sign in again."), frappe.AuthenticationError)
+
+	frappe.cache.delete_value(cache_key)
+	return payload
+
+
+def _get_user_payload(user_name):
+	user = frappe.get_doc("User", user_name)
+	return {
+		"name": user.name,
+		"email": user.email,
+		"mobile_no": user.mobile_no,
+		"full_name": user.full_name,
+		"user_type": user.user_type,
+		"user_image": user.user_image,
+	}
+
+
+def _restore_checkout_user(user_name, sales_order_name):
+	user_name = _normalize_user_name(user_name)
+	sales_order_name = _clean_text(sales_order_name)
+	if user_name == "Guest" or not sales_order_name:
+		frappe.throw(_("Unable to restore checkout session."), frappe.AuthenticationError)
+
+	if not frappe.db.exists("User", user_name):
+		frappe.throw(_("Checkout user was not found."), frappe.AuthenticationError)
+
+	if frappe.db.get_value("User", user_name, "enabled") != 1:
+		frappe.throw(_("Checkout user is disabled."), frappe.AuthenticationError)
+
+	sales_order_owner = frappe.db.get_value("Sales Order", sales_order_name, "owner")
+	if sales_order_owner != user_name:
+		frappe.throw(_("Checkout session does not match this order."), frappe.AuthenticationError)
+
+	if _normalize_user_name(frappe.session.user) != user_name:
+		from buy_in_minutes.auth import _login_user
+
+		_login_user(user_name)
+
+	return _get_user_payload(user_name)
 
 
 def _get_stripe_settings():
@@ -154,6 +234,12 @@ def _normalize_cart_items(cart_items):
 			cart_item.get("supplier"),
 			cart_item.get("supplier_name") or cart_item.get("supplierName"),
 		)
+		size = _clean_text(
+			cart_item.get("size")
+			or cart_item.get("selectedSize")
+			or cart_item.get("custom_size")
+			or cart_item.get("customSize")
+		)
 
 		if not item_code or quantity <= 0:
 			frappe.throw(_("Cart contains an invalid item."))
@@ -163,6 +249,7 @@ def _normalize_cart_items(cart_items):
 				"item_code": item_code,
 				"quantity": quantity,
 				"supplier": supplier,
+				"size": size,
 			}
 		)
 
@@ -187,6 +274,14 @@ def _resolve_supplier_name(supplier=None, supplier_name=None):
 
 def _clean_text(value):
 	return str(value or "").strip()
+
+
+def _normalize_user_name(user_name, default="Guest"):
+	user_name = _clean_text(user_name)
+	if not user_name or user_name.lower() in {"guest", "none", "null"}:
+		return default
+
+	return user_name
 
 
 def _get_item_selling_price(item_code, fallback_rate=0):
@@ -284,8 +379,8 @@ def _get_default_supplier_for_item(item_code, company, preferred_supplier=None):
 
 
 def _is_guest_user(user_name=None):
-	user_name = user_name if user_name is not None else frappe.session.user
-	return not user_name or user_name == "Guest"
+	user_name = frappe.session.user if user_name is None else user_name
+	return _normalize_user_name(user_name) == "Guest"
 
 
 def _require_checkout_user():
@@ -296,6 +391,7 @@ def _require_checkout_user():
 
 
 def _get_or_create_customer_for_user(user_name):
+	user_name = _normalize_user_name(user_name)
 	if _is_guest_user(user_name):
 		frappe.throw(_("Please sign in before checkout."), frappe.AuthenticationError)
 
@@ -338,10 +434,43 @@ def _normalize_delivery_address(delivery_address):
 		"phone": _clean_text(delivery_address.get("phone")),
 		"area": _clean_text(delivery_address.get("area")),
 		"building": _clean_text(delivery_address.get("building")),
+		"street": _clean_text(delivery_address.get("street")),
 		"landmark": _clean_text(delivery_address.get("landmark")),
+		"emirate": _clean_text(delivery_address.get("emirate")),
 		"latitude": _clean_text(delivery_address.get("latitude")),
 		"longitude": _clean_text(delivery_address.get("longitude")),
 	}
+
+
+def _build_delivery_address_display(delivery_address):
+	address = _normalize_delivery_address(delivery_address)
+	if not address:
+		return ""
+
+	lines = []
+	if address.get("label"):
+		lines.append(address["label"])
+
+	contact_line = ", ".join(filter(None, [address.get("contact_name"), address.get("phone")]))
+	if contact_line:
+		lines.append(contact_line)
+
+	address_line = ", ".join(
+		filter(
+			None,
+			[
+				address.get("building"),
+				address.get("street"),
+				address.get("area"),
+				address.get("landmark"),
+				address.get("emirate"),
+			],
+		)
+	)
+	if address_line:
+		lines.append(address_line)
+
+	return "\n".join(lines)
 
 
 def _get_linked_customer_address(customer, address):
@@ -527,6 +656,11 @@ def _apply_delivery_address_to_sales_order(sales_order, customer, delivery_addre
 
 	sales_order.set_missing_values()
 
+	address_display = _build_delivery_address_display(delivery_address)
+	if address_display:
+		_set_doc_value_if_field_exists(sales_order, "address_display", address_display)
+		_set_doc_value_if_field_exists(sales_order, "shipping_address", address_display)
+
 
 def _get_checkout_items(cart_items):
 	checkout_items = []
@@ -552,6 +686,7 @@ def _get_checkout_items(cart_items):
 				"rate": rate,
 				"amount": rate * cart_item["quantity"],
 				"supplier": cart_item.get("supplier"),
+				"size": cart_item.get("size"),
 			}
 		)
 
@@ -570,8 +705,10 @@ def _get_checkout_items(cart_items):
 	return checkout_items
 
 
-def _build_sales_order_item_rows(checkout_items, company):
+def _build_sales_order_item_rows(checkout_items, company, delivery_date=None):
 	order_items = []
+	delivery_date = delivery_date or nowdate()
+	sales_order_item_meta = frappe.get_meta("Sales Order Item")
 	for item in checkout_items:
 		if not frappe.db.exists("Item", item["item_code"]):
 			continue
@@ -593,11 +730,20 @@ def _build_sales_order_item_rows(checkout_items, company):
 			"item_name": item["item_name"],
 			"qty": item["quantity"],
 			"rate": item["rate"],
-			"delivery_date": nowdate(),
+			"delivery_date": delivery_date,
 		}
+		if item.get("size"):
+			row["custom_size"] = item["size"]
+			row["size"] = item["size"]
 		if supplier:
 			row["supplier"] = supplier
 			row["delivered_by_supplier"] = 1
+
+		row = {
+			fieldname: value
+			for fieldname, value in row.items()
+			if sales_order_item_meta.has_field(fieldname)
+		}
 
 		order_items.append(row)
 
@@ -649,14 +795,164 @@ def _get_purchase_order_names_for_sales_order(sales_order_name):
 	]
 
 
+def _get_purchased_sales_order_item_names(sales_order_name):
+	if not frappe.get_meta("Purchase Order Item").has_field("sales_order_item"):
+		return set()
+
+	return set(
+		filter(
+			None,
+			frappe.get_all(
+				"Purchase Order Item",
+				filters={
+					"sales_order": sales_order_name,
+					"docstatus": ["<", 2],
+				},
+				pluck="sales_order_item",
+				ignore_permissions=True,
+			),
+		)
+	)
+
+
 def _get_purchase_orderable_sales_order_items(sales_order):
+	purchased_sales_order_items = _get_purchased_sales_order_item_names(sales_order.name)
+
 	return [
-		{"item_code": item.item_code, "supplier": item.supplier}
+		{
+			"item_code": item.item_code,
+			"sales_order_item": item.name,
+			"supplier": item.supplier,
+		}
 		for item in sales_order.items
 		if item.item_code
 		and item.supplier
+		and item.name not in purchased_sales_order_items
 		and flt(item.ordered_qty) < flt(item.stock_qty)
 	]
+
+
+def _set_doc_value_if_field_exists(doc, fieldname, value):
+	if doc.meta.has_field(fieldname):
+		doc.set(fieldname, value)
+
+
+def _build_manual_purchase_orders_for_sales_order(sales_order, selected_items):
+	selected_item_names = {
+		item.get("sales_order_item")
+		for item in selected_items
+		if item.get("sales_order_item")
+	}
+	items_by_supplier = {}
+
+	for item in sales_order.items:
+		if item.name not in selected_item_names:
+			continue
+
+		qty = flt(item.qty) - (flt(item.ordered_qty) / (flt(item.conversion_factor) or 1))
+		if qty <= 0:
+			continue
+
+		items_by_supplier.setdefault(item.supplier, []).append((item, qty))
+
+	purchase_orders = []
+	purchase_order_item_meta = frappe.get_meta("Purchase Order Item")
+	for supplier, supplier_items in items_by_supplier.items():
+		purchase_order = frappe.new_doc("Purchase Order")
+		purchase_order.supplier = supplier
+		purchase_order.company = sales_order.company
+		purchase_order.transaction_date = nowdate()
+		_set_doc_value_if_field_exists(purchase_order, "schedule_date", sales_order.delivery_date or nowdate())
+		_set_doc_value_if_field_exists(purchase_order, "buying_price_list", "")
+		_set_doc_value_if_field_exists(purchase_order, "ignore_pricing_rule", 1)
+
+		if any(item.delivered_by_supplier for item, _qty in supplier_items):
+			_set_doc_value_if_field_exists(purchase_order, "customer", sales_order.customer)
+			_set_doc_value_if_field_exists(purchase_order, "customer_name", sales_order.customer_name)
+			_set_doc_value_if_field_exists(
+				purchase_order,
+				"shipping_address",
+				sales_order.shipping_address_name or sales_order.customer_address,
+			)
+			_set_doc_value_if_field_exists(
+				purchase_order,
+				"shipping_address_display",
+				sales_order.shipping_address or sales_order.address_display,
+			)
+			_set_doc_value_if_field_exists(purchase_order, "customer_contact_person", sales_order.contact_person)
+			_set_doc_value_if_field_exists(purchase_order, "customer_contact_display", sales_order.contact_display)
+			_set_doc_value_if_field_exists(purchase_order, "customer_contact_mobile", sales_order.contact_mobile)
+			_set_doc_value_if_field_exists(purchase_order, "customer_contact_email", sales_order.contact_email)
+
+		for item, qty in supplier_items:
+			amount = flt(qty) * flt(item.rate)
+			row = {
+				"item_code": item.item_code,
+				"item_name": item.item_name,
+				"description": item.description,
+				"qty": qty,
+				"schedule_date": item.delivery_date or sales_order.delivery_date or nowdate(),
+				"uom": item.uom,
+				"stock_uom": item.stock_uom,
+				"conversion_factor": item.conversion_factor or 1,
+				"rate": item.rate,
+				"price_list_rate": item.rate,
+				"amount": amount,
+				"base_rate": item.rate,
+				"base_amount": amount,
+				"sales_order": sales_order.name,
+				"sales_order_item": item.name,
+				"project": sales_order.project,
+			}
+			row = {
+				fieldname: value
+				for fieldname, value in row.items()
+				if purchase_order_item_meta.has_field(fieldname)
+			}
+			purchase_order.append("items", row)
+
+		total_amount = sum(flt(item.amount) for item in purchase_order.items)
+		_set_doc_value_if_field_exists(purchase_order, "net_total", total_amount)
+		_set_doc_value_if_field_exists(purchase_order, "grand_total", total_amount)
+		_set_doc_value_if_field_exists(purchase_order, "base_net_total", total_amount)
+		_set_doc_value_if_field_exists(purchase_order, "base_grand_total", total_amount)
+		_set_doc_value_if_field_exists(purchase_order, "total", total_amount)
+		_set_doc_value_if_field_exists(purchase_order, "rounded_total", total_amount)
+		_set_doc_value_if_field_exists(purchase_order, "base_rounded_total", total_amount)
+
+		purchase_order.flags.ignore_validate = True
+		purchase_order.flags.ignore_mandatory = True
+		purchase_order.flags.ignore_permissions = True
+		purchase_order.insert(ignore_permissions=True)
+		purchase_order.flags.ignore_validate = True
+		purchase_order.flags.ignore_mandatory = True
+		purchase_orders.append(purchase_order)
+
+	frappe.db.commit()
+	return purchase_orders
+
+
+def _make_purchase_orders_for_sales_order(sales_order, selected_items):
+	try:
+		from erpnext.selling.doctype.sales_order import sales_order as sales_order_module
+
+		make_purchase_order_for_default_supplier = getattr(
+			sales_order_module,
+			"make_purchase_order_for_default_supplier",
+			None,
+		)
+		if make_purchase_order_for_default_supplier:
+			return make_purchase_order_for_default_supplier(
+				sales_order.name,
+				selected_items=selected_items,
+			) or []
+	except ImportError:
+		pass
+
+	frappe.logger("buy_in_minutes.payment").info(
+		f"Using manual Purchase Order creation fallback for {sales_order.name}"
+	)
+	return _build_manual_purchase_orders_for_sales_order(sales_order, selected_items)
 
 
 def _create_purchase_orders_for_sales_order(sales_order):
@@ -687,10 +983,8 @@ def _create_purchase_orders_for_sales_order(sales_order):
 		)
 		return linked_purchase_orders
 
-	from erpnext.selling.doctype.sales_order.sales_order import make_purchase_order_for_default_supplier
-
 	try:
-		purchase_orders = make_purchase_order_for_default_supplier(sales_order.name, selected_items=selected_items) or []
+		purchase_orders = _make_purchase_orders_for_sales_order(sales_order, selected_items)
 	except Exception:
 		frappe.log_error(
 			title="Purchase Order Creation Failed",
@@ -735,7 +1029,7 @@ def on_sales_order_submit(doc, method=None):
 
 @contextmanager
 def _as_administrator():
-	previous_user = frappe.session.user or "Guest"
+	previous_user = _normalize_user_name(getattr(frappe.session, "user", None))
 	frappe.set_user("Administrator")
 	try:
 		yield
@@ -752,13 +1046,21 @@ def _normalize_payment_schedule_dates(sales_order):
 			payment_row.due_date = transaction_date
 
 
-def _upsert_sales_order(checkout_items, sales_order_name=None, submit=False, delivery_address=None):
-	checkout_user = frappe.session.user
+def _upsert_sales_order(
+	checkout_items,
+	sales_order_name=None,
+	submit=False,
+	delivery_address=None,
+	delivery_date=None,
+	delivery_slot=None,
+	customer_location=None,
+):
+	checkout_user = _normalize_user_name(frappe.session.user)
 	customer = _get_or_create_customer_for_user(checkout_user)
 	company = _get_default_company()
 	order_date = nowdate()
-	delivery_date = order_date
-	order_items = _build_sales_order_item_rows(checkout_items, company)
+	delivery_date = delivery_date or order_date
+	order_items = _build_sales_order_item_rows(checkout_items, company, delivery_date)
 
 	if not order_items:
 		frappe.throw(_("Cart does not contain orderable items."))
@@ -790,6 +1092,8 @@ def _upsert_sales_order(checkout_items, sales_order_name=None, submit=False, del
 			"order_type": "Sales",
 		}
 	)
+	_set_doc_value_if_field_exists(sales_order, "custom_delivery_slot", _clean_text(delivery_slot))
+	_set_doc_value_if_field_exists(sales_order, "custom_customer_location", _clean_text(customer_location))
 	for item in order_items:
 		sales_order.append("items", item)
 
@@ -807,7 +1111,7 @@ def _upsert_sales_order(checkout_items, sales_order_name=None, submit=False, del
 		with _as_administrator():
 			sales_order.flags.ignore_permissions = True
 			sales_order.submit()
-			sales_order.purchase_orders = _create_purchase_orders_for_sales_order(sales_order)
+			sales_order.purchase_orders = _get_purchase_orders_for_sales_order(sales_order.name)
 
 	return sales_order
 
@@ -817,12 +1121,13 @@ def _build_checkout_params(checkout_items, sales_order_name=None, return_origin=
 	success_url = f"{return_origin}/buy-in-minutes#/payment/success?method=stripe&session_id={{CHECKOUT_SESSION_ID}}"
 	cancel_url = f"{return_origin}/buy-in-minutes#/payment/cancel"
 	stripe_currency = _get_stripe_settings().get("currency") or DEFAULT_CURRENCY
+	checkout_user = _normalize_user_name(frappe.session.user)
 	params = {
 		"mode": "payment",
 		"success_url": success_url,
 		"cancel_url": cancel_url,
-		"client_reference_id": frappe.session.user,
-		"metadata[user]": frappe.session.user,
+		"client_reference_id": checkout_user,
+		"metadata[user]": checkout_user,
 		"metadata[payment_method]": "stripe",
 	}
 	if sales_order_name:
@@ -869,13 +1174,16 @@ def _submit_sales_order(sales_order_name):
 				_("Sales Order {0} is cancelled.").format(sales_order_name)
 			)
 
+		was_draft = sales_order.docstatus == 0
+
 		# Submit the Sales Order after successful Stripe payment
 		if sales_order.docstatus == 0:
 			sales_order.flags.ignore_permissions = True
 			sales_order.submit()
 
-		# Create Purchase Orders first
-		_create_purchase_orders_for_sales_order(sales_order)
+		# Submitted orders may come from a previous callback, so keep this path idempotent.
+		if not was_draft:
+			_create_purchase_orders_for_sales_order(sales_order)
 
 		# Force the status after ERPNext completes its submit processing
 		if sales_order.docstatus == 1:
@@ -926,6 +1234,7 @@ def _get_sales_order_item_summary(sales_order):
 			"qty": flt(row.qty),
 			"rate": flt(row.rate),
 			"amount": flt(row.amount),
+			"size": getattr(row, "custom_size", None) or getattr(row, "size", None),
 		}
 		for row in sales_order.items
 	]
@@ -953,6 +1262,10 @@ def finalize_stripe_checkout(session_id=None):
 		)
 
 	sales_order = _submit_sales_order(sales_order_name)
+	restored_user = None
+	checkout_user = session.get("metadata", {}).get("user")
+	if frappe.session.user == "Guest" and checkout_user:
+		restored_user = _restore_checkout_user(checkout_user, sales_order.name)
 
 	return {
 		"success": True,
@@ -962,11 +1275,30 @@ def finalize_stripe_checkout(session_id=None):
 		"docstatus": sales_order.docstatus,
 		"payment_status": session.get("payment_status"),
 		"items": _get_sales_order_item_summary(sales_order),
+		"user": restored_user,
+	}
+
+
+@frappe.whitelist(allow_guest=True, methods=["POST"])
+def resume_checkout_session(checkout_resume_token=None):
+	payload = _read_checkout_resume_token(checkout_resume_token)
+	user = _restore_checkout_user(payload.get("user"), payload.get("sales_order"))
+
+	return {
+		"success": True,
+		"user": user,
 	}
 
 
 @frappe.whitelist(methods=["POST"])
-def sync_cart_sales_order(cart_items=None, sales_order_name=None, delivery_address=None):
+def sync_cart_sales_order(
+	cart_items=None,
+	sales_order_name=None,
+	delivery_address=None,
+	delivery_date=None,
+	delivery_slot=None,
+	customer_location=None,
+):
 	_require_checkout_user()
 
 	checkout_items = _get_checkout_items(cart_items)
@@ -974,6 +1306,9 @@ def sync_cart_sales_order(cart_items=None, sales_order_name=None, delivery_addre
 		checkout_items,
 		sales_order_name=sales_order_name,
 		delivery_address=delivery_address,
+		delivery_date=delivery_date,
+		delivery_slot=delivery_slot,
+		customer_location=customer_location,
 	)
 
 	return {
@@ -983,7 +1318,15 @@ def sync_cart_sales_order(cart_items=None, sales_order_name=None, delivery_addre
 
 
 @frappe.whitelist(methods=["POST"])
-def create_checkout_session(cart_items=None, sales_order_name=None, delivery_address=None, return_origin=None):
+def create_checkout_session(
+	cart_items=None,
+	sales_order_name=None,
+	delivery_address=None,
+	return_origin=None,
+	delivery_date=None,
+	delivery_slot=None,
+	customer_location=None,
+):
 	_require_checkout_user()
 
 	checkout_items = _get_checkout_items(cart_items)
@@ -991,6 +1334,9 @@ def create_checkout_session(cart_items=None, sales_order_name=None, delivery_add
 		checkout_items,
 		sales_order_name=sales_order_name,
 		delivery_address=delivery_address,
+		delivery_date=delivery_date,
+		delivery_slot=delivery_slot,
+		customer_location=customer_location,
 	)
 	session = _stripe_request(
 		"/checkout/sessions",
@@ -1002,11 +1348,19 @@ def create_checkout_session(cart_items=None, sales_order_name=None, delivery_add
 		"checkout_url": session.get("url"),
 		"session_id": session.get("id"),
 		"sales_order": sales_order.name,
+		"checkout_resume_token": _create_checkout_resume_token(frappe.session.user, sales_order.name),
 	}
 
 
 @frappe.whitelist(methods=["POST"])
-def create_cash_on_delivery_order(cart_items=None, sales_order_name=None, delivery_address=None):
+def create_cash_on_delivery_order(
+	cart_items=None,
+	sales_order_name=None,
+	delivery_address=None,
+	delivery_date=None,
+	delivery_slot=None,
+	customer_location=None,
+):
 	_require_checkout_user()
 
 	checkout_items = _get_checkout_items(cart_items)
@@ -1015,6 +1369,9 @@ def create_cash_on_delivery_order(cart_items=None, sales_order_name=None, delive
 		sales_order_name=sales_order_name,
 		submit=True,
 		delivery_address=delivery_address,
+		delivery_date=delivery_date,
+		delivery_slot=delivery_slot,
+		customer_location=customer_location,
 	)
 	purchase_orders = getattr(sales_order, "purchase_orders", None)
 

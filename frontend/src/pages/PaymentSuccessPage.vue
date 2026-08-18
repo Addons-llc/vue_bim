@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import { getSalesOrder } from '../api/orderApi'
 import { finalizeStripeCheckout } from '../api/paymentApi'
+import { setCurrentUser } from '../data/authStore'
 import { clearCart } from '../data/cartStore'
 
 const route = useRoute()
@@ -51,7 +52,6 @@ async function loadOrderedProducts() {
   if (paymentMethod.value === 'cod') {
     orderedProducts.value = loadStoredCodOrderItems()
     sessionStorage.removeItem(LAST_COD_ORDER_ITEMS_STORAGE_KEY)
-    return
   }
 
   if (!salesOrderName.value) {
@@ -63,9 +63,21 @@ async function loadOrderedProducts() {
 
   try {
     const response = await getSalesOrder(salesOrderName.value)
-    orderedProducts.value = response?.message?.items || []
+    const fetchedPurchaseOrders = response?.message?.purchase_orders || []
+    console.log('Sales order fetch response', response)
+    console.log('Purchase order response', fetchedPurchaseOrders)
+
+    if (fetchedPurchaseOrders.length) {
+      purchaseOrders.value = fetchedPurchaseOrders
+    }
+
+    if (!orderedProducts.value.length) {
+      orderedProducts.value = response?.message?.items || []
+    }
   } catch (error) {
-    orderedProducts.value = []
+    if (!orderedProducts.value.length) {
+      orderedProducts.value = []
+    }
     orderedProductsError.value = error.message || 'Unable to load ordered products.'
   } finally {
     isLoadingOrderedProducts.value = false
@@ -79,15 +91,16 @@ onMounted(async () => {
       salesOrderName.value = response?.message?.sales_order || salesOrderName.value
       purchaseOrders.value = response?.message?.purchase_orders || purchaseOrders.value
       orderedProducts.value = response?.message?.items || []
+      if (response?.message?.user) {
+        setCurrentUser(response.message.user)
+      }
     } catch (error) {
       finalizeError.value = error.message
       return
     }
   }
 
-  if (!orderedProducts.value.length) {
-    await loadOrderedProducts()
-  }
+  await loadOrderedProducts()
   clearCart()
 })
 </script>

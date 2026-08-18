@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { getCurrentUser } from '../api/authApi'
+import { getCurrentUser, hasPersistedPhoneAuthState, restoreLoginSession } from '../api/authApi'
 import { getOrderHistory } from '../api/orderHistoryApi'
 import { clearCurrentUser, currentUser, setCurrentUser } from '../data/authStore'
 
@@ -36,10 +36,21 @@ async function loadOrders() {
     if (message.is_authenticated) {
       setCurrentUser(message.user)
     } else {
-      clearCurrentUser()
+      const restoredSession = await restoreLoginSession().catch(() => null)
+      const restoredUser = restoredSession?.message?.user
+
+      if (restoredUser) {
+        setCurrentUser(restoredUser)
+      } else if (currentUser.value && hasPersistedPhoneAuthState()) {
+        // Keep the local website user while a persisted phone-auth state exists.
+      } else {
+        clearCurrentUser()
+      }
     }
   } catch {
-    // The redirect below handles unauthenticated sessions.
+    if (!currentUser.value && !hasPersistedPhoneAuthState()) {
+      clearCurrentUser()
+    }
   }
 
   if (!currentUser.value) {
@@ -80,7 +91,15 @@ onMounted(loadOrders)
     <p v-if="ordersError" class="form-message error-message">{{ ordersError }}</p>
 
     <section v-if="hasOrders" class="orders-list" aria-label="Order history">
-      <article v-for="order in orders" :key="order.name" class="order-history-card">
+      <article
+        v-for="order in orders"
+        :key="order.name"
+        class="order-history-card is-clickable"
+        role="button"
+        tabindex="0"
+        @click="router.push({ name: 'order-details', params: { orderName: order.name } })"
+        @keydown.enter="router.push({ name: 'order-details', params: { orderName: order.name } })"
+      >
         <header class="order-history-header">
           <div>
             <strong>{{ order.name }}</strong>

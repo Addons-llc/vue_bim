@@ -42,6 +42,10 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  stackedTile: {
+    type: Boolean,
+    default: false,
+  },
 })
 
 const emit = defineEmits(['select', 'view-all'])
@@ -154,7 +158,10 @@ function viewAll() {
         v-for="category in visibleCategories"
         :key="category.id"
         class="category-tile"
-        :class="{ 'is-active': activeCategory === category.name }"
+        :class="{
+          'is-active': activeCategory === category.name,
+          'is-stacked': stackedTile,
+        }"
         type="button"
         @click="selectCategory(category)"
       >

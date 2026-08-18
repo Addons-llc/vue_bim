@@ -1,7 +1,8 @@
 <script setup>
 import { onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { getCurrentUser, logout } from './api/authApi'
+import { getCurrentUser, hasPersistedPhoneAuthState, logout, restoreLoginSession } from './api/authApi'
+import { resumeCheckoutSession } from './api/paymentApi'
 import { clearCurrentUser, currentUser, setCurrentUser } from './data/authStore'
 import DefaultLayout from './layouts/DefaultLayout.vue'
 
@@ -10,6 +11,25 @@ const router = useRouter()
 
 onMounted(async () => {
   try {
+    let checkoutResumeUser = null
+
+    // The success page restores the session itself via finalizeStripeCheckout
+    // (using the Stripe session id); resuming here too would race it and can
+    // spuriously log the user out if this attempt loses the race.
+    if (route.name !== 'payment-success') {
+      try {
+        const checkoutResumeResponse = await resumeCheckoutSession()
+        checkoutResumeUser = checkoutResumeResponse?.message?.user
+      } catch (error) {
+        console.error('Unable to resume checkout session', error)
+      }
+    }
+
+    if (checkoutResumeUser) {
+      setCurrentUser(checkoutResumeUser)
+      return
+    }
+
     const response = await getCurrentUser()
     const message = response?.message || {}
 
@@ -17,11 +37,28 @@ onMounted(async () => {
       setCurrentUser(message.user)
       return
     }
+
+    const restoredSession = await restoreLoginSession().catch(() => null)
+    const restoredUser = restoredSession?.message?.user
+
+    if (restoredUser) {
+      setCurrentUser(restoredUser)
+      return
+    }
+
+    if (currentUser.value && hasPersistedPhoneAuthState()) {
+      return
+    }
+
+    clearCurrentUser()
+    return
   } catch (error) {
     console.error('Unable to load current user session', error)
   }
 
-  clearCurrentUser()
+  if (!currentUser.value && !hasPersistedPhoneAuthState()) {
+    clearCurrentUser()
+  }
 })
 
 function navigateToLogin() {

@@ -247,6 +247,31 @@
   color: #2563eb;
 }
 
+.category-tile.is-stacked {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+  width: 100%;
+  min-height: 0;
+}
+
+.category-tile.is-stacked .category-image-wrap {
+  flex: none;
+  width: 100%;
+  height: auto;
+  max-width: none;
+  aspect-ratio: 1;
+}
+
+.category-tile.is-stacked .category-copy {
+  padding-top: 0;
+}
+
+.category-tile.is-stacked .category-name {
+  min-height: 0;
+  text-align: left;
+}
+
 .category-section--category .category-grid {
   grid-template-columns: repeat(10, minmax(0, 1fr));
   gap: 24px 16px;
@@ -387,25 +412,95 @@
 }
 
 .home-rail-brands .category-grid.is-manual-scroll .category-tile {
-  flex-basis: auto;
-  width: fit-content;
-  min-width: 210px;
-  max-width: 320px;
+  flex: 0 0 112px;
+  width: 112px;
+  min-width: 112px;
+  max-width: 112px;
+}
+
+.home-rail-brands .category-tile.is-stacked,
+.home-rail-categories .category-tile.is-stacked,
+.home-rail-store .category-tile.is-stacked {
+  max-width: 140px;
+  border-radius: 14px;
+}
+
+.home-rail-brands .category-image-wrap {
+  flex: 0 0 124px;
+  width: 124px;
+  height: 124px;
+  max-width: 124px;
+  border-radius: 8px;
+  clip-path: none;
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+
+.dashboard-hero ~ .category-section.home-rail-brands .category-image-wrap,
+.dashboard-hero ~ .category-section.home-rail-store .category-image-wrap {
+  flex: 0 0 124px;
+  width: 124px;
+  height: 124px;
+  max-width: 124px;
 }
 
 .home-rail-brands .brand-card-details {
-  flex-wrap: nowrap;
-  align-items: flex-start;
+  display: none;
+}
+
+.home-rail-store .category-image-wrap {
+  flex: 0 0 124px;
+  width: 124px;
+  height: 124px;
+  max-width: 124px;
+  border-radius: 8px;
+  clip-path: none;
+  -webkit-mask-image: none;
+  mask-image: none;
 }
 
 .home-rail-store .category-grid.is-manual-scroll .category-tile {
-  flex-basis: auto;
-  width: fit-content;
-  min-width: 210px;
-  max-width: 320px;
+  flex: 0 0 112px;
+  width: 112px;
+  min-width: 112px;
+  max-width: 112px;
 }
 
 .home-rail-store .item-card-details {
-  flex-wrap: nowrap;
-  align-items: flex-start;
+  display: none;
+}
+
+.home-rail-brands .category-tile.is-stacked .category-image-wrap,
+.home-rail-store .category-tile.is-stacked .category-image-wrap,
+.home-rail-categories .category-tile.is-stacked .category-image-wrap {
+  flex: none;
+  width: 100%;
+  height: auto;
+  max-width: none;
+  aspect-ratio: 1;
+  border-radius: 8px;
+  clip-path: none;
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+
+.home-rail-brands .category-tile.is-stacked .category-image-wrap,
+.home-rail-categories .category-tile.is-stacked .category-image-wrap,
+.home-rail-store .category-tile.is-stacked .category-image-wrap {
+  border-radius: 50%;
+  clip-path: circle(50%);
+  -webkit-mask-image: radial-gradient(circle, #000 99%, transparent 100%);
+  mask-image: radial-gradient(circle, #000 99%, transparent 100%);
+}
+
+.home-rail-brands .category-tile.is-stacked .category-copy,
+.home-rail-categories .category-tile.is-stacked .category-copy,
+.home-rail-store .category-tile.is-stacked .category-copy {
+  align-items: center;
+}
+
+.home-rail-brands .category-tile.is-stacked .category-name,
+.home-rail-categories .category-tile.is-stacked .category-name,
+.home-rail-store .category-tile.is-stacked .category-name {
+  text-align: center;
 }

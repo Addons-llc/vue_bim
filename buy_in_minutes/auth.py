@@ -1,5 +1,6 @@
 import re
 import time
+import json
 
 import frappe
 import frappe.sessions
@@ -24,11 +25,19 @@ DEFAULT_OTP_REQUEST_COOLDOWN_SECONDS = 60
 DEFAULT_PHONE_LOGIN_SESSION_EXPIRY = "87600:00:00"
 OTP_RATE_LIMIT_CACHE_VERSION = "v2"
 PROFILE_TOKEN_TTL_SECONDS = 10 * 60
+WEBSITE_LOGIN_TOKEN_TTL_SECONDS = 30 * 24 * 60 * 60
+PHONE_AUTH_FLOW_TOKEN_TTL_SECONDS = 10 * 60
 
 
 def _error(message, status_code=400):
 	frappe.local.response["http_status_code"] = status_code
 	return {"success": False, "message": message}
+
+
+def _log_phone_auth_response(action, phone_number, payload):
+	frappe.logger("buy_in_minutes.auth").info(
+		f"{action} response for {phone_number}: {frappe.as_json(payload, indent=None)}"
+	)
 
 
 def _get_conf_value(key):
@@ -133,6 +142,14 @@ def _get_phone_profile_token_key(profile_token):
 	return frappe.cache.make_key(f"phone-profile-token:{OTP_RATE_LIMIT_CACHE_VERSION}:{profile_token}")
 
 
+def _get_website_login_token_key(login_token):
+	return frappe.cache.make_key(f"website-login-token:{OTP_RATE_LIMIT_CACHE_VERSION}:{login_token}")
+
+
+def _get_phone_auth_flow_token_key(flow_token):
+	return frappe.cache.make_key(f"phone-auth-flow:{OTP_RATE_LIMIT_CACHE_VERSION}:{flow_token}")
+
+
 def _check_otp_request_cooldown(phone_number):
 	cooldown_seconds = _get_otp_request_cooldown_seconds()
 	if cooldown_seconds <= 0:
@@ -189,6 +206,77 @@ def _validate_phone_profile_token(profile_token, phone_number):
 def _clear_phone_profile_token(profile_token):
 	if profile_token:
 		frappe.cache.delete_value(_get_phone_profile_token_key(profile_token))
+
+
+def _create_phone_auth_flow_token(phone_number, mode, user_name=None):
+	flow_token = frappe.generate_hash(length=32)
+	frappe.cache.setex(
+		_get_phone_auth_flow_token_key(flow_token),
+		PHONE_AUTH_FLOW_TOKEN_TTL_SECONDS,
+		json.dumps(
+			{
+				"phone_number": phone_number,
+				"mode": mode,
+				"user_name": user_name,
+			}
+		),
+	)
+	return flow_token
+
+
+def _read_phone_auth_flow_token(flow_token, phone_number):
+	flow_token = (flow_token or "").strip()
+	if not flow_token:
+		frappe.throw(_("Missing phone auth flow token."), frappe.AuthenticationError)
+
+	payload = frappe.cache.get(_get_phone_auth_flow_token_key(flow_token))
+	if isinstance(payload, bytes):
+		payload = payload.decode()
+
+	try:
+		payload = json.loads(payload or "{}")
+	except Exception:
+		payload = {}
+
+	if payload.get("phone_number") != phone_number:
+		frappe.throw(_("Phone verification session does not match this number."), frappe.AuthenticationError)
+
+	if payload.get("mode") not in {"sign_in", "sign_up"}:
+		frappe.throw(_("Phone verification session expired. Please try again."), frappe.AuthenticationError)
+
+	return payload
+
+
+def _create_website_login_token(user_name):
+	user_name = _normalize_login_user_name(user_name)
+	login_token = frappe.generate_hash(length=32)
+	frappe.cache.setex(
+		_get_website_login_token_key(login_token),
+		WEBSITE_LOGIN_TOKEN_TTL_SECONDS,
+		user_name,
+	)
+	return login_token
+
+
+def _read_website_login_token(login_token):
+	login_token = (login_token or "").strip()
+	if not login_token:
+		frappe.throw(_("Missing login token."), frappe.AuthenticationError)
+
+	user_name = frappe.cache.get(_get_website_login_token_key(login_token))
+	if isinstance(user_name, bytes):
+		user_name = user_name.decode()
+
+	return _normalize_login_user_name(user_name)
+
+
+def _get_login_response_payload(user):
+	return {
+		"success": True,
+		**_get_phone_user_payload(user, False),
+		"session_token": _create_website_login_token(user.name),
+		"message": _("Logged in successfully."),
+	}
 
 
 def _format_twilio_error(exc):
@@ -269,13 +357,8 @@ def _normalize_phone(phone_number):
 
 
 def _get_existing_website_user_by_phone(phone_number):
-	user_name = frappe.db.get_value(
-		"User",
-		{"mobile_no": phone_number, "user_type": "Website User"},
-		"name",
-	)
-	if user_name:
-		user = frappe.get_doc("User", user_name)
+	user = _get_existing_user_by_phone(phone_number)
+	if user and user.user_type == "Website User":
 		if not user.enabled:
 			frappe.throw(_("User disabled or missing"), frappe.AuthenticationError)
 		return user
@@ -283,12 +366,95 @@ def _get_existing_website_user_by_phone(phone_number):
 	return None
 
 
+def _get_existing_user_by_phone(phone_number):
+	user_name = frappe.db.get_value("User", {"mobile_no": phone_number}, "name")
+	if not user_name:
+		user_name = frappe.db.get_value("User", {"phone": phone_number}, "name")
+
+	if not user_name:
+		return None
+
+	return frappe.get_doc("User", user_name)
+
+
+def _build_phone_login_email(phone_number):
+	phone_digits = re.sub(r"\D", "", phone_number or "")
+	if not phone_digits:
+		phone_digits = frappe.generate_hash(length=12).lower()
+
+	return f"{phone_digits}@{PHONE_USER_EMAIL_DOMAIN}"
+
+
+def _create_phone_website_user(phone_number):
+	existing_user = _get_existing_user_by_phone(phone_number)
+	if existing_user:
+		if existing_user.user_type != "Website User":
+			frappe.throw(_("This phone number is already linked to a non-website user account."))
+
+		if not existing_user.enabled:
+			frappe.throw(_("User disabled or missing"), frappe.AuthenticationError)
+
+		return existing_user
+
+	email = _build_phone_login_email(phone_number)
+	if frappe.db.exists("User", email):
+		email = f"{frappe.generate_hash(length=12).lower()}@{PHONE_USER_EMAIL_DOMAIN}"
+
+	user = frappe.get_doc(
+		{
+			"doctype": "User",
+			"email": email,
+			"first_name": _("Customer"),
+			"last_name": "",
+			"full_name": _("Customer"),
+			"enabled": 1,
+			"user_type": "Website User",
+			"send_welcome_email": 0,
+			"mobile_no": phone_number,
+			"phone": phone_number,
+		}
+	)
+
+	if frappe.db.exists("Role", "Customer"):
+		user.append("roles", {"role": "Customer"})
+
+	user.insert(ignore_permissions=True)
+	frappe.db.commit()
+	return user
+
+
+def _get_phone_login_lookup(phone_number):
+	existing_user = _get_existing_user_by_phone(phone_number)
+	if not existing_user:
+		return {
+			"user": None,
+			"website_user": None,
+			"user_exists": False,
+			"website_user_exists": False,
+		}
+
+	if not existing_user.enabled:
+		frappe.throw(_("User disabled or missing"), frappe.AuthenticationError)
+
+	website_user = existing_user if existing_user.user_type == "Website User" else None
+	return {
+		"user": existing_user,
+		"website_user": website_user,
+		"user_exists": True,
+		"website_user_exists": bool(website_user),
+	}
+
+
 def _create_profile_website_user(full_name, email, phone_number):
 	if frappe.db.exists("User", email):
 		frappe.throw(_("A user with this email address already exists."))
 
-	if _get_existing_website_user_by_phone(phone_number):
-		frappe.throw(_("A user with this phone number already exists. Please sign in again."))
+	existing_user = _get_existing_user_by_phone(phone_number)
+	if existing_user:
+		if existing_user.user_type == "Website User":
+			frappe.throw(_("A user with this phone number already exists. Please sign in again."))
+
+		frappe.throw(_("This phone number is already linked to a non-website user account."))
 
 	first_name, last_name = _split_full_name(full_name)
 	user = frappe.get_doc(
@@ -333,20 +499,24 @@ def _get_phone_user_payload(user, is_new_user):
 	}
 
 
+def _normalize_login_user_name(user_name):
+	user_name = str(user_name or "").strip()
+	if not user_name or user_name.lower() in {"guest", "none", "null"}:
+		frappe.throw(_("Unable to restore your session. Please sign in again."), frappe.AuthenticationError)
+
+	return user_name
+
+
 def _login_user(user_name):
+	user_name = _normalize_login_user_name(user_name)
+	session_expiry = _get_phone_login_session_expiry()
+	_ensure_global_session_expiry(session_expiry)
+
 	frappe.local.login_manager = LoginManager()
 	frappe.local.login_manager.login_as(user_name)
 
-	session_expiry = _get_phone_login_session_expiry()
-	_ensure_global_session_expiry(session_expiry)
 	frappe.local.session_obj.data.data.session_expiry = session_expiry
 	frappe.local.session_obj.update(force=True)
-	frappe.local.cookie_manager.set_cookie(
-		"sid",
-		frappe.session.sid,
-		max_age=get_expiry_in_seconds(session_expiry),
-		httponly=True,
-	)
 	frappe.db.commit()
 
 
@@ -420,6 +590,16 @@ def get_current_user():
 @frappe.whitelist(allow_guest=True, methods=["GET", "POST"])
 def request_phone_otp(phone_number=None, phoneNumber=None):
 	phone_number = _normalize_phone(phone_number or phoneNumber)
+	lookup = _get_phone_login_lookup(phone_number)
+	if lookup["user"] and not lookup["website_user"]:
+		return _error(_("This phone number is already linked to a non-website user account."))
+	mode = "sign_in" if lookup["website_user"] else "sign_up"
+	flow_token = _create_phone_auth_flow_token(
+		phone_number,
+		mode,
+		lookup["website_user"].name if lookup["website_user"] else None,
+	)
+
 	cooldown_response = _check_otp_request_cooldown(phone_number)
 	if cooldown_response:
 		return cooldown_response
@@ -430,11 +610,27 @@ def request_phone_otp(phone_number=None, phoneNumber=None):
 
 	if _is_test_otp_enabled(phone_number):
 		_set_otp_request_cooldown(phone_number)
-		return {
+		response = {
 			"success": True,
 			"status": "test",
+			"auth_flow_token": flow_token,
+			"auth_mode": mode,
+			"user_exists": lookup["user_exists"],
+			"website_user_exists": lookup["website_user_exists"],
 			"message": _("Test OTP enabled. Use the configured OTP to continue."),
 		}
+		_log_phone_auth_response(
+			"request_phone_otp",
+			phone_number,
+			{
+				"success": response["success"],
+				"status": response["status"],
+				"auth_mode": response["auth_mode"],
+				"user_exists": response["user_exists"],
+				"website_user_exists": response["website_user_exists"],
+			},
+		)
+		return response
 
 	client, service_sid = _get_twilio_client()
 
@@ -452,21 +648,38 @@ def request_phone_otp(phone_number=None, phoneNumber=None):
 
 	_set_otp_request_cooldown(phone_number)
 
-	return {
+	response = {
 		"success": True,
 		"status": verification.status,
+		"auth_flow_token": flow_token,
+		"auth_mode": mode,
+		"user_exists": lookup["user_exists"],
+		"website_user_exists": lookup["website_user_exists"],
 		"message": _("OTP sent successfully."),
 	}
+	_log_phone_auth_response(
+		"request_phone_otp",
+		phone_number,
+		{
+			"success": response["success"],
+			"status": response["status"],
+			"auth_mode": response["auth_mode"],
+			"user_exists": response["user_exists"],
+			"website_user_exists": response["website_user_exists"],
+		},
+	)
+	return response
 
 
 @frappe.whitelist(allow_guest=True, methods=["POST"])
-def verify_phone_otp(phone_number=None, otp=None, phoneNumber=None):
+def verify_phone_otp(phone_number=None, otp=None, phoneNumber=None, auth_flow_token=None):
 	phone_number = _normalize_phone(phone_number or phoneNumber)
 	rate_limit_response = _check_otp_rate_limit("verify_phone_otp", phone_number, _get_otp_verify_limit())
 	if rate_limit_response:
 		return rate_limit_response
 
 	otp = (otp or "").strip()
+	auth_flow = _read_phone_auth_flow_token(auth_flow_token, phone_number)
 
 	if not OTP_PATTERN.match(otp):
 		return _error(_("Enter a valid OTP."))
@@ -476,26 +689,32 @@ def verify_phone_otp(phone_number=None, otp=None, phoneNumber=None):
 		if otp != test_otp:
 			return _error(_("Invalid OTP."), 400)
 
-		user = _get_existing_website_user_by_phone(phone_number)
-		if not user:
-			return {
-				"success": True,
-				"is_new_user": True,
-				"website_user_created": False,
-				"website_user_exists": False,
-				"needs_profile": True,
-				"profile_completed": False,
-				"profile_token": _create_phone_profile_token(phone_number),
-				"message": _("OTP verified. Complete your profile to continue."),
-			}
+		if auth_flow["mode"] == "sign_in":
+			user = frappe.get_doc("User", auth_flow["user_name"])
+			is_new_user = False
+		else:
+			user = _create_phone_website_user(phone_number)
+			is_new_user = True
 
 		_login_user(user.name)
 
-		return {
-			"success": True,
-			**_get_phone_user_payload(user, False),
-			"message": _("Logged in successfully."),
+		response = {
+			**_get_login_response_payload(user),
+			**_get_phone_user_payload(user, is_new_user),
 		}
+		_log_phone_auth_response(
+			"verify_phone_otp",
+			phone_number,
+			{
+				"success": response["success"],
+				"auth_mode": auth_flow["mode"],
+				"is_new_user": response["is_new_user"],
+				"website_user_exists": response["website_user_exists"],
+				"profile_completed": response["profile_completed"],
+				"user_name": response["user"]["name"],
+			},
+		)
+		return response
 
 	client, service_sid = _get_twilio_client()
 
@@ -514,26 +733,32 @@ def verify_phone_otp(phone_number=None, otp=None, phoneNumber=None):
 	if check.status != "approved":
 		return _error(_("Invalid OTP."), 400)
 
-	user = _get_existing_website_user_by_phone(phone_number)
-	if not user:
-		return {
-			"success": True,
-			"is_new_user": True,
-			"website_user_created": False,
-			"website_user_exists": False,
-			"needs_profile": True,
-			"profile_completed": False,
-			"profile_token": _create_phone_profile_token(phone_number),
-			"message": _("OTP verified. Complete your profile to continue."),
-		}
+	if auth_flow["mode"] == "sign_in":
+		user = frappe.get_doc("User", auth_flow["user_name"])
+		is_new_user = False
+	else:
+		user = _create_phone_website_user(phone_number)
+		is_new_user = True
 
 	_login_user(user.name)
 
-	return {
-		"success": True,
-		**_get_phone_user_payload(user, False),
-		"message": _("Logged in successfully."),
+	response = {
+		**_get_login_response_payload(user),
+		**_get_phone_user_payload(user, is_new_user),
 	}
+	_log_phone_auth_response(
+		"verify_phone_otp",
+		phone_number,
+		{
+			"success": response["success"],
+			"auth_mode": auth_flow["mode"],
+			"is_new_user": response["is_new_user"],
+			"website_user_exists": response["website_user_exists"],
+			"profile_completed": response["profile_completed"],
+			"user_name": response["user"]["name"],
+		},
+	)
+	return response
 
 
 @frappe.whitelist(allow_guest=True, methods=["POST"])
@@ -561,6 +786,7 @@ def complete_phone_profile(full_name=None, email=None, phone_number=None, phoneN
 				"full_name": user.full_name,
 				"user_image": user.user_image,
 			},
+			"session_token": _create_website_login_token(user.name),
 			"message": _("Profile completed successfully."),
 		}
 
@@ -595,5 +821,33 @@ def complete_phone_profile(full_name=None, email=None, phone_number=None, phoneN
 			"full_name": user.full_name,
 			"user_image": user.user_image,
 		},
+		"session_token": _create_website_login_token(user.name),
 		"message": _("Profile completed successfully."),
+	}
+
+
+@frappe.whitelist(allow_guest=True, methods=["POST"])
+def restore_login_session(session_token=None):
+	user_name = _read_website_login_token(session_token)
+
+	if not frappe.db.exists("User", user_name):
+		frappe.throw(_("Login user was not found."), frappe.AuthenticationError)
+
+	if frappe.db.get_value("User", user_name, "enabled") != 1:
+		frappe.throw(_("Login user is disabled."), frappe.AuthenticationError)
+
+	_login_user(user_name)
+	user = frappe.get_doc("User", user_name)
+	return {
+		"success": True,
+		"user": {
+			"name": user.name,
+			"email": user.email,
+			"mobile_no": user.mobile_no,
+			"full_name": user.full_name,
+			"user_type": user.user_type,
+			"user_image": user.user_image,
+		},
+		"session_token": _create_website_login_token(user.name),
+		"message": _("Logged in successfully."),
 	}

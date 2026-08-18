@@ -1,7 +1,7 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { requestPhoneOtp, verifyPhoneOtp } from '../api/authApi'
+import { AUTH_FLOW_TOKEN_STORAGE_KEY, requestPhoneOtp, verifyPhoneOtp } from '../api/authApi'
 import { setCurrentUser } from '../data/authStore'
 
 const OTP_LENGTH = 6
@@ -21,6 +21,14 @@ let digitInputEls = []
 const phoneNumber = computed(() => {
   const routePhone = route.query.phone
   return Array.isArray(routePhone) ? routePhone[0] : routePhone || ''
+})
+const authFlowToken = computed(() => {
+  const routeFlow = route.query.flow
+  if (Array.isArray(routeFlow) ? routeFlow[0] : routeFlow) {
+    return Array.isArray(routeFlow) ? routeFlow[0] : routeFlow || ''
+  }
+
+  return localStorage.getItem(AUTH_FLOW_TOKEN_STORAGE_KEY) || ''
 })
 
 const canResendOtp = computed(() => resendSecondsRemaining.value === 0 && !isSubmitting.value)
@@ -48,7 +56,7 @@ function startResendTimer() {
 }
 
 onMounted(() => {
-  if (!phoneNumber.value) {
+  if (!phoneNumber.value || !authFlowToken.value) {
     router.replace({ name: 'login' })
     return
   }
@@ -197,8 +205,9 @@ async function handleOtpVerification() {
   try {
     console.log('Phone OTP verify payload', {
       phoneNumber: phoneNumber.value,
+      authFlowToken: authFlowToken.value,
     })
-    const response = await verifyPhoneOtp(phoneNumber.value, otp.value)
+    const response = await verifyPhoneOtp(phoneNumber.value, otp.value, authFlowToken.value)
     console.log('Phone OTP verify response', response)
     const otpResult = getOtpResult(response)
 
@@ -250,6 +259,16 @@ async function resendOtp() {
     console.log('Phone OTP resend response', response)
     resetOtpDigits()
     successMessage.value = 'OTP sent to your phone number.'
+    if (response?.message?.auth_flow_token) {
+      await router.replace({
+        name: 'login-otp',
+        query: {
+          ...route.query,
+          flow: response.message.auth_flow_token,
+          mode: response?.message?.auth_mode || '',
+        },
+      })
+    }
     startResendTimer()
   } catch (error) {
     console.error('Phone OTP resend failed', error)

@@ -36,6 +36,15 @@ const brandProducts = computed(() =>
 const brandMainDescription = computed(() =>
   brandDescription.value || 'Browse published products available from this brand.',
 )
+const isBrandDescriptionExpanded = ref(false)
+const shouldTruncateBrandDescription = computed(() => brandMainDescription.value.length > 300)
+const visibleBrandDescription = computed(() => {
+  if (isBrandDescriptionExpanded.value || !shouldTruncateBrandDescription.value) {
+    return brandMainDescription.value
+  }
+
+  return `${brandMainDescription.value.slice(0, 300).trim()}...`
+})
 const dummyBrandRating = {
   score: '4.7',
   reviewCount: 128,
@@ -52,6 +61,10 @@ function openProductDetails(product) {
 
 function hideBrokenBrandBanner() {
   failedBrandBannerImage.value = brandBannerImage.value
+}
+
+function toggleBrandDescription() {
+  isBrandDescriptionExpanded.value = !isBrandDescriptionExpanded.value
 }
 
 async function loadBrandProducts() {
@@ -82,6 +95,7 @@ watch(brandName, () => {
   brandRecord.value = null
   loadedProducts.value = []
   failedBrandBannerImage.value = ''
+  isBrandDescriptionExpanded.value = false
   loadBrandProducts()
 })
 </script>
@@ -100,16 +114,11 @@ watch(brandName, () => {
         </span>
         <h1>{{ brandDisplayName }}</h1>
       </div>
-      <p class="supplier-profile-summary">{{ brandMainDescription }}</p>
 
       <section class="supplier-profile-info" aria-label="Brand information">
         <div class="supplier-profile-info-row">
           <span>Brand</span>
           <p>{{ brandDetails.brand }}</p>
-        </div>
-        <div class="supplier-profile-info-row">
-          <span>Brand Details</span>
-          <p>{{ brandMainDescription }}</p>
         </div>
       </section>
     </aside>
@@ -138,7 +147,15 @@ watch(brandName, () => {
       <section class="supplier-store-overview">
         <div class="supplier-store-description" aria-label="Brand description">
           <h2>About {{ brandDisplayName }}</h2>
-          <p>{{ brandMainDescription }}</p>
+          <p>{{ visibleBrandDescription }}</p>
+          <button
+            v-if="shouldTruncateBrandDescription"
+            class="supplier-description-toggle"
+            type="button"
+            @click="toggleBrandDescription"
+          >
+            {{ isBrandDescriptionExpanded ? 'Read less' : 'Read more' }}
+          </button>
         </div>
 
         <div class="supplier-ratings-panel" aria-label="Brand ratings">

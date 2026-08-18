@@ -61,6 +61,18 @@ const productImages = computed(() => {
 
   return images.filter(Boolean)
 })
+const defaultProductSize = computed(() => {
+  const rawSize = props.product?.selectedSize || props.product?.size || props.product?.customSize || props.product?.custom_size || ''
+
+  if (Array.isArray(rawSize)) {
+    return rawSize.map((size) => String(size).trim()).find(Boolean) || ''
+  }
+
+  return String(rawSize)
+    .split(/\r?\n|[|,;/]+/)
+    .map((size) => size.trim())
+    .find(Boolean) || String(rawSize).trim()
+})
 
 const productDetails = computed(() => {
   if (!props.product) {
@@ -74,7 +86,7 @@ const productDetails = computed(() => {
   return [
     { label: 'Pack size', value: props.product.description },
     { label: 'Category', value: props.product.category },
-    { label: 'Delivery', value: props.product.deliveryTime },
+    { label: 'Delivery', value: props.product.deliveryTime || '18 min' },
   ].filter((detail) => detail.value)
 })
 
@@ -94,7 +106,10 @@ function moveProductDetailImage(direction) {
 
 function addSelectedProductToCart() {
   if (props.product) {
-    addProductToCart(props.product)
+    addProductToCart({
+      ...props.product,
+      selectedSize: defaultProductSize.value,
+    })
   }
 }
 
@@ -186,7 +201,7 @@ watch(
 
         <div class="product-detail-meta">
           <span>★ {{ product.rating }}</span>
-          <span>{{ product.deliveryTime }}</span>
+          <span>{{ product.deliveryTime || '18 min' }}</span>
           <span>{{ product.category }}</span>
         </div>
 

@@ -89,11 +89,29 @@ function mapSupplierStoreToBrand(store) {
     bannerImage: getImageUrl(storeBanner),
     primaryColour: store.primary_colour || '',
     secondaryColour: store.secondary_colour || '',
-    contactNumber: store.contact_number || '',
+    contactNumber: store.contact_number
+      || store.phone
+      || store.mobile_no
+      || store.contact_mobile
+      || store.store_phone
+      || store.store_contact_number
+      || store.custom_contact_number
+      || '',
     whatsappNumber: store.whatsapp_number || '',
-    email: store.email || store.contact_email || '',
-    website: store.website || store.store_website || '',
-    description: store.description || store.store_details || store.about || '',
+    email: store.email
+      || store.contact_email
+      || store.store_email
+      || store.custom_email
+      || store.custom_contact_email
+      || '',
+    website: store.website
+      || store.store_website
+      || store.website_url
+      || store.custom_website
+      || store.custom_store_website
+      || '',
+    shortDescription: store.short_description || '',
+    description: store.short_description || store.description || store.store_details || store.about || '',
     supplierDetails: store.supplier_details || '',
     sellerSince: store.seller_since || store.creation || '',
     productIds: getStoreProductIds(store),

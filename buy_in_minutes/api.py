@@ -39,6 +39,7 @@ SUPPLIER_DETAIL_FIELDS = (
 	"custom_supplier_image",
 	"custom_supplier_banner",
 	"custom_supplier_banner_image",
+	"custom_google_address",
 	"custom_seller_since",
 )
 
@@ -86,37 +87,6 @@ def _filter_published_records(records, publish_fields):
 		record
 		for record in records
 		if _record_has_publish_flag(record, publish_fields)
-	]
-
-
-def _get_published_item_group_names():
-	publish_fields = _get_item_group_publish_fields()
-	if not publish_fields:
-		return None
-
-	item_groups = frappe.get_all(
-		"Item Group",
-		fields=["name"] + publish_fields,
-		ignore_permissions=True,
-		limit_page_length=0,
-	)
-
-	return {
-		item_group.name
-		for item_group in item_groups
-		if item_group.name != "All Item Groups" and _record_has_publish_flag(item_group, publish_fields)
-	}
-
-
-def _filter_items_by_published_item_groups(items):
-	published_item_groups = _get_published_item_group_names()
-	if published_item_groups is None:
-		return items
-
-	return [
-		item
-		for item in items
-		if item.get("item_group") in published_item_groups
 	]
 
 
@@ -521,6 +491,7 @@ def get_supplier_stores(limit_page_length=24, published=1):
 			"contact_email",
 			"website",
 			"store_website",
+			"short_description",
 			"description",
 			"store_details",
 			"about",
@@ -635,7 +606,6 @@ def get_items(
 
 	if _is_truthy_flag(published):
 		items = _filter_published_records(items, publish_fields)
-		items = _filter_items_by_published_item_groups(items)
 
 	_apply_selling_prices(items)
 	_apply_item_group_images(items)
@@ -688,27 +658,8 @@ def get_item_groups(limit_page_length=5000, published=1):
 	]
 
 
-def _get_customer_for_user(user_name):
-	if not user_name or user_name == "Guest":
-		return None
-
-	user = frappe.get_cached_doc("User", user_name)
-	if user.email:
-		customer = frappe.db.get_value("Customer", {"email_id": user.email}, "name")
-		if customer:
-			return customer
-
-	if user.mobile_no:
-		return frappe.db.get_value("Customer", {"mobile_no": user.mobile_no}, "name")
-
-	return None
-
-
 def _can_view_sales_order(sales_order):
-	if frappe.session.user == "Administrator" or sales_order.owner == frappe.session.user:
-		return True
-
-	return bool(sales_order.customer and sales_order.customer == _get_customer_for_user(frappe.session.user))
+	return frappe.session.user == "Administrator" or sales_order.owner == frappe.session.user
 
 
 def _get_purchase_order_names_for_sales_order(sales_order_name):
@@ -783,8 +734,16 @@ def get_sales_order(sales_order_name):
 		"name": sales_order.name,
 		"status": sales_order.status,
 		"transaction_date": sales_order.transaction_date,
+		"delivery_date": sales_order.delivery_date,
+		"delivery_slot": getattr(sales_order, "custom_delivery_slot", "") or "",
+		"net_total": flt(sales_order.net_total),
+		"total_taxes_and_charges": flt(sales_order.total_taxes_and_charges),
 		"grand_total": flt(sales_order.grand_total),
 		"currency": sales_order.currency or "AED",
+		"customer_name": sales_order.customer_name or sales_order.customer,
+		"shipping_address": sales_order.shipping_address or sales_order.address_display or "",
+		"contact_display": sales_order.contact_display or "",
+		"contact_mobile": sales_order.contact_mobile or "",
 		"purchase_orders": list(dict.fromkeys(_get_purchase_order_names_for_sales_order(sales_order.name))),
 		"items": [
 			{
@@ -803,7 +762,7 @@ def get_sales_order(sales_order_name):
 
 @frappe.whitelist()
 def get_order_history(limit_page_length=20):
-	from buy_in_minutes.buy_in_minutes.order_history import get_order_history as get_history
+	from buy_in_minutes.order_history import get_order_history as get_history
 
 	return get_history(limit_page_length=limit_page_length)
 
