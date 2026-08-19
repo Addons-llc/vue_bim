@@ -194,10 +194,21 @@ function getAttachmentFieldValue(record) {
 }
 
 function getItemAttachmentImages(item) {
-  const images = new Set()
+  const images = []
+  const seenImages = new Set()
   const imageFieldPattern = /(attachment|attachments|gallery|slider|carousel|image)/i
+  const pushImage = (image) => {
+    const imageUrl = getImageUrl(image)
 
-  ;[
+    if (!imageUrl || seenImages.has(imageUrl)) {
+      return
+    }
+
+    seenImages.add(imageUrl)
+    images.push(imageUrl)
+  }
+
+  const primaryImageCandidates = [
     item.image,
     item.website_image,
     item.thumbnail,
@@ -208,13 +219,9 @@ function getItemAttachmentImages(item) {
     item.custom_banner_image,
     item.custom_item_banner_image,
     item.custom_product_banner_image,
-  ].forEach((image) => {
-    const imageUrl = getImageUrl(image)
+  ]
 
-    if (imageUrl) {
-      images.add(imageUrl)
-    }
-  })
+  primaryImageCandidates.forEach(pushImage)
 
   Object.entries(item || {}).forEach(([fieldname, value]) => {
     if (!imageFieldPattern.test(fieldname)) {
@@ -222,11 +229,7 @@ function getItemAttachmentImages(item) {
     }
 
     if (typeof value === 'string') {
-      const imageUrl = getImageUrl(value)
-
-      if (imageUrl) {
-        images.add(imageUrl)
-      }
+      pushImage(value)
       return
     }
 
@@ -236,23 +239,19 @@ function getItemAttachmentImages(item) {
 
     value.forEach((entry) => {
       if (typeof entry === 'string') {
-        const imageUrl = getImageUrl(entry)
-
-        if (imageUrl) {
-          images.add(imageUrl)
-        }
+        pushImage(entry)
         return
       }
 
       const imageUrl = getAttachmentFieldValue(entry)
 
       if (imageUrl) {
-        images.add(imageUrl)
+        pushImage(imageUrl)
       }
     })
   })
 
-  return Array.from(images)
+  return images.slice(0, 3)
 }
 
 async function mapItemToProduct(item) {
