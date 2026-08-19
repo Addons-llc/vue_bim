@@ -313,6 +313,8 @@ def _apply_supplier_details(items):
 		item.supplier_phone = supplier.get("mobile_no")
 		item.supplier_email = supplier.get("email_id")
 		item.supplier_website = supplier.get("website")
+		item.custom_google_address = supplier.get("custom_google_address")
+		item.supplier_custom_google_address = supplier.get("custom_google_address")
 		item.supplier_image = (
 			supplier.get("image")
 			or supplier.get("supplier_logo")

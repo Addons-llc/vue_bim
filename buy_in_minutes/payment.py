@@ -688,7 +688,12 @@ def _get_checkout_return_origin(return_origin=None):
 	return get_url("").rstrip("/")
 
 
-def _apply_delivery_address_to_sales_order(sales_order, customer, delivery_address):
+def _apply_delivery_address_to_sales_order(
+	sales_order,
+	customer,
+	delivery_address,
+	address_display=None,
+):
 	if not delivery_address:
 		return
 
@@ -704,7 +709,9 @@ def _apply_delivery_address_to_sales_order(sales_order, customer, delivery_addre
 
 	sales_order.set_missing_values()
 
-	address_display = _build_delivery_address_display(delivery_address)
+	address_display = _clean_text(address_display) or _build_delivery_address_display(
+		delivery_address
+	)
 	if address_display:
 		_set_doc_value_if_field_exists(sales_order, "address_display", address_display)
 		_set_doc_value_if_field_exists(sales_order, "shipping_address", address_display)
@@ -1083,6 +1090,32 @@ def _normalize_payment_schedule_dates(sales_order):
 			payment_row.due_date = transaction_date
 
 
+def _persist_sales_order_address_display(sales_order, address_display):
+	address_display = _clean_text(address_display)
+	if not address_display:
+		return
+
+	updates = {}
+	if sales_order.meta.has_field("address_display"):
+		updates["address_display"] = address_display
+	if sales_order.meta.has_field("shipping_address"):
+		updates["shipping_address"] = address_display
+
+	if not updates:
+		return
+
+	for fieldname, value in updates.items():
+		sales_order.set(fieldname, value)
+
+	if sales_order.name:
+		frappe.db.set_value(
+			sales_order.doctype,
+			sales_order.name,
+			updates,
+			update_modified=False,
+		)
+
+
 def _upsert_sales_order(
 	checkout_items,
 	sales_order_name=None,
@@ -1091,6 +1124,7 @@ def _upsert_sales_order(
 	delivery_date=None,
 	delivery_slot=None,
 	customer_location=None,
+	address_display=None,
 ):
 	checkout_user = frappe.session.user
 	customer = _get_or_create_customer_for_user(checkout_user)
@@ -1149,6 +1183,10 @@ def _upsert_sales_order(
 		sales_order,
 		customer,
 		delivery_address,
+		address_display=address_display,
+	)
+	address_display = _clean_text(address_display) or _build_delivery_address_display(
+		delivery_address
 	)
 	_normalize_payment_schedule_dates(sales_order)
 
@@ -1158,9 +1196,12 @@ def _upsert_sales_order(
 	else:
 		sales_order.save(ignore_permissions=True)
 
+	_persist_sales_order_address_display(sales_order, address_display)
+
 	if submit:
 		sales_order.flags.ignore_permissions = True
 		sales_order.submit()
+		_persist_sales_order_address_display(sales_order, address_display)
 
 		# The on_submit hook creates the Purchase Orders.
 		sales_order.purchase_orders = _get_purchase_orders_for_sales_order(
@@ -1351,6 +1392,7 @@ def sync_cart_sales_order(
 	delivery_date=None,
 	delivery_slot=None,
 	customer_location=None,
+	address_display=None,
 ):
 	_require_checkout_user()
 
@@ -1362,6 +1404,7 @@ def sync_cart_sales_order(
 		delivery_date=delivery_date,
 		delivery_slot=delivery_slot,
 		customer_location=customer_location,
+		address_display=address_display,
 	)
 
 	return {
@@ -1379,6 +1422,7 @@ def create_checkout_session(
 	delivery_date=None,
 	delivery_slot=None,
 	customer_location=None,
+	address_display=None,
 ):
 	_require_checkout_user()
 
@@ -1390,6 +1434,7 @@ def create_checkout_session(
 		delivery_date=delivery_date,
 		delivery_slot=delivery_slot,
 		customer_location=customer_location,
+		address_display=address_display,
 	)
 	session = _stripe_request(
 		"/checkout/sessions",
@@ -1413,6 +1458,7 @@ def create_cash_on_delivery_order(
 	delivery_date=None,
 	delivery_slot=None,
 	customer_location=None,
+	address_display=None,
 ):
 	_require_checkout_user()
 
@@ -1425,6 +1471,7 @@ def create_cash_on_delivery_order(
 		delivery_date=delivery_date,
 		delivery_slot=delivery_slot,
 		customer_location=customer_location,
+		address_display=address_display,
 	)
 	purchase_orders = getattr(sales_order, "purchase_orders", None)
 
