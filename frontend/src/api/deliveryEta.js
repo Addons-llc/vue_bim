@@ -9,10 +9,6 @@ const ETA_PROMISE_CACHE = new Map()
 const GEOCODE_CACHE = new Map()
 const ROUTE_DURATION_CACHE = new Map()
 
-const MIN_DELIVERY_MINUTES = 8
-const AVERAGE_DELIVERY_SPEED_KMH = 24
-const ROAD_DISTANCE_MULTIPLIER = 1.22
-
 export const LOCATION_UPDATED_EVENT = 'buy-in-minutes:location-updated'
 
 function toFiniteNumber(value) {
@@ -289,34 +285,12 @@ async function getRouteDurationMinutes(origin, destination) {
       return null
     }
 
-    const durationMinutes = Math.max(MIN_DELIVERY_MINUTES, Math.round(durationSeconds / 60))
+    const durationMinutes = Math.max(1, Math.round(durationSeconds / 60))
     ROUTE_DURATION_CACHE.set(cacheKey, durationMinutes)
     return durationMinutes
   } catch {
     return null
   }
-}
-
-function getDistanceKm(origin, destination) {
-  const earthRadiusKm = 6371
-  const latitudeDelta = ((destination.lat - origin.lat) * Math.PI) / 180
-  const longitudeDelta = ((destination.lng - origin.lng) * Math.PI) / 180
-  const originLatitude = (origin.lat * Math.PI) / 180
-  const destinationLatitude = (destination.lat * Math.PI) / 180
-
-  const a =
-    Math.sin(latitudeDelta / 2) ** 2
-    + Math.cos(originLatitude) * Math.cos(destinationLatitude)
-      * Math.sin(longitudeDelta / 2) ** 2
-
-  return 2 * earthRadiusKm * Math.asin(Math.min(1, Math.sqrt(a)))
-}
-
-function estimateMinutes(distanceKm) {
-  const roadDistanceKm = distanceKm * ROAD_DISTANCE_MULTIPLIER
-  const travelMinutes = (roadDistanceKm / AVERAGE_DELIVERY_SPEED_KMH) * 60
-
-  return Math.max(MIN_DELIVERY_MINUTES, Math.round(travelMinutes + 6))
 }
 
 export async function getEstimatedDeliveryTimeLabel(product = {}) {
@@ -369,9 +343,11 @@ export async function getEstimatedDeliveryTimeLabel(product = {}) {
       return fallbackDeliveryTime
     }
 
-    const routedMinutes = await getRouteDurationMinutes(supplierCoords, customerCoords)
-    const minutes = routedMinutes
-      ?? estimateMinutes(getDistanceKm(supplierCoords, customerCoords))
+    const minutes = await getRouteDurationMinutes(supplierCoords, customerCoords)
+
+    if (!minutes) {
+      return fallbackDeliveryTime
+    }
 
     return `${minutes} min`
   })()
