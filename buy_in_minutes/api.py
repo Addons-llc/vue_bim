@@ -622,6 +622,7 @@ def get_items(
 			"website_image",
 			"thumbnail",
 			"brand",
+			"custom_popular_items",
 			"standard_rate",
 			*ITEM_SUPPLIER_FIELDS,
 		)
