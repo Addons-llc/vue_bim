@@ -432,6 +432,14 @@ def _normalize_delivery_address(delivery_address):
 		"contact_name": _clean_text(delivery_address.get("contactName") or delivery_address.get("contact_name")),
 		"phone": _clean_text(delivery_address.get("phone")),
 		"area": _clean_text(delivery_address.get("area")),
+		"apartment_office_name": _clean_text(
+			delivery_address.get("apartmentOfficeName")
+			or delivery_address.get("apartment_office_name")
+		),
+		"apartment_office_no": _clean_text(
+			delivery_address.get("apartmentOfficeNo")
+			or delivery_address.get("apartment_office_no")
+		),
 		"building": _clean_text(delivery_address.get("building")),
 		"street": _clean_text(delivery_address.get("street")),
 		"landmark": _clean_text(delivery_address.get("landmark")),
@@ -454,20 +462,44 @@ def _build_delivery_address_display(delivery_address):
 	if contact_line:
 		lines.append(contact_line)
 
-	address_line = ", ".join(
+	apartment_line = ", ".join(
+		filter(
+			None,
+			[
+				address.get("apartment_office_name"),
+				address.get("apartment_office_no"),
+			],
+		)
+	)
+	if apartment_line:
+		lines.append(apartment_line)
+
+	building_line = ", ".join(
 		filter(
 			None,
 			[
 				address.get("building"),
 				address.get("street"),
+			],
+		)
+	)
+	if building_line:
+		lines.append(building_line)
+
+	area_line = ", ".join(
+		filter(
+			None,
+			[
 				address.get("area"),
-				address.get("landmark"),
 				address.get("emirate"),
 			],
 		)
 	)
-	if address_line:
-		lines.append(address_line)
+	if area_line:
+		lines.append(area_line)
+
+	if address.get("landmark"):
+		lines.append(address["landmark"])
 
 	return "\n".join(lines)
 
@@ -523,8 +555,25 @@ def _get_or_create_customer_address(customer, delivery_address):
 			"doctype": "Address",
 			"address_title": address.get("contact_name") or customer,
 			"address_type": address.get("label") if address.get("label") in ("Billing", "Shipping", "Office", "Personal") else "Shipping",
-			"address_line1": address["building"],
-			"address_line2": address["area"],
+			"address_line1": ", ".join(
+				filter(
+					None,
+					[
+						address.get("apartment_office_name"),
+						address.get("apartment_office_no"),
+						address["building"],
+					],
+				)
+			),
+			"address_line2": ", ".join(
+				filter(
+					None,
+					[
+						address.get("street"),
+						address["area"],
+					],
+				)
+			),
 			"city": address["area"],
 			"country": "United Arab Emirates",
 			"phone": address.get("phone"),
