@@ -40,6 +40,8 @@ SUPPLIER_DETAIL_FIELDS = (
 	"custom_supplier_banner",
 	"custom_supplier_banner_image",
 	"custom_google_address",
+	"custom_latitude",
+	"custom_longitude",
 	"custom_seller_since",
 )
 
@@ -315,6 +317,10 @@ def _apply_supplier_details(items):
 		item.supplier_website = supplier.get("website")
 		item.custom_google_address = supplier.get("custom_google_address")
 		item.supplier_custom_google_address = supplier.get("custom_google_address")
+		item.custom_latitude = supplier.get("custom_latitude")
+		item.custom_longitude = supplier.get("custom_longitude")
+		item.supplier_custom_latitude = supplier.get("custom_latitude")
+		item.supplier_custom_longitude = supplier.get("custom_longitude")
 		item.supplier_image = (
 			supplier.get("image")
 			or supplier.get("supplier_logo")

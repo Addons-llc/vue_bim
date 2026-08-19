@@ -62,6 +62,8 @@ function getSupplierDetails(item) {
         || item.custom_supplier_logo,
     ),
     customGoogleAddress: item.custom_google_address || item.customGoogleAddress || '',
+    customLatitude: item.custom_latitude || item.customLatitude || item.supplier_custom_latitude || '',
+    customLongitude: item.custom_longitude || item.customLongitude || item.supplier_custom_longitude || '',
     bannerImage: getImageUrl(
       item.supplier_banner
         || item.supplier_banner_image

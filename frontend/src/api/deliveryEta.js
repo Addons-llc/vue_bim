@@ -25,6 +25,20 @@ function normalizeLocationText(value = '') {
   return String(value).trim().replace(/\s+/g, ' ')
 }
 
+function getCoordinatePair(latitudeValue, longitudeValue) {
+  const latitude = toFiniteNumber(latitudeValue)
+  const longitude = toFiniteNumber(longitudeValue)
+
+  if (latitude === null || longitude === null) {
+    return null
+  }
+
+  return {
+    lat: latitude,
+    lng: longitude,
+  }
+}
+
 function isUnitedArabEmiratesResult(result = {}) {
   return (result.address_components || []).some((component) => (
     (component.types || []).includes('country')
@@ -122,15 +136,6 @@ function getCustomerLocationSource() {
     }
   }
 
-  const selectedLocation = getStoredSelectedLocation()
-
-  if (selectedLocation && selectedLocation !== 'Select location') {
-    return {
-      key: `location:${selectedLocation.toLowerCase()}`,
-      address: selectedLocation,
-    }
-  }
-
   return {
     key: 'unknown',
     coords: null,
@@ -202,14 +207,36 @@ async function getCustomerCoordinates() {
     return customerLocation.coords
   }
 
-  if (!customerLocation.address) {
+  return null
+}
+
+async function getSupplierCoordinates(product = {}) {
+  const supplierCoords = getCoordinatePair(
+    product?.supplierDetails?.customLatitude
+      || product?.supplierDetails?.custom_latitude
+      || product?.supplierLatitude
+      || product?.custom_latitude,
+    product?.supplierDetails?.customLongitude
+      || product?.supplierDetails?.custom_longitude
+      || product?.supplierLongitude
+      || product?.custom_longitude,
+  )
+
+  if (supplierCoords) {
+    return supplierCoords
+  }
+
+  const supplierAddress = normalizeLocationText(
+    product?.supplierDetails?.customGoogleAddress
+      || product?.supplierDetails?.custom_google_address
+      || product?.supplierAddress
+      || '',
+  )
+
+  if (!supplierAddress) {
     return null
   }
 
-  return geocodeLocation(customerLocation.address)
-}
-
-async function getSupplierCoordinates(supplierAddress) {
   return geocodeLocation(supplierAddress)
 }
 
@@ -293,20 +320,36 @@ function estimateMinutes(distanceKm) {
 }
 
 export async function getEstimatedDeliveryTimeLabel(product = {}) {
-  const supplierAddress = normalizeLocationText(
+  const fallbackDeliveryTime = normalizeLocationText(product?.deliveryTime || '')
+
+  const customerLocation = getCustomerLocationSource()
+  const supplierCoordinateKey = [
+    product?.supplierDetails?.customLatitude
+      || product?.supplierDetails?.custom_latitude
+      || product?.supplierLatitude
+      || product?.custom_latitude
+      || '',
+    product?.supplierDetails?.customLongitude
+      || product?.supplierDetails?.custom_longitude
+      || product?.supplierLongitude
+      || product?.custom_longitude
+      || '',
+  ].join(',')
+  const supplierAddressKey = normalizeLocationText(
     product?.supplierDetails?.customGoogleAddress
       || product?.supplierDetails?.custom_google_address
       || product?.supplierAddress
       || '',
-  )
-  const fallbackDeliveryTime = normalizeLocationText(product?.deliveryTime || '')
+  ).toLowerCase()
+  const supplierKey = supplierCoordinateKey !== ','
+    ? `coords:${supplierCoordinateKey}`
+    : `address:${supplierAddressKey}`
 
-  if (!supplierAddress) {
+  if (supplierKey === 'address:' && !supplierAddressKey) {
     return fallbackDeliveryTime
   }
 
-  const customerLocation = getCustomerLocationSource()
-  const cacheKey = `${supplierAddress.toLowerCase()}::${customerLocation.key}`
+  const cacheKey = `${supplierKey}::${customerLocation.key}`
 
   if (ETA_CACHE.has(cacheKey)) {
     return ETA_CACHE.get(cacheKey)
@@ -318,7 +361,7 @@ export async function getEstimatedDeliveryTimeLabel(product = {}) {
 
   const etaPromise = (async () => {
     const [supplierCoords, customerCoords] = await Promise.all([
-      getSupplierCoordinates(supplierAddress),
+      getSupplierCoordinates(product),
       getCustomerCoordinates(),
     ])
 
