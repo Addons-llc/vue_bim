@@ -3,9 +3,11 @@ import { loadGoogleMaps } from './googleMaps'
 
 const SELECTED_LOCATION_STORAGE_KEY = 'buyInMinutesSelectedLocation'
 const CURRENT_LOCATION_COORDS_STORAGE_KEY = 'buyInMinutesCurrentLocationCoords'
+const UAE_COUNTRY_CODE = 'AE'
 const ETA_CACHE = new Map()
 const ETA_PROMISE_CACHE = new Map()
 const GEOCODE_CACHE = new Map()
+const ROUTE_DURATION_CACHE = new Map()
 
 const MIN_DELIVERY_MINUTES = 8
 const AVERAGE_DELIVERY_SPEED_KMH = 24
@@ -21,6 +23,13 @@ function toFiniteNumber(value) {
 
 function normalizeLocationText(value = '') {
   return String(value).trim().replace(/\s+/g, ' ')
+}
+
+function isUnitedArabEmiratesResult(result = {}) {
+  return (result.address_components || []).some((component) => (
+    (component.types || []).includes('country')
+    && String(component.short_name || '').toUpperCase() === UAE_COUNTRY_CODE
+  ))
 }
 
 function getLocationKey(coords) {
@@ -143,12 +152,26 @@ async function geocodeLocation(address) {
   try {
     const maps = await loadGoogleMaps()
     const geocoder = new maps.Geocoder()
+    const uaeBounds = new maps.LatLngBounds(
+      new maps.LatLng(22.5, 51.4),
+      new maps.LatLng(26.5, 56.8),
+    )
     const result = await new Promise((resolve) => {
       geocoder.geocode(
-        { address: normalizedAddress },
+        {
+          address: normalizedAddress,
+          bounds: uaeBounds,
+          componentRestrictions: { country: UAE_COUNTRY_CODE },
+          region: UAE_COUNTRY_CODE,
+        },
         (results, status) => {
-          if (status === 'OK' && results?.length && results[0]?.geometry?.location) {
-            const location = results[0].geometry.location
+          if (status === 'OK' && results?.length) {
+            const preferredResult = results.find(isUnitedArabEmiratesResult) || results[0]
+            if (!preferredResult?.geometry?.location || !isUnitedArabEmiratesResult(preferredResult)) {
+              resolve(null)
+              return
+            }
+            const location = preferredResult.geometry.location
 
             resolve({
               lat: location.lat(),
@@ -188,6 +211,63 @@ async function getCustomerCoordinates() {
 
 async function getSupplierCoordinates(supplierAddress) {
   return geocodeLocation(supplierAddress)
+}
+
+async function getRouteDurationMinutes(origin, destination) {
+  if (!origin || !destination) {
+    return null
+  }
+
+  const cacheKey = `${getLocationKey(origin)}::${getLocationKey(destination)}`
+  if (ROUTE_DURATION_CACHE.has(cacheKey)) {
+    return ROUTE_DURATION_CACHE.get(cacheKey)
+  }
+
+  try {
+    const maps = await loadGoogleMaps()
+    const directionsService = new maps.DirectionsService()
+    const route = await new Promise((resolve, reject) => {
+      directionsService.route(
+        {
+          origin,
+          destination,
+          travelMode: maps.TravelMode.DRIVING,
+          drivingOptions: {
+            departureTime: new Date(),
+          },
+          provideRouteAlternatives: false,
+        },
+        (result, status) => {
+          if (status === 'OK' && result?.routes?.length) {
+            resolve(result)
+            return
+          }
+
+          reject(new Error(status || 'DIRECTIONS_FAILED'))
+        },
+      )
+    })
+
+    const durationSeconds = route.routes
+      .flatMap((candidateRoute) => candidateRoute.legs || [])
+      .reduce((total, leg) => (
+        total + Number(
+          leg.duration_in_traffic?.value
+          ?? leg.duration?.value
+          ?? 0
+        )
+      ), 0)
+
+    if (!durationSeconds) {
+      return null
+    }
+
+    const durationMinutes = Math.max(MIN_DELIVERY_MINUTES, Math.round(durationSeconds / 60))
+    ROUTE_DURATION_CACHE.set(cacheKey, durationMinutes)
+    return durationMinutes
+  } catch {
+    return null
+  }
 }
 
 function getDistanceKm(origin, destination) {
@@ -246,7 +326,10 @@ export async function getEstimatedDeliveryTimeLabel(product = {}) {
       return fallbackDeliveryTime
     }
 
-    const minutes = estimateMinutes(getDistanceKm(supplierCoords, customerCoords))
+    const routedMinutes = await getRouteDurationMinutes(supplierCoords, customerCoords)
+    const minutes = routedMinutes
+      ?? estimateMinutes(getDistanceKm(supplierCoords, customerCoords))
+
     return `${minutes} min`
   })()
 
