@@ -2,7 +2,6 @@ import base64
 import hashlib
 import hmac
 import json
-from contextlib import contextmanager
 from urllib.parse import urlencode, urlparse
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
@@ -1008,9 +1007,8 @@ def _submit_purchase_orders(purchase_orders, sales_order_name):
 			continue
 
 		try:
-			with _as_administrator():
-				purchase_order.flags.ignore_permissions = True
-				purchase_order.submit()
+			purchase_order.flags.ignore_permissions = True
+			purchase_order.submit()
 		except Exception:
 			frappe.log_error(
 				title="Purchase Order Submission Failed",
@@ -1027,16 +1025,6 @@ def on_sales_order_submit(doc, method=None):
 	_create_purchase_orders_for_sales_order(doc)
 
 
-@contextmanager
-def _as_administrator():
-	previous_user = _normalize_user_name(getattr(frappe.session, "user", None))
-	frappe.set_user("Administrator")
-	try:
-		yield
-	finally:
-		frappe.set_user(previous_user)
-
-
 def _normalize_payment_schedule_dates(sales_order):
 	transaction_date = sales_order.transaction_date or nowdate()
 	transaction_date_value = getdate(transaction_date)
@@ -1051,35 +1039,34 @@ def _upsert_sales_order(
 	sales_order_name=None,
 	submit=False,
 	delivery_address=None,
-	delivery_date=None,
-	delivery_slot=None,
-	customer_location=None,
 ):
-	checkout_user = _normalize_user_name(frappe.session.user)
+	checkout_user = frappe.session.user
 	customer = _get_or_create_customer_for_user(checkout_user)
 	company = _get_default_company()
 	order_date = nowdate()
-	delivery_date = delivery_date or order_date
-	order_items = _build_sales_order_item_rows(checkout_items, company, delivery_date)
+	delivery_date = order_date
+	order_items = _build_sales_order_item_rows(checkout_items, company)
 
 	if not order_items:
 		frappe.throw(_("Cart does not contain orderable items."))
 
 	if sales_order_name and frappe.db.exists("Sales Order", sales_order_name):
 		sales_order_owner = frappe.db.sql(
-			"select owner from `tabSales Order` where name = %s",
+			"select owner from tabSales Order where name = %s",
 			(sales_order_name,),
 			as_dict=True,
 		)
+
 		if not sales_order_owner or sales_order_owner[0].owner != checkout_user:
 			frappe.throw(_("The linked Sales Order is no longer editable."))
 
-		with _as_administrator():
-			sales_order = frappe.get_doc("Sales Order", sales_order_name)
-			if sales_order.docstatus != 0:
-				frappe.throw(_("The linked Sales Order is no longer editable."))
-			sales_order.set("items", [])
-			sales_order.set("payment_schedule", [])
+		sales_order = frappe.get_doc("Sales Order", sales_order_name)
+
+		if sales_order.docstatus != 0:
+			frappe.throw(_("The linked Sales Order is no longer editable."))
+
+		sales_order.set("items", [])
+		sales_order.set("payment_schedule", [])
 	else:
 		sales_order = frappe.get_doc({"doctype": "Sales Order"})
 
@@ -1092,26 +1079,31 @@ def _upsert_sales_order(
 			"order_type": "Sales",
 		}
 	)
-	_set_doc_value_if_field_exists(sales_order, "custom_delivery_slot", _clean_text(delivery_slot))
-	_set_doc_value_if_field_exists(sales_order, "custom_customer_location", _clean_text(customer_location))
+
 	for item in order_items:
 		sales_order.append("items", item)
 
-	with _as_administrator():
-		_apply_delivery_address_to_sales_order(sales_order, customer, delivery_address)
-		_normalize_payment_schedule_dates(sales_order)
+	_apply_delivery_address_to_sales_order(
+		sales_order,
+		customer,
+		delivery_address,
+	)
+	_normalize_payment_schedule_dates(sales_order)
 
-		if sales_order.is_new():
-			sales_order.owner = checkout_user
-			sales_order.insert(ignore_permissions=True)
-		else:
-			sales_order.save(ignore_permissions=True)
+	if sales_order.is_new():
+		sales_order.owner = checkout_user
+		sales_order.insert(ignore_permissions=True)
+	else:
+		sales_order.save(ignore_permissions=True)
 
 	if submit:
-		with _as_administrator():
-			sales_order.flags.ignore_permissions = True
-			sales_order.submit()
-			sales_order.purchase_orders = _get_purchase_orders_for_sales_order(sales_order.name)
+		sales_order.flags.ignore_permissions = True
+		sales_order.submit()
+
+		# The on_submit hook creates the Purchase Orders.
+		sales_order.purchase_orders = _get_purchase_orders_for_sales_order(
+			sales_order.name
+		)
 
 	return sales_order
 
@@ -1166,40 +1158,39 @@ def _submit_sales_order(sales_order_name):
 			_("Sales Order {0} does not exist.").format(sales_order_name)
 		)
 
-	with _as_administrator():
-		sales_order = frappe.get_doc("Sales Order", sales_order_name)
+	sales_order = frappe.get_doc("Sales Order", sales_order_name)
 
-		if sales_order.docstatus == 2:
-			frappe.throw(
-				_("Sales Order {0} is cancelled.").format(sales_order_name)
-			)
+	if sales_order.docstatus == 2:
+		frappe.throw(
+			_("Sales Order {0} is cancelled.").format(sales_order_name)
+		)
 
-		was_draft = sales_order.docstatus == 0
+	was_draft = sales_order.docstatus == 0
 
-		# Submit the Sales Order after successful Stripe payment
-		if sales_order.docstatus == 0:
-			sales_order.flags.ignore_permissions = True
-			sales_order.submit()
+	# Submit the Sales Order after successful Stripe payment.
+	if sales_order.docstatus == 0:
+		sales_order.flags.ignore_permissions = True
+		sales_order.submit()
 
-		# Submitted orders may come from a previous callback, so keep this path idempotent.
-		if not was_draft:
-			_create_purchase_orders_for_sales_order(sales_order)
+	# Submitted orders may come from a previous callback, so keep this path idempotent.
+	if not was_draft:
+		_create_purchase_orders_for_sales_order(sales_order)
 
-		# Force the status after ERPNext completes its submit processing
-		if sales_order.docstatus == 1:
-			frappe.db.set_value(
-				"Sales Order",
-				sales_order.name,
-				{
-					"status": "To Deliver",
-					"billing_status": "Fully Billed",
-					"per_billed": 100,
-				},
-				update_modified=False,
-			)
+	# Force the status after ERPNext completes its submit processing.
+	if sales_order.docstatus == 1:
+		frappe.db.set_value(
+			"Sales Order",
+			sales_order.name,
+			{
+				"status": "To Deliver",
+				"billing_status": "Fully Billed",
+				"per_billed": 100,
+			},
+			update_modified=False,
+		)
 
-			frappe.db.commit()
-			sales_order.reload()
+		frappe.db.commit()
+		sales_order.reload()
 
 	return sales_order
 
@@ -1306,9 +1297,6 @@ def sync_cart_sales_order(
 		checkout_items,
 		sales_order_name=sales_order_name,
 		delivery_address=delivery_address,
-		delivery_date=delivery_date,
-		delivery_slot=delivery_slot,
-		customer_location=customer_location,
 	)
 
 	return {
@@ -1334,9 +1322,6 @@ def create_checkout_session(
 		checkout_items,
 		sales_order_name=sales_order_name,
 		delivery_address=delivery_address,
-		delivery_date=delivery_date,
-		delivery_slot=delivery_slot,
-		customer_location=customer_location,
 	)
 	session = _stripe_request(
 		"/checkout/sessions",
@@ -1369,9 +1354,6 @@ def create_cash_on_delivery_order(
 		sales_order_name=sales_order_name,
 		submit=True,
 		delivery_address=delivery_address,
-		delivery_date=delivery_date,
-		delivery_slot=delivery_slot,
-		customer_location=customer_location,
 	)
 	purchase_orders = getattr(sales_order, "purchase_orders", None)
 

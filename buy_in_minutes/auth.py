@@ -385,6 +385,21 @@ def _build_phone_login_email(phone_number):
 	return f"{phone_digits}@{PHONE_USER_EMAIL_DOMAIN}"
 
 
+def _get_available_phone_login_email(phone_number):
+	phone_digits = re.sub(r"\D", "", phone_number or "")
+	base_local_part = phone_digits or frappe.generate_hash(length=12).lower()
+	candidate = f"{base_local_part}@{PHONE_USER_EMAIL_DOMAIN}"
+	if not frappe.db.exists("User", candidate):
+		return candidate
+
+	suffix = 2
+	while True:
+		candidate = f"{base_local_part}-{suffix}@{PHONE_USER_EMAIL_DOMAIN}"
+		if not frappe.db.exists("User", candidate):
+			return candidate
+		suffix += 1
+
+
 def _create_phone_website_user(phone_number):
 	existing_user = _get_existing_user_by_phone(phone_number)
 	if existing_user:
@@ -396,9 +411,7 @@ def _create_phone_website_user(phone_number):
 
 		return existing_user
 
-	email = _build_phone_login_email(phone_number)
-	if frappe.db.exists("User", email):
-		email = f"{frappe.generate_hash(length=12).lower()}@{PHONE_USER_EMAIL_DOMAIN}"
+	email = _get_available_phone_login_email(phone_number)
 
 	user = frappe.get_doc(
 		{
@@ -691,27 +704,34 @@ def verify_phone_otp(phone_number=None, otp=None, phoneNumber=None, auth_flow_to
 
 		if auth_flow["mode"] == "sign_in":
 			user = frappe.get_doc("User", auth_flow["user_name"])
-			is_new_user = False
+			_login_user(user.name)
+			response = {
+				**_get_login_response_payload(user),
+				**_get_phone_user_payload(user, False),
+			}
 		else:
-			user = _create_phone_website_user(phone_number)
-			is_new_user = True
+			response = {
+				"success": True,
+				"auth_mode": "sign_up",
+				"profile_token": _create_phone_profile_token(phone_number),
+				"phone_number": phone_number,
+				"website_user_created": False,
+				"website_user_exists": False,
+				"needs_profile": True,
+				"profile_completed": False,
+				"message": _("OTP verified. Complete your profile to create your account."),
+			}
 
-		_login_user(user.name)
-
-		response = {
-			**_get_login_response_payload(user),
-			**_get_phone_user_payload(user, is_new_user),
-		}
 		_log_phone_auth_response(
 			"verify_phone_otp",
 			phone_number,
 			{
 				"success": response["success"],
 				"auth_mode": auth_flow["mode"],
-				"is_new_user": response["is_new_user"],
+				"is_new_user": response.get("is_new_user"),
 				"website_user_exists": response["website_user_exists"],
 				"profile_completed": response["profile_completed"],
-				"user_name": response["user"]["name"],
+				"user_name": response.get("user", {}).get("name"),
 			},
 		)
 		return response
@@ -735,27 +755,34 @@ def verify_phone_otp(phone_number=None, otp=None, phoneNumber=None, auth_flow_to
 
 	if auth_flow["mode"] == "sign_in":
 		user = frappe.get_doc("User", auth_flow["user_name"])
-		is_new_user = False
+		_login_user(user.name)
+		response = {
+			**_get_login_response_payload(user),
+			**_get_phone_user_payload(user, False),
+		}
 	else:
-		user = _create_phone_website_user(phone_number)
-		is_new_user = True
+		response = {
+			"success": True,
+			"auth_mode": "sign_up",
+			"profile_token": _create_phone_profile_token(phone_number),
+			"phone_number": phone_number,
+			"website_user_created": False,
+			"website_user_exists": False,
+			"needs_profile": True,
+			"profile_completed": False,
+			"message": _("OTP verified. Complete your profile to create your account."),
+		}
 
-	_login_user(user.name)
-
-	response = {
-		**_get_login_response_payload(user),
-		**_get_phone_user_payload(user, is_new_user),
-	}
 	_log_phone_auth_response(
 		"verify_phone_otp",
 		phone_number,
 		{
 			"success": response["success"],
 			"auth_mode": auth_flow["mode"],
-			"is_new_user": response["is_new_user"],
+			"is_new_user": response.get("is_new_user"),
 			"website_user_exists": response["website_user_exists"],
 			"profile_completed": response["profile_completed"],
-			"user_name": response["user"]["name"],
+			"user_name": response.get("user", {}).get("name"),
 		},
 	)
 	return response

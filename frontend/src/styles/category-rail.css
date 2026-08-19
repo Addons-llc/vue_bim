@@ -504,3 +504,32 @@
 .home-rail-store .category-tile.is-stacked .category-name {
   text-align: center;
 }
+
+.home-rail-brands .category-image-wrap,
+.home-rail-store .category-image-wrap,
+.home-rail-brands .category-tile.is-stacked .category-image-wrap,
+.home-rail-store .category-tile.is-stacked .category-image-wrap {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  clip-path: none;
+  overflow: visible;
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+
+.home-rail-brands .category-tile:hover .category-image-wrap,
+.home-rail-brands .category-tile:focus-visible .category-image-wrap,
+.home-rail-brands .category-tile.is-active .category-image-wrap,
+.home-rail-store .category-tile:hover .category-image-wrap,
+.home-rail-store .category-tile:focus-visible .category-image-wrap,
+.home-rail-store .category-tile.is-active .category-image-wrap {
+  background: transparent;
+  box-shadow: none;
+}
+
+.home-rail-brands .category-image,
+.home-rail-store .category-image {
+  border-radius: 0;
+}
