@@ -27,7 +27,7 @@ function serializeDeliveryAddress(deliveryAddress) {
     return deliveryAddress || null
   }
 
-  return {
+  const normalizedAddress = {
     id: normalizeAddressValue(deliveryAddress.id),
     label: normalizeAddressValue(deliveryAddress.label),
     contactName: normalizeAddressValue(deliveryAddress.contactName),
@@ -42,6 +42,13 @@ function serializeDeliveryAddress(deliveryAddress) {
     latitude: normalizeAddressValue(deliveryAddress.latitude),
     longitude: normalizeAddressValue(deliveryAddress.longitude),
     isDefault: Boolean(deliveryAddress.isDefault),
+  }
+
+  return {
+    ...normalizedAddress,
+    contact_name: normalizedAddress.contactName,
+    apartment_office_name: normalizedAddress.apartmentOfficeName,
+    apartment_office_no: normalizedAddress.apartmentOfficeNo,
   }
 }
 
@@ -248,15 +255,13 @@ export async function createCashOnDeliveryOrder(
     body: JSON.stringify({
       cart_items: serializeCartItems(cartItems),
       sales_order_name: salesOrderName,
-      address_display: savedAddress,
       delivery_address: serializedDeliveryAddress,
       delivery_date: deliveryDate,
       delivery_slot: deliverySlot,
       custom_delivery_slot: deliverySlot,
       customer_location: customerLocation,
       custom_customer_location: customerLocation,
-      saved_address: savedAddress,
-      customer_address: savedAddress,
+      address_display: savedAddress,
     }),
   })
 }

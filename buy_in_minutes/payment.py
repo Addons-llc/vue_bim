@@ -1088,13 +1088,16 @@ def _upsert_sales_order(
 	sales_order_name=None,
 	submit=False,
 	delivery_address=None,
+	delivery_date=None,
+	delivery_slot=None,
+	customer_location=None,
 ):
 	checkout_user = frappe.session.user
 	customer = _get_or_create_customer_for_user(checkout_user)
 	company = _get_default_company()
 	order_date = nowdate()
-	delivery_date = order_date
-	order_items = _build_sales_order_item_rows(checkout_items, company)
+	delivery_date = _clean_text(delivery_date) or order_date
+	order_items = _build_sales_order_item_rows(checkout_items, company, delivery_date)
 
 	if not order_items:
 		frappe.throw(_("Cart does not contain orderable items."))
@@ -1127,6 +1130,16 @@ def _upsert_sales_order(
 			"delivery_date": delivery_date,
 			"order_type": "Sales",
 		}
+	)
+	_set_doc_value_if_field_exists(
+		sales_order,
+		"custom_delivery_slot",
+		_clean_text(delivery_slot),
+	)
+	_set_doc_value_if_field_exists(
+		sales_order,
+		"custom_customer_location",
+		_clean_text(customer_location),
 	)
 
 	for item in order_items:
@@ -1346,6 +1359,9 @@ def sync_cart_sales_order(
 		checkout_items,
 		sales_order_name=sales_order_name,
 		delivery_address=delivery_address,
+		delivery_date=delivery_date,
+		delivery_slot=delivery_slot,
+		customer_location=customer_location,
 	)
 
 	return {
@@ -1371,6 +1387,9 @@ def create_checkout_session(
 		checkout_items,
 		sales_order_name=sales_order_name,
 		delivery_address=delivery_address,
+		delivery_date=delivery_date,
+		delivery_slot=delivery_slot,
+		customer_location=customer_location,
 	)
 	session = _stripe_request(
 		"/checkout/sessions",
@@ -1403,6 +1422,9 @@ def create_cash_on_delivery_order(
 		sales_order_name=sales_order_name,
 		submit=True,
 		delivery_address=delivery_address,
+		delivery_date=delivery_date,
+		delivery_slot=delivery_slot,
+		customer_location=customer_location,
 	)
 	purchase_orders = getattr(sales_order, "purchase_orders", None)
 
