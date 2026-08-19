@@ -662,6 +662,11 @@ def _can_view_sales_order(sales_order):
 	return frappe.session.user == "Administrator" or sales_order.owner == frappe.session.user
 
 
+def _is_guest_session_user():
+	user_name = str(getattr(frappe.session, "user", "") or "").strip()
+	return not user_name or user_name.lower() in {"guest", "none", "null"}
+
+
 def _get_purchase_order_names_for_sales_order(sales_order_name):
 	return frappe.get_all(
 		"Purchase Order Item",
@@ -692,7 +697,7 @@ def _ensure_purchase_orders_for_sales_order(sales_order):
 
 @frappe.whitelist(allow_guest=True)
 def get_sales_order(sales_order_name):
-	if frappe.session.user == "Guest":
+	if _is_guest_session_user():
 		frappe.throw("Please sign in to view this Sales Order.", frappe.AuthenticationError)
 
 	if not sales_order_name:
@@ -770,7 +775,7 @@ def get_order_history(limit_page_length=20):
 @frappe.whitelist()
 def get_ordered_products(limit_page_length=40):
 	limit_page_length = frappe.utils.cint(limit_page_length) or 40
-	if frappe.session.user == "Guest":
+	if _is_guest_session_user():
 		frappe.throw("Please sign in to view ordered products.")
 
 	sales_orders = frappe.get_all(

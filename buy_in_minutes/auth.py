@@ -520,6 +520,11 @@ def _normalize_login_user_name(user_name):
 	return user_name
 
 
+def _is_guest_session_user():
+	user_name = str(getattr(frappe.session, "user", "") or "").strip()
+	return not user_name or user_name.lower() in {"guest", "none", "null"}
+
+
 def _login_user(user_name):
 	user_name = _normalize_login_user_name(user_name)
 	session_expiry = _get_phone_login_session_expiry()
@@ -580,7 +585,7 @@ def get_csrf_token():
 
 @frappe.whitelist(allow_guest=True, methods=["GET"])
 def get_current_user():
-	if frappe.session.user == "Guest":
+	if _is_guest_session_user():
 		return {
 			"is_authenticated": False,
 			"user": None,
@@ -817,7 +822,7 @@ def complete_phone_profile(full_name=None, email=None, phone_number=None, phoneN
 			"message": _("Profile completed successfully."),
 		}
 
-	if frappe.session.user == "Guest":
+	if _is_guest_session_user():
 		frappe.throw(_("Please verify the OTP before completing your profile."), frappe.AuthenticationError)
 
 	user = frappe.get_doc("User", frappe.session.user)
