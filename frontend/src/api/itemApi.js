@@ -173,6 +173,88 @@ function getItemSize(item) {
   )
 }
 
+function getAttachmentFieldValue(record) {
+  if (!record || typeof record !== 'object') {
+    return ''
+  }
+
+  return getImageUrl(
+    record.image
+      || record.image_url
+      || record.image_path
+      || record.attachment
+      || record.attachment_url
+      || record.file
+      || record.file_url
+      || record.file_name
+      || record.url
+      || record.photo
+      || record.thumbnail,
+  )
+}
+
+function getItemAttachmentImages(item) {
+  const images = new Set()
+  const imageFieldPattern = /(attachment|attachments|gallery|slider|carousel|image)/i
+
+  ;[
+    item.image,
+    item.website_image,
+    item.thumbnail,
+    item.banner_image,
+    item.item_banner_image,
+    item.website_banner_image,
+    item.product_banner_image,
+    item.custom_banner_image,
+    item.custom_item_banner_image,
+    item.custom_product_banner_image,
+  ].forEach((image) => {
+    const imageUrl = getImageUrl(image)
+
+    if (imageUrl) {
+      images.add(imageUrl)
+    }
+  })
+
+  Object.entries(item || {}).forEach(([fieldname, value]) => {
+    if (!imageFieldPattern.test(fieldname)) {
+      return
+    }
+
+    if (typeof value === 'string') {
+      const imageUrl = getImageUrl(value)
+
+      if (imageUrl) {
+        images.add(imageUrl)
+      }
+      return
+    }
+
+    if (!Array.isArray(value)) {
+      return
+    }
+
+    value.forEach((entry) => {
+      if (typeof entry === 'string') {
+        const imageUrl = getImageUrl(entry)
+
+        if (imageUrl) {
+          images.add(imageUrl)
+        }
+        return
+      }
+
+      const imageUrl = getAttachmentFieldValue(entry)
+
+      if (imageUrl) {
+        images.add(imageUrl)
+      }
+    })
+  })
+
+  return Array.from(images)
+}
+
 async function mapItemToProduct(item) {
   const itemGroup = item.item_group || ''
   const categoryImage = getItemGroupImage(item)
@@ -185,6 +267,7 @@ async function mapItemToProduct(item) {
   const stockQuantity = getStockQuantity(item)
   const reviewCount = getReviewCount(item)
   const supplierDetails = getSupplierDetails(item)
+  const images = getItemAttachmentImages(item)
   const deliveryTime = await getEstimatedDeliveryTimeLabel({
     supplierDetails,
   })
@@ -212,6 +295,7 @@ async function mapItemToProduct(item) {
     deliveryTime,
     image,
     bannerImage,
+    images,
     categoryImage,
     imageLabel: item.item_group || 'Item',
   }
@@ -299,6 +383,8 @@ export async function getItemMasterItems(params = {}) {
 }
 
 export async function getItemMasterItem(itemName) {
+  let listedProduct = null
+
   try {
     const products = await getItemMasterItems({
       item: itemName,
@@ -306,18 +392,36 @@ export async function getItemMasterItem(itemName) {
     })
 
     if (products.length) {
-      return products[0]
+      listedProduct = products[0]
     }
   } catch {
     // Fall back to direct doctype read for older backend deployments.
   }
 
-  const item = await getDocTypeByName('Item', itemName)
-  if (!isPublishedItem(item)) {
-    return null
-  }
+  try {
+    const item = await getDocTypeByName('Item', itemName)
+    if (!isPublishedItem(item)) {
+      return null
+    }
 
-  return mapItemToProduct(item)
+    const detailedProduct = await mapItemToProduct(item)
+
+    return listedProduct
+      ? {
+        ...listedProduct,
+        ...detailedProduct,
+        image: detailedProduct.image || listedProduct.image,
+        bannerImage: detailedProduct.bannerImage || listedProduct.bannerImage,
+        images: detailedProduct.images?.length ? detailedProduct.images : (listedProduct.images || []),
+      }
+      : detailedProduct
+  } catch (error) {
+    if (listedProduct) {
+      return listedProduct
+    }
+
+    throw error
+  }
 }
 
 export async function getItemMasterCategories() {
