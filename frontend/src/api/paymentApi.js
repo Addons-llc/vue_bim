@@ -18,6 +18,12 @@ function serializeCartItems(cartItems) {
   }))
 }
 
+function normalizeDeliveryFeeValue(deliveryFee) {
+  const numericValue = Number(deliveryFee)
+
+  return Number.isFinite(numericValue) && numericValue > 0 ? numericValue : 0
+}
+
 function normalizeAddressValue(value) {
   return String(value || '').trim()
 }
@@ -221,6 +227,7 @@ export async function createStripeCheckoutSession(
   deliveryAddress = null,
   deliveryDate = '',
   deliverySlot = '',
+  deliveryFee = 0,
 ) {
   const customerLocation = await getLiveCustomerLocationPayload()
 
@@ -234,6 +241,7 @@ export async function createStripeCheckoutSession(
       delivery_slot: deliverySlot,
       customer_location: customerLocation,
       custom_customer_location: customerLocation,
+      delivery_fee: normalizeDeliveryFeeValue(deliveryFee),
       return_origin: getCheckoutReturnOrigin(),
     }),
   })
@@ -245,6 +253,7 @@ export async function createCashOnDeliveryOrder(
   deliveryAddress = null,
   deliveryDate = '',
   deliverySlot = '',
+  deliveryFee = 0,
 ) {
   const customerLocation = await getLiveCustomerLocationPayload()
   const savedAddress = formatSavedAddress(deliveryAddress)
@@ -262,6 +271,7 @@ export async function createCashOnDeliveryOrder(
       customer_location: customerLocation,
       custom_customer_location: customerLocation,
       address_display: savedAddress,
+      delivery_fee: normalizeDeliveryFeeValue(deliveryFee),
     }),
   })
 }

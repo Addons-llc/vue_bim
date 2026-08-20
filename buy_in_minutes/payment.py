@@ -276,6 +276,13 @@ def _clean_text(value):
 	return str(value or "").strip()
 
 
+def _normalize_delivery_fee(delivery_fee):
+	if delivery_fee in (None, ""):
+		return None
+
+	return max(flt(delivery_fee), 0)
+
+
 def _normalize_user_name(user_name, default="Guest"):
 	user_name = _clean_text(user_name)
 	if not user_name or user_name.lower() in {"guest", "none", "null"}:
@@ -718,7 +725,7 @@ def _apply_delivery_address_to_sales_order(
 		_set_doc_value_if_field_exists(sales_order, "shipping_address", address_display)
 
 
-def _get_checkout_items(cart_items):
+def _get_checkout_items(cart_items, delivery_fee=None):
 	checkout_items = []
 	for cart_item in _normalize_cart_items(cart_items):
 		item = frappe.db.get_value(
@@ -746,15 +753,20 @@ def _get_checkout_items(cart_items):
 			}
 		)
 
+	normalized_delivery_fee = _normalize_delivery_fee(delivery_fee)
 	subtotal = sum(item["amount"] for item in checkout_items)
-	if checkout_items and subtotal < FREE_DELIVERY_MINIMUM:
+	effective_delivery_fee = normalized_delivery_fee
+	if effective_delivery_fee is None and checkout_items and subtotal < FREE_DELIVERY_MINIMUM:
+		effective_delivery_fee = DELIVERY_FEE
+
+	if checkout_items and effective_delivery_fee and effective_delivery_fee > 0:
 		checkout_items.append(
 			{
 				"item_code": DELIVERY_FEE_ITEM_CODE,
 				"item_name": _("Delivery charge"),
 				"quantity": 1,
-				"rate": DELIVERY_FEE,
-				"amount": DELIVERY_FEE,
+				"rate": effective_delivery_fee,
+				"amount": effective_delivery_fee,
 			}
 		)
 
@@ -1396,10 +1408,11 @@ def sync_cart_sales_order(
 	delivery_slot=None,
 	customer_location=None,
 	address_display=None,
+	delivery_fee=None,
 ):
 	_require_checkout_user()
 
-	checkout_items = _get_checkout_items(cart_items)
+	checkout_items = _get_checkout_items(cart_items, delivery_fee=delivery_fee)
 	sales_order = _upsert_sales_order(
 		checkout_items,
 		sales_order_name=sales_order_name,
@@ -1426,10 +1439,11 @@ def create_checkout_session(
 	delivery_slot=None,
 	customer_location=None,
 	address_display=None,
+	delivery_fee=None,
 ):
 	_require_checkout_user()
 
-	checkout_items = _get_checkout_items(cart_items)
+	checkout_items = _get_checkout_items(cart_items, delivery_fee=delivery_fee)
 	sales_order = _upsert_sales_order(
 		checkout_items,
 		sales_order_name=sales_order_name,
@@ -1462,10 +1476,11 @@ def create_cash_on_delivery_order(
 	delivery_slot=None,
 	customer_location=None,
 	address_display=None,
+	delivery_fee=None,
 ):
 	_require_checkout_user()
 
-	checkout_items = _get_checkout_items(cart_items)
+	checkout_items = _get_checkout_items(cart_items, delivery_fee=delivery_fee)
 	sales_order = _upsert_sales_order(
 		checkout_items,
 		sales_order_name=sales_order_name,

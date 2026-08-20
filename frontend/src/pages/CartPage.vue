@@ -1,7 +1,8 @@
 <script setup>
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { getCurrentUser, hasPersistedPhoneAuthState, restoreLoginSession } from '../api/authApi'
+import { getCustomerToSupplierDistanceKm, LOCATION_UPDATED_EVENT } from '../api/deliveryEta'
 import {
   createCashOnDeliveryOrder,
   createStripeCheckoutSession,
@@ -20,7 +21,9 @@ import {
 const emit = defineEmits(['continueShopping', 'login'])
 const router = useRouter()
 
-const deliveryFee = computed(() => (cartTotal.value >= 60 || !cartProducts.value.length ? 0 : 6))
+const totalDeliveryDistanceKm = ref(null)
+const isDeliveryDistanceLoading = ref(false)
+const deliveryFee = computed(() => calculateDeliveryFee(totalDeliveryDistanceKm.value))
 const payableTotal = computed(() => cartTotal.value + deliveryFee.value)
 const isStartingCheckout = ref(false)
 const isPlacingCodOrder = ref(false)
@@ -83,6 +86,105 @@ const itemSavings = computed(() =>
     return total + (item.oldPrice - item.price) * item.quantity
   }, 0),
 )
+
+function formatDistanceValue(distanceKm) {
+  if (!Number.isFinite(distanceKm) || distanceKm <= 0) {
+    return ''
+  }
+
+  return distanceKm >= 10
+    ? distanceKm.toFixed(1).replace(/\.0$/, '')
+    : distanceKm.toFixed(2).replace(/0+$/, '').replace(/\.$/, '')
+}
+
+function calculateDeliveryFee(distanceKm) {
+  if (!cartProducts.value.length || !Number.isFinite(distanceKm) || distanceKm <= 0) {
+    return 0
+  }
+
+  const roundedDistanceKm = Math.ceil(distanceKm)
+
+  return roundedDistanceKm <= 10 ? 10 : 10 + (roundedDistanceKm - 10)
+}
+
+function getSupplierDistanceKey(item = {}) {
+  const latitude = item?.supplierDetails?.customLatitude
+    || item?.supplierDetails?.custom_latitude
+    || item?.supplierLatitude
+    || item?.custom_latitude
+    || ''
+  const longitude = item?.supplierDetails?.customLongitude
+    || item?.supplierDetails?.custom_longitude
+    || item?.supplierLongitude
+    || item?.custom_longitude
+    || ''
+  const supplierAddress = String(
+    item?.supplierDetails?.customGoogleAddress
+      || item?.supplierDetails?.custom_google_address
+      || item?.supplierAddress
+      || '',
+  ).trim().toLowerCase()
+
+  if (latitude && longitude) {
+    return `coords:${latitude},${longitude}`
+  }
+
+  if (supplierAddress) {
+    return `address:${supplierAddress}`
+  }
+
+  return `item:${item.id}`
+}
+
+let deliveryDistanceRequestId = 0
+
+async function refreshDeliveryDistance() {
+  const requestId = ++deliveryDistanceRequestId
+
+  if (!cartProducts.value.length) {
+    totalDeliveryDistanceKm.value = null
+    isDeliveryDistanceLoading.value = false
+    return
+  }
+
+  isDeliveryDistanceLoading.value = true
+
+  try {
+    const uniqueSupplierItems = Array.from(
+      cartProducts.value.reduce((supplierMap, item) => {
+        const supplierKey = getSupplierDistanceKey(item)
+
+        if (!supplierMap.has(supplierKey)) {
+          supplierMap.set(supplierKey, item)
+        }
+
+        return supplierMap
+      }, new Map()).values(),
+    )
+    const distances = await Promise.all(
+      uniqueSupplierItems.map((item) => getCustomerToSupplierDistanceKm(item)),
+    )
+
+    if (requestId !== deliveryDistanceRequestId) {
+      return
+    }
+
+    const resolvedDistances = distances.filter((distance) => Number.isFinite(distance) && distance > 0)
+    totalDeliveryDistanceKm.value = resolvedDistances.length
+      ? resolvedDistances.reduce((total, distance) => total + distance, 0)
+      : null
+  } catch {
+    if (requestId !== deliveryDistanceRequestId) {
+      return
+    }
+
+    totalDeliveryDistanceKm.value = null
+  } finally {
+    if (requestId === deliveryDistanceRequestId) {
+      isDeliveryDistanceLoading.value = false
+    }
+  }
+}
 
 function selectDeliverySlot(slot) {
   selectedDeliverySlot.value = slot
@@ -231,6 +333,7 @@ async function startStripeCheckout() {
       selectedDeliveryAddress.value,
       selectedDeliveryDate.value,
       effectiveDeliverySlot.value,
+      deliveryFee.value,
     )
     console.log('Pay now checkout response', response)
     const checkoutUrl = response?.message?.checkout_url
@@ -301,6 +404,7 @@ async function placeCashOnDeliveryOrder() {
       selectedDeliveryAddress.value,
       selectedDeliveryDate.value,
       effectiveDeliverySlot.value,
+      deliveryFee.value,
     )
     console.log('Cash on delivery order response', response)
     const salesOrder = response?.message?.sales_order
@@ -365,14 +469,33 @@ function handleWindowFocus() {
 
 onMounted(() => {
   refreshCurrentSession()
+  refreshDeliveryDistance()
   window.addEventListener('focus', handleWindowFocus)
   window.addEventListener('pageshow', handleWindowFocus)
+  window.addEventListener(LOCATION_UPDATED_EVENT, refreshDeliveryDistance)
 })
 
 onUnmounted(() => {
   window.removeEventListener('focus', handleWindowFocus)
   window.removeEventListener('pageshow', handleWindowFocus)
+  window.removeEventListener(LOCATION_UPDATED_EVENT, refreshDeliveryDistance)
 })
+
+watch(
+  cartProducts,
+  () => {
+    refreshDeliveryDistance()
+  },
+  { deep: true },
+)
+
+watch(
+  customerAddresses,
+  () => {
+    refreshDeliveryDistance()
+  },
+  { deep: true },
+)
 </script>
 
 <template>
@@ -441,8 +564,14 @@ onUnmounted(() => {
             <strong>- AED {{ itemSavings }}</strong>
           </div>
           <div class="cart-summary-row">
+            <span>Total distance</span>
+            <strong>
+              {{ isDeliveryDistanceLoading ? 'Calculating...' : (formatDistanceValue(totalDeliveryDistanceKm) ? `${formatDistanceValue(totalDeliveryDistanceKm)} km` : '-') }}
+            </strong>
+          </div>
+          <div class="cart-summary-row">
             <span>Delivery charge</span>
-            <strong>{{ deliveryFee ? `AED ${deliveryFee}` : 'FREE' }}</strong>
+            <strong>{{ isDeliveryDistanceLoading ? 'Calculating...' : (deliveryFee ? `AED ${deliveryFee}` : 'FREE') }}</strong>
           </div>
           <div class="cart-summary-total">
             <span>Grand total</span>
