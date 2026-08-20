@@ -26,45 +26,23 @@ const isStartingCheckout = ref(false)
 const isPlacingCodOrder = ref(false)
 const checkoutError = ref('')
 const isAddressRequired = ref(false)
-const selectedDeliveryDate = ref('2026-08-26')
 const selectedDeliverySlot = ref('')
+const deliveryDateInput = ref(null)
 const LAST_COD_ORDER_ITEMS_STORAGE_KEY = 'buyInMinutesLastCodOrderItems'
-const deliveryDateOptions = [
-  {
-    value: '2026-08-26',
-    day: 'Wed',
-    date: '26 Aug',
-    status: 'Available',
-    isAvailable: true,
-  },
-  {
-    value: '2026-08-27',
-    day: 'Thurs',
-    date: '27 Aug',
-    status: 'Full',
-    isAvailable: false,
-  },
-  {
-    value: '2026-08-28',
-    day: 'Fri',
-    date: '28 Aug',
-    status: 'Full',
-    isAvailable: false,
-  },
-  {
-    value: '2026-08-29',
-    day: 'Sat',
-    date: '29 Aug',
-    status: 'Full',
-    isAvailable: false,
-  },
-]
 const deliverySlots = [
   '10 AM - 12 PM',
   '12 PM - 2 PM',
   '2 PM - 4 PM',
   '4 PM - 6 PM',
 ]
+const deliveryDateMin = getDubaiDateInputValue()
+const selectedDeliveryDate = ref(deliveryDateMin)
+const requiresDeliverySlot = computed(() =>
+  cartProducts.value.some((item) => item.customDeliverySlots),
+)
+const effectiveDeliverySlot = computed(() =>
+  requiresDeliverySlot.value ? selectedDeliverySlot.value : '',
+)
 const canCheckout = computed(() => isAuthReady.value && Boolean(currentUser.value))
 const checkoutButtonLabel = computed(() => {
   if (!isAuthReady.value) {
@@ -74,10 +52,7 @@ const checkoutButtonLabel = computed(() => {
   return canCheckout.value ? '' : 'Login to Proceed'
 })
 const hasDeliveryAddress = computed(() => customerAddresses.value.length > 0)
-const selectedDeliveryDateLabel = computed(() =>
-  deliveryDateOptions.find((dateOption) => dateOption.value === selectedDeliveryDate.value)?.day
-  || selectedDeliveryDate.value,
-)
+const selectedDeliveryDateLabel = computed(() => formatDeliveryDate(selectedDeliveryDate.value))
 const selectedDeliveryAddress = computed(() =>
   customerAddresses.value.find((address) => address.isDefault)
   || customerAddresses.value[0]
@@ -93,16 +68,53 @@ const itemSavings = computed(() =>
   }, 0),
 )
 
-function selectDeliveryDate(dateOption) {
-  if (!dateOption.isAvailable) {
+function selectDeliverySlot(slot) {
+  selectedDeliverySlot.value = slot
+}
+
+function openDeliveryDatePicker() {
+  const input = deliveryDateInput.value
+
+  if (!input) {
     return
   }
 
-  selectedDeliveryDate.value = dateOption.value
+  input.focus()
+
+  if (typeof input.showPicker === 'function') {
+    input.showPicker()
+    return
+  }
+
+  input.click()
 }
 
-function selectDeliverySlot(slot) {
-  selectedDeliverySlot.value = slot
+function getDubaiDateInputValue() {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Dubai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date())
+}
+
+function formatDeliveryDate(dateValue) {
+  if (!dateValue) {
+    return ''
+  }
+
+  const deliveryDate = new Date(`${dateValue}T00:00:00`)
+
+  if (Number.isNaN(deliveryDate.getTime())) {
+    return dateValue
+  }
+
+  return new Intl.DateTimeFormat('en-US', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  }).format(deliveryDate)
 }
 
 async function refreshCurrentSession() {
@@ -183,7 +195,7 @@ async function startStripeCheckout() {
     return
   }
 
-  if (!selectedDeliverySlot.value) {
+  if (requiresDeliverySlot.value && !selectedDeliverySlot.value) {
     checkoutError.value = 'Please choose a delivery slot before checkout.'
     return
   }
@@ -195,14 +207,14 @@ async function startStripeCheckout() {
       cartItems: cartProducts.value,
       deliveryAddress: selectedDeliveryAddress.value,
       deliveryDate: selectedDeliveryDate.value,
-      deliverySlot: selectedDeliverySlot.value,
+      deliverySlot: effectiveDeliverySlot.value,
     })
     const response = await createStripeCheckoutSession(
       cartProducts.value,
       '',
       selectedDeliveryAddress.value,
       selectedDeliveryDate.value,
-      selectedDeliverySlot.value,
+      effectiveDeliverySlot.value,
     )
     console.log('Pay now checkout response', response)
     const checkoutUrl = response?.message?.checkout_url
@@ -253,7 +265,7 @@ async function placeCashOnDeliveryOrder() {
     return
   }
 
-  if (!selectedDeliverySlot.value) {
+  if (requiresDeliverySlot.value && !selectedDeliverySlot.value) {
     checkoutError.value = 'Please choose a delivery slot before placing the order.'
     return
   }
@@ -265,14 +277,14 @@ async function placeCashOnDeliveryOrder() {
       cartItems: cartProducts.value,
       deliveryAddress: selectedDeliveryAddress.value,
       deliveryDate: selectedDeliveryDate.value,
-      deliverySlot: selectedDeliverySlot.value,
+      deliverySlot: effectiveDeliverySlot.value,
     })
     const response = await createCashOnDeliveryOrder(
       cartProducts.value,
       '',
       selectedDeliveryAddress.value,
       selectedDeliveryDate.value,
-      selectedDeliverySlot.value,
+      effectiveDeliverySlot.value,
     )
     console.log('Cash on delivery order response', response)
     const salesOrder = response?.message?.sales_order
@@ -431,55 +443,65 @@ onUnmounted(() => {
               </div>
             </div>
 
-            <div class="cart-date-options" role="group" aria-label="Choose delivery date">
-              <button
-                v-for="dateOption in deliveryDateOptions"
-                :key="dateOption.value"
-                class="cart-date-option"
-                :class="{
-                  'is-selected': selectedDeliveryDate === dateOption.value,
-                  'is-full': !dateOption.isAvailable,
-                }"
-                type="button"
-                :disabled="!dateOption.isAvailable"
-                @click="selectDeliveryDate(dateOption)"
-              >
-                <span>{{ dateOption.day }}</span>
-                <strong>{{ dateOption.date }}</strong>
-                <em>{{ dateOption.status }}</em>
-              </button>
-            </div>
-
-            <div class="cart-delivery-heading cart-slot-heading">
-              <span class="cart-delivery-step">2</span>
-              <div>
-                <h3>Choose delivery slot</h3>
-                <p>Pick the time window that works best.</p>
+            <div class="cart-date-picker">
+              <label class="cart-date-label" for="cart-delivery-date">Delivery date</label>
+              <div class="cart-date-input-shell" @click="openDeliveryDatePicker">
+                <div class="cart-date-display">
+                  <strong>{{ selectedDeliveryDateLabel }}</strong>
+                </div>
+                <input
+                  id="cart-delivery-date"
+                  ref="deliveryDateInput"
+                  v-model="selectedDeliveryDate"
+                  class="cart-date-input"
+                  type="date"
+                  :min="deliveryDateMin"
+                  @click="openDeliveryDatePicker"
+                />
               </div>
+              <p class="cart-date-help">
+                Choose any date from {{ selectedDeliveryDateLabel || 'the calendar' }} onward.
+              </p>
             </div>
 
-            <div class="cart-slot-options" role="group" aria-label="Choose delivery slot">
-              <button
-                v-for="slot in deliverySlots"
-                :key="slot"
-                class="cart-slot-option"
-                :class="{ 'is-selected': selectedDeliverySlot === slot }"
-                type="button"
-                @click="selectDeliverySlot(slot)"
-              >
-                {{ slot }}
-              </button>
-            </div>
+            <template v-if="requiresDeliverySlot">
+              <div class="cart-delivery-heading cart-slot-heading">
+                <span class="cart-delivery-step">2</span>
+                <div>
+                  <h3>Choose delivery slot</h3>
+                  <p>Pick the time window that works best.</p>
+                </div>
+              </div>
+
+              <div class="cart-slot-options" role="group" aria-label="Choose delivery slot">
+                <button
+                  v-for="slot in deliverySlots"
+                  :key="slot"
+                  class="cart-slot-option"
+                  :class="{ 'is-selected': selectedDeliverySlot === slot }"
+                  type="button"
+                  @click="selectDeliverySlot(slot)"
+                >
+                  {{ slot }}
+                </button>
+              </div>
+            </template>
 
             <p
-              v-if="selectedDeliveryDate && selectedDeliverySlot"
+              v-if="selectedDeliveryDate && effectiveDeliverySlot"
               class="cart-delivery-selection"
             >
               Delivery selected for
               <strong>{{ selectedDeliveryDateLabel }}</strong>
-              between <strong>{{ selectedDeliverySlot }}</strong>.
+              between <strong>{{ effectiveDeliverySlot }}</strong>.
             </p>
-            <label class="visually-hidden" for="cart-delivery-slot">
+            <p
+              v-else-if="selectedDeliveryDate"
+              class="cart-delivery-selection"
+            >
+              Delivery date selected for <strong>{{ selectedDeliveryDateLabel }}</strong>.
+            </p>
+            <label v-if="requiresDeliverySlot" class="visually-hidden" for="cart-delivery-slot">
               Choose Delivery Slot
               <select id="cart-delivery-slot" v-model="selectedDeliverySlot" tabindex="-1">
                 <option value="" disabled>Choose Delivery Slot</option>

@@ -47,6 +47,7 @@ export function addProductToCart(product) {
       supplier: product.supplier || product.supplierDetails?.name || '',
       supplierName: product.supplierName,
       size: selectedSize,
+      customDeliverySlots: Boolean(product.customDeliverySlots),
       quantity: 1,
     }
     cartItems.value.push(cartItem)

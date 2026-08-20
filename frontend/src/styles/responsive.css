@@ -1463,13 +1463,8 @@
     gap: 9px;
   }
 
-  .cart-date-options {
-    gap: 8px;
-  }
-
-  .cart-date-option {
-    min-height: 72px;
-    padding: 9px 10px;
+  .cart-date-input {
+    min-height: 46px;
   }
 
   .cart-slot-option {
