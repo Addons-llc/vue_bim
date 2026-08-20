@@ -2,9 +2,22 @@ import { computed, ref } from 'vue'
 
 const CART_STORAGE_KEY = 'buyInMinutesCart'
 
+function isTruthyFlag(value) {
+  return value === true || value === 1 || value === '1' || value === 'Yes'
+}
+
 function readStoredCart() {
   try {
-    return JSON.parse(localStorage.getItem(CART_STORAGE_KEY)) || []
+    const storedItems = JSON.parse(localStorage.getItem(CART_STORAGE_KEY)) || []
+
+    return Array.isArray(storedItems)
+      ? storedItems.map((item) => ({
+        ...item,
+        customDeliverySlots: isTruthyFlag(
+          item?.customDeliverySlots ?? item?.custom_delivery_slots,
+        ),
+      }))
+      : []
   } catch {
     return []
   }
@@ -27,6 +40,9 @@ export const cartTotal = computed(() =>
 export function addProductToCart(product) {
   const selectedSize = String(product.selectedSize || product.size || '').trim()
   const existingItem = cartItems.value.find((item) => item.id === product.id)
+  const productRequiresDeliverySlot = isTruthyFlag(
+    product.customDeliverySlots ?? product.custom_delivery_slots,
+  )
   let cartItem
 
   if (existingItem) {
@@ -34,6 +50,9 @@ export function addProductToCart(product) {
     if (selectedSize) {
       existingItem.size = selectedSize
     }
+    existingItem.customDeliverySlots = isTruthyFlag(
+      existingItem.customDeliverySlots ?? existingItem.custom_delivery_slots,
+    ) || productRequiresDeliverySlot
     cartItem = existingItem
   } else {
     cartItem = {
@@ -47,7 +66,7 @@ export function addProductToCart(product) {
       supplier: product.supplier || product.supplierDetails?.name || '',
       supplierName: product.supplierName,
       size: selectedSize,
-      customDeliverySlots: Boolean(product.customDeliverySlots),
+      customDeliverySlots: productRequiresDeliverySlot,
       quantity: 1,
     }
     cartItems.value.push(cartItem)

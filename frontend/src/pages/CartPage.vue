@@ -37,8 +37,21 @@ const deliverySlots = [
 ]
 const deliveryDateMin = getDubaiDateInputValue()
 const selectedDeliveryDate = ref(deliveryDateMin)
+function itemRequiresDeliverySlot(item) {
+  return (
+    item?.customDeliverySlots === true
+    || item?.customDeliverySlots === 1
+    || item?.customDeliverySlots === '1'
+    || item?.customDeliverySlots === 'Yes'
+    || item?.custom_delivery_slots === true
+    || item?.custom_delivery_slots === 1
+    || item?.custom_delivery_slots === '1'
+    || item?.custom_delivery_slots === 'Yes'
+  )
+}
+
 const requiresDeliverySlot = computed(() =>
-  cartProducts.value.some((item) => item.customDeliverySlots),
+  cartProducts.value.some((item) => itemRequiresDeliverySlot(item)),
 )
 const effectiveDeliverySlot = computed(() =>
   requiresDeliverySlot.value ? selectedDeliverySlot.value : '',
@@ -459,9 +472,6 @@ onUnmounted(() => {
                   @click="openDeliveryDatePicker"
                 />
               </div>
-              <p class="cart-date-help">
-                Choose any date from {{ selectedDeliveryDateLabel || 'the calendar' }} onward.
-              </p>
             </div>
 
             <template v-if="requiresDeliverySlot">

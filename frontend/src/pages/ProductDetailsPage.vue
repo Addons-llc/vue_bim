@@ -88,6 +88,7 @@ function mergeProductDetails(cachedProduct, loadedProduct) {
     reviewCount: loadedProduct.reviewCount || cachedProduct.reviewCount,
     stockQuantity: loadedProduct.stockQuantity || cachedProduct.stockQuantity,
     inStock: loadedProduct.inStock ?? cachedProduct.inStock,
+    customDeliverySlots: loadedProduct.customDeliverySlots ?? cachedProduct.customDeliverySlots,
     customSize: loadedProduct.customSize || cachedProduct.customSize || loadedProduct.custom_size || cachedProduct.custom_size,
   }
 }

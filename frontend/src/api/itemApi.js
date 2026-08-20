@@ -88,6 +88,15 @@ function isTruthyFlag(value) {
   return value === true || value === 1 || value === '1' || value === 'Yes'
 }
 
+function hasCustomDeliverySlots(item) {
+  return isTruthyFlag(
+    item.custom_delivery_slots
+      ?? item.customDeliverySlots
+      ?? item.delivery_slots
+      ?? item.deliverySlots,
+  )
+}
+
 function hasPublishField(item) {
   return [
     'published_in_supplier_portal',
@@ -280,7 +289,7 @@ async function mapItemToProduct(item) {
     category: itemGroup,
     brand: item.brand || '',
     customPopularItems: isTruthyFlag(item.custom_popular_items),
-    customDeliverySlots: isTruthyFlag(item.custom_delivery_slots),
+    customDeliverySlots: hasCustomDeliverySlots(item),
     description: description || 'Fresh item available for quick delivery.',
     customSize,
     price: getItemSellingPrice(item),
