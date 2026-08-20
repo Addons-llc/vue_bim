@@ -511,12 +511,12 @@
 .home-rail-store .category-tile.is-stacked .category-image-wrap {
   background: transparent;
   border: 0;
-  border-radius: 0;
+  border-radius: 50%;
   box-shadow: none;
-  clip-path: none;
-  overflow: visible;
-  -webkit-mask-image: none;
-  mask-image: none;
+  clip-path: circle(50%);
+  overflow: hidden;
+  -webkit-mask-image: radial-gradient(circle, #000 99%, transparent 100%);
+  mask-image: radial-gradient(circle, #000 99%, transparent 100%);
 }
 
 .home-rail-brands .category-tile:hover .category-image-wrap,
@@ -531,5 +531,8 @@
 
 .home-rail-brands .category-image,
 .home-rail-store .category-image {
-  border-radius: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
 }
