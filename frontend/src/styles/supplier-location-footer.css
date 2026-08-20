@@ -236,6 +236,68 @@
   padding: 36px 0 0;
 }
 
+.footer-supplier-section > .supplier-dashboard-card:first-child {
+  min-height: 188px;
+  align-items: start;
+}
+
+.footer-supplier-section > .supplier-dashboard-card:first-child .supplier-card-copy {
+  align-content: start;
+  gap: 10px;
+}
+
+.footer-supplier-section > .supplier-dashboard-card:first-child .supplier-card-copy p {
+  max-width: 220px;
+}
+
+.supplier-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 14px;
+  position: relative;
+  z-index: 2;
+}
+
+.supplier-card-actions .supplier-card-cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  min-height: 36px;
+  border-radius: 999px;
+  padding: 0 18px;
+  border: 1px solid transparent;
+  background: #0754d6;
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1;
+  transition: background-color 0.15s ease, color 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.supplier-card-actions .supplier-card-cta::after {
+  content: none;
+}
+
+.supplier-card-actions .supplier-card-cta:hover,
+.supplier-card-actions .supplier-card-cta:active {
+  background: #0647b5;
+}
+
+.supplier-card-actions .supplier-card-cta.is-secondary {
+  border: 1px solid #0f172a;
+  background: #0f172a;
+  color: #ffffff;
+}
+
+.supplier-card-actions .supplier-card-cta.is-secondary:hover,
+.supplier-card-actions .supplier-card-cta.is-secondary:active {
+  border-color: #020617;
+  background: #020617;
+}
+
 .footer-inner {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);

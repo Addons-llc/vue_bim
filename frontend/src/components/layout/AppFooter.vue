@@ -1,21 +1,20 @@
 <script setup>
 const appBase = import.meta.env.BASE_URL
-const addSupplierUrl = 'https://buyinminutes.u.frappe.cloud/become-a-supplier/new'
+const supplierPortalUrl = 'https://buyinminutes.u.frappe.cloud/supplier'
 const deliveryCompanyUrl = 'https://buyinminutes.u.frappe.cloud/Buy%20In%20Minutes/new'
 </script>
 
 <template>
   <footer class="app-footer">
     <section class="footer-supplier-section" aria-label="Partner enrollment">
-      <a
-        class="supplier-dashboard-card"
-        :href="addSupplierUrl"
-        aria-label="SELL WITH US"
-      >
+      <article class="supplier-dashboard-card" aria-label="SELL WITH US">
         <div class="supplier-card-copy">
           <h2>SELL WITH US</h2>
           <p>Fast onboarding for trusted market partners.</p>
-          <span class="supplier-card-cta">Add now</span>
+          <div class="supplier-card-actions">
+            <a class="supplier-card-cta" :href="supplierPortalUrl">Register</a>
+            <a class="supplier-card-cta is-secondary" :href="supplierPortalUrl">Login</a>
+          </div>
         </div>
         <img
           class="supplier-card-image"
@@ -23,7 +22,7 @@ const deliveryCompanyUrl = 'https://buyinminutes.u.frappe.cloud/Buy%20In%20Minut
           alt=""
           aria-hidden="true"
         />
-      </a>
+      </article>
 
       <a
         class="supplier-dashboard-card delivery-company-card"

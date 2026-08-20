@@ -688,8 +688,38 @@
   }
 
   .supplier-card-copy p,
-  .supplier-card-cta,
   .supplier-card-image {
+    display: none;
+  }
+
+  .footer-supplier-section .supplier-card-actions,
+  .footer-supplier-section .supplier-card-actions .supplier-card-cta {
+    display: inline-flex;
+  }
+
+  .footer-supplier-section .supplier-card-actions {
+    gap: 8px;
+    margin-top: 10px;
+  }
+
+  .footer-supplier-section .supplier-card-actions .supplier-card-cta {
+    min-height: 32px;
+    padding: 0 14px;
+    font-size: 12px;
+  }
+
+  .footer-supplier-section .supplier-card-copy p {
+    display: block;
+    max-width: 100%;
+    margin-top: 8px;
+    color: #d1d5db;
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1.4;
+  }
+
+  .footer-supplier-section .delivery-company-card .supplier-card-cta,
+  .footer-supplier-section .rider-card .supplier-card-cta {
     display: none;
   }
 
