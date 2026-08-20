@@ -12,6 +12,7 @@ from frappe.utils import flt, get_url, getdate, nowdate
 from erpnext.setup.doctype.brand.brand import get_brand_defaults
 from erpnext.setup.doctype.item_group.item_group import get_item_group_defaults
 from erpnext.stock.doctype.item.item import get_item_defaults
+from buy_in_minutes.config import adaptive_pricing
 
 
 STRIPE_API_BASE_URL = "https://api.stripe.com/v1"
@@ -1217,6 +1218,7 @@ def _build_checkout_params(checkout_items, sales_order_name=None, return_origin=
 	cancel_url = f"{return_origin}/buy-in-minutes#/payment/cancel"
 	stripe_currency = _get_stripe_settings().get("currency") or DEFAULT_CURRENCY
 	checkout_user = _normalize_user_name(frappe.session.user)
+	adaptive_pricing_enabled = bool((adaptive_pricing or {}).get("enabled"))
 	params = {
 		"mode": "payment",
 		"success_url": success_url,
@@ -1224,6 +1226,7 @@ def _build_checkout_params(checkout_items, sales_order_name=None, return_origin=
 		"client_reference_id": checkout_user,
 		"metadata[user]": checkout_user,
 		"metadata[payment_method]": "stripe",
+		"adaptive_pricing[enabled]": "true" if adaptive_pricing_enabled else "false",
 	}
 	if sales_order_name:
 		params["metadata[sales_order]"] = sales_order_name

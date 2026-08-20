@@ -193,7 +193,6 @@ watch(
       <div class="product-footer">
         <span class="product-price">
           AED {{ product.price }}
-          <span v-if="product.oldPrice">AED {{ product.oldPrice }}</span>
         </span>
         <div v-if="cartQuantity" class="product-quantity-control" :aria-label="`${product.name} quantity`">
           <button

@@ -193,7 +193,6 @@ watch(
         <div class="product-detail-footer">
           <span class="product-detail-price">
             AED {{ product.price }}
-            <span v-if="product.oldPrice">AED {{ product.oldPrice }}</span>
           </span>
 
           <div

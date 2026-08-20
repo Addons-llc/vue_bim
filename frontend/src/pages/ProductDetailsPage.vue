@@ -332,7 +332,6 @@ watch(productSizeOptions, (sizes) => {
           <span class="product-detail-price">
             <span class="product-detail-currency">AED</span>
             {{ product.price }}
-            <span v-if="product.oldPrice">AED {{ product.oldPrice }}</span>
           </span>
           <span class="product-detail-free-delivery">Free Delivery</span>
         </div>

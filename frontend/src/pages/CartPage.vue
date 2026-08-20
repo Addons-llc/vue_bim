@@ -406,7 +406,6 @@ onUnmounted(() => {
             <p v-if="item.size" class="cart-page-item-size">Size: {{ item.size }}</p>
             <div class="cart-page-item-price">
               <strong>AED {{ item.price }}</strong>
-              <span v-if="item.oldPrice">AED {{ item.oldPrice }}</span>
             </div>
           </div>
 
