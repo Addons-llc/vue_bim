@@ -56,6 +56,9 @@ const requiresDeliverySlot = computed(() =>
 const effectiveDeliverySlot = computed(() =>
   requiresDeliverySlot.value ? selectedDeliverySlot.value : '',
 )
+const selectedDeliveryDateContext = computed(() =>
+  selectedDeliveryDate.value === deliveryDateMin ? 'Today' : 'Scheduled delivery',
+)
 const canCheckout = computed(() => isAuthReady.value && Boolean(currentUser.value))
 const checkoutButtonLabel = computed(() => {
   if (!isAuthReady.value) {
@@ -460,7 +463,17 @@ onUnmounted(() => {
               <label class="cart-date-label" for="cart-delivery-date">Delivery date</label>
               <div class="cart-date-input-shell" @click="openDeliveryDatePicker">
                 <div class="cart-date-display">
-                  <strong>{{ selectedDeliveryDateLabel }}</strong>
+                  <span class="cart-date-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                      <rect x="3" y="5" width="18" height="16" rx="3" />
+                      <path d="M16 3v4M8 3v4M3 10h18" />
+                    </svg>
+                  </span>
+                  <div class="cart-date-copy">
+                    <span>{{ selectedDeliveryDateContext }}</span>
+                    <strong>{{ selectedDeliveryDateLabel }}</strong>
+                  </div>
+                  <span class="cart-date-action" aria-hidden="true">Change</span>
                 </div>
                 <input
                   id="cart-delivery-date"
@@ -495,6 +508,9 @@ onUnmounted(() => {
                   {{ slot }}
                 </button>
               </div>
+              <p v-if="!selectedDeliverySlot" class="cart-slot-prompt">
+                Select a delivery slot to continue.
+              </p>
             </template>
 
             <p

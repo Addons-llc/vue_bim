@@ -7,10 +7,11 @@
   flex-wrap: wrap;
   gap: 8px;
   margin-bottom: 18px;
-  border: 1px solid #d1d5db;
-  border-radius: 8px;
+  border: 1px solid #dbe3ee;
+  border-radius: 14px;
   padding: 4px;
-  background: #ffffff;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05);
 }
 
 .category-tab-button {
@@ -28,8 +29,9 @@
 
 .category-tab-button:hover,
 .category-tab-button.is-active {
-  background: #2563eb;
+  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
   color: #ffffff;
+  box-shadow: 0 8px 18px rgba(37, 99, 235, 0.22);
 }
 
 .dashboard-hero + .category-section {
@@ -152,11 +154,11 @@
   align-items: flex-start;
   gap: 12px;
   width: 100%;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
+  border: 1px solid #e0e7f0;
+  border-radius: 16px;
   min-height: 126px;
   padding: 8px;
-  background: #ffffff;
+  background: linear-gradient(180deg, #ffffff 0%, #fcfdff 100%);
   color: #374151;
   text-align: left;
   cursor: pointer;
@@ -171,8 +173,9 @@
 .category-tile:focus-visible,
 .category-tile.is-active {
   background: #f8fbff;
-  border-color: #bfdbfe;
+  border-color: #c7dafd;
   color: #111827;
+  box-shadow: 0 16px 32px rgba(37, 99, 235, 0.1);
 }
 
 .category-tile:hover,
@@ -194,8 +197,8 @@
   height: 112px;
   max-width: none;
   aspect-ratio: 1;
-  border-radius: 8px;
-  background: #ffffff;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #ffffff 0%, #f6f9ff 100%);
   overflow: hidden;
   padding: 0;
   transition:
@@ -207,7 +210,7 @@
 .category-tile:focus-visible .category-image-wrap,
 .category-tile.is-active .category-image-wrap {
   background: #eaf2ff;
-  box-shadow: 0 10px 24px rgba(37, 99, 235, 0.13);
+  box-shadow: 0 14px 28px rgba(37, 99, 235, 0.16);
 }
 
 .category-image {

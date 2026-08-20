@@ -281,36 +281,69 @@
 
 .cart-date-input-shell {
   position: relative;
+  display: flex;
+  align-items: center;
   border: 1px solid #d1d5db;
-  border-radius: 8px;
+  border-radius: 12px;
   background: #ffffff;
-  transition: border-color 0.18s ease, background-color 0.18s ease, box-shadow 0.18s ease;
+  box-shadow: 0 10px 20px rgba(15, 23, 42, 0.05);
+  transition: border-color 0.18s ease, background-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
   cursor: pointer;
 }
 
 .cart-date-display {
   display: grid;
-  gap: 2px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
   min-height: 48px;
-  padding: 10px 14px;
+  width: 100%;
+  padding: 11px 14px;
   box-sizing: border-box;
-  justify-items: center;
-  align-content: center;
-  text-align: center;
+  text-align: left;
 }
 
-.cart-date-display strong {
+.cart-date-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: #eff6ff;
+  color: #2563eb;
+}
+
+.cart-date-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.cart-date-copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.cart-date-copy strong {
   color: #111827;
   font-size: 14px;
   font-weight: 850;
   line-height: 1.2;
 }
 
-.cart-date-display span {
+.cart-date-copy span {
   color: #6b7280;
   font-size: 12px;
   font-weight: 650;
   line-height: 1.3;
+}
+
+.cart-date-action {
+  color: #2563eb;
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
 }
 
 .cart-date-input {
@@ -327,6 +360,11 @@
 .cart-slot-option:hover {
   border-color: #9ca3af;
   background: #f9fafb;
+}
+
+.cart-date-input-shell:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 14px 28px rgba(15, 23, 42, 0.08);
 }
 
 .cart-date-input-shell:focus-within,
@@ -354,9 +392,25 @@
 .cart-slot-option {
   min-height: 42px;
   padding: 0 12px;
+  border-radius: 12px;
   text-align: center;
   font-size: 13px;
   font-weight: 850;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.04);
+  transition: border-color 0.18s ease, background-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+}
+
+.cart-slot-option:hover,
+.cart-slot-option:focus-visible {
+  transform: translateY(-1px);
+}
+
+.cart-slot-prompt {
+  margin: -2px 0 0 34px;
+  color: #6b7280;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.4;
 }
 
 .cart-date-input:focus-visible,

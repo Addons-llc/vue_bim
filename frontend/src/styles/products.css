@@ -66,6 +66,7 @@
 
 .section-link:hover {
   color: #076516;
+  transform: translateX(2px);
 }
 
 .product-rail-wrap {
@@ -128,12 +129,12 @@
   height: 32px;
   border: 0;
   border-radius: 999px;
-  background: #ffffff;
+  background: rgba(255, 255, 255, 0.96);
   color: #111827;
   font-size: 26px;
   line-height: 1;
   cursor: pointer;
-  box-shadow: 0 6px 18px rgba(17, 24, 39, 0.16);
+  box-shadow: 0 12px 28px rgba(17, 24, 39, 0.16);
   transform: translateY(-50%);
   z-index: 2;
 }
@@ -148,6 +149,7 @@
 
 .product-rail-arrow:hover {
   color: #0c831f;
+  transform: translateY(-50%) scale(1.06);
 }
 
 .product-grid {
@@ -163,9 +165,22 @@
   overflow: hidden;
   min-width: 0;
   min-height: 340px;
-  border: 1px solid #d1d5db;
-  border-radius: 8px;
-  background: #ffffff;
+  border: 1px solid #e0e7f0;
+  border-radius: 16px;
+  background: linear-gradient(180deg, #ffffff 0%, #fcfdff 100%);
+  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.05);
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease,
+    transform 0.2s ease,
+    background-color 0.2s ease;
+}
+
+.product-card:hover,
+.product-card:focus-within {
+  border-color: #cfe0ff;
+  box-shadow: 0 20px 40px rgba(15, 23, 42, 0.1);
+  transform: translateY(-3px);
 }
 
 .product-select-area {
@@ -203,7 +218,9 @@
 .product-card.is-compact .product-image {
   aspect-ratio: auto;
   height: 160px;
-  background: #ffffff;
+  background:
+    radial-gradient(circle at top, rgba(37, 99, 235, 0.08), transparent 45%),
+    #ffffff;
   border-radius: 0;
 }
 
@@ -222,7 +239,7 @@
   background: rgba(255, 255, 255, 0.94);
   color: #6b7280;
   cursor: pointer;
-  box-shadow: 0 4px 14px rgba(17, 24, 39, 0.12);
+  box-shadow: 0 8px 20px rgba(17, 24, 39, 0.12);
 }
 
 .product-wishlist-button svg {
@@ -236,6 +253,7 @@
   border-color: #fecaca;
   background: #fff1f2;
   color: #dc2626;
+  transform: scale(1.06);
 }
 
 .product-wishlist-button.is-active {
