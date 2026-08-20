@@ -2,7 +2,6 @@ import base64
 import hashlib
 import hmac
 import json
-from contextlib import contextmanager
 from urllib.parse import urlencode, urlparse
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
@@ -433,6 +432,14 @@ def _normalize_delivery_address(delivery_address):
 		"contact_name": _clean_text(delivery_address.get("contactName") or delivery_address.get("contact_name")),
 		"phone": _clean_text(delivery_address.get("phone")),
 		"area": _clean_text(delivery_address.get("area")),
+		"apartment_office_name": _clean_text(
+			delivery_address.get("apartmentOfficeName")
+			or delivery_address.get("apartment_office_name")
+		),
+		"apartment_office_no": _clean_text(
+			delivery_address.get("apartmentOfficeNo")
+			or delivery_address.get("apartment_office_no")
+		),
 		"building": _clean_text(delivery_address.get("building")),
 		"street": _clean_text(delivery_address.get("street")),
 		"landmark": _clean_text(delivery_address.get("landmark")),
@@ -455,20 +462,44 @@ def _build_delivery_address_display(delivery_address):
 	if contact_line:
 		lines.append(contact_line)
 
-	address_line = ", ".join(
+	apartment_line = ", ".join(
+		filter(
+			None,
+			[
+				address.get("apartment_office_name"),
+				address.get("apartment_office_no"),
+			],
+		)
+	)
+	if apartment_line:
+		lines.append(apartment_line)
+
+	building_line = ", ".join(
 		filter(
 			None,
 			[
 				address.get("building"),
 				address.get("street"),
+			],
+		)
+	)
+	if building_line:
+		lines.append(building_line)
+
+	area_line = ", ".join(
+		filter(
+			None,
+			[
 				address.get("area"),
-				address.get("landmark"),
 				address.get("emirate"),
 			],
 		)
 	)
-	if address_line:
-		lines.append(address_line)
+	if area_line:
+		lines.append(area_line)
+
+	if address.get("landmark"):
+		lines.append(address["landmark"])
 
 	return "\n".join(lines)
 
@@ -524,8 +555,25 @@ def _get_or_create_customer_address(customer, delivery_address):
 			"doctype": "Address",
 			"address_title": address.get("contact_name") or customer,
 			"address_type": address.get("label") if address.get("label") in ("Billing", "Shipping", "Office", "Personal") else "Shipping",
-			"address_line1": address["building"],
-			"address_line2": address["area"],
+			"address_line1": ", ".join(
+				filter(
+					None,
+					[
+						address.get("apartment_office_name"),
+						address.get("apartment_office_no"),
+						address["building"],
+					],
+				)
+			),
+			"address_line2": ", ".join(
+				filter(
+					None,
+					[
+						address.get("street"),
+						address["area"],
+					],
+				)
+			),
 			"city": address["area"],
 			"country": "United Arab Emirates",
 			"phone": address.get("phone"),
@@ -640,7 +688,12 @@ def _get_checkout_return_origin(return_origin=None):
 	return get_url("").rstrip("/")
 
 
-def _apply_delivery_address_to_sales_order(sales_order, customer, delivery_address):
+def _apply_delivery_address_to_sales_order(
+	sales_order,
+	customer,
+	delivery_address,
+	address_display=None,
+):
 	if not delivery_address:
 		return
 
@@ -656,7 +709,9 @@ def _apply_delivery_address_to_sales_order(sales_order, customer, delivery_addre
 
 	sales_order.set_missing_values()
 
-	address_display = _build_delivery_address_display(delivery_address)
+	address_display = _clean_text(address_display) or _build_delivery_address_display(
+		delivery_address
+	)
 	if address_display:
 		_set_doc_value_if_field_exists(sales_order, "address_display", address_display)
 		_set_doc_value_if_field_exists(sales_order, "shipping_address", address_display)
@@ -1008,9 +1063,8 @@ def _submit_purchase_orders(purchase_orders, sales_order_name):
 			continue
 
 		try:
-			with _as_administrator():
-				purchase_order.flags.ignore_permissions = True
-				purchase_order.submit()
+			purchase_order.flags.ignore_permissions = True
+			purchase_order.submit()
 		except Exception:
 			frappe.log_error(
 				title="Purchase Order Submission Failed",
@@ -1027,16 +1081,6 @@ def on_sales_order_submit(doc, method=None):
 	_create_purchase_orders_for_sales_order(doc)
 
 
-@contextmanager
-def _as_administrator():
-	previous_user = _normalize_user_name(getattr(frappe.session, "user", None))
-	frappe.set_user("Administrator")
-	try:
-		yield
-	finally:
-		frappe.set_user(previous_user)
-
-
 def _normalize_payment_schedule_dates(sales_order):
 	transaction_date = sales_order.transaction_date or nowdate()
 	transaction_date_value = getdate(transaction_date)
@@ -1044,6 +1088,32 @@ def _normalize_payment_schedule_dates(sales_order):
 	for payment_row in sales_order.get("payment_schedule") or []:
 		if not payment_row.due_date or getdate(payment_row.due_date) < transaction_date_value:
 			payment_row.due_date = transaction_date
+
+
+def _persist_sales_order_address_display(sales_order, address_display):
+	address_display = _clean_text(address_display)
+	if not address_display:
+		return
+
+	updates = {}
+	if sales_order.meta.has_field("address_display"):
+		updates["address_display"] = address_display
+	if sales_order.meta.has_field("shipping_address"):
+		updates["shipping_address"] = address_display
+
+	if not updates:
+		return
+
+	for fieldname, value in updates.items():
+		sales_order.set(fieldname, value)
+
+	if sales_order.name:
+		frappe.db.set_value(
+			sales_order.doctype,
+			sales_order.name,
+			updates,
+			update_modified=False,
+		)
 
 
 def _upsert_sales_order(
@@ -1054,12 +1124,13 @@ def _upsert_sales_order(
 	delivery_date=None,
 	delivery_slot=None,
 	customer_location=None,
+	address_display=None,
 ):
-	checkout_user = _normalize_user_name(frappe.session.user)
+	checkout_user = frappe.session.user
 	customer = _get_or_create_customer_for_user(checkout_user)
 	company = _get_default_company()
 	order_date = nowdate()
-	delivery_date = delivery_date or order_date
+	delivery_date = _clean_text(delivery_date) or order_date
 	order_items = _build_sales_order_item_rows(checkout_items, company, delivery_date)
 
 	if not order_items:
@@ -1067,19 +1138,21 @@ def _upsert_sales_order(
 
 	if sales_order_name and frappe.db.exists("Sales Order", sales_order_name):
 		sales_order_owner = frappe.db.sql(
-			"select owner from `tabSales Order` where name = %s",
+			"select owner from tabSales Order where name = %s",
 			(sales_order_name,),
 			as_dict=True,
 		)
+
 		if not sales_order_owner or sales_order_owner[0].owner != checkout_user:
 			frappe.throw(_("The linked Sales Order is no longer editable."))
 
-		with _as_administrator():
-			sales_order = frappe.get_doc("Sales Order", sales_order_name)
-			if sales_order.docstatus != 0:
-				frappe.throw(_("The linked Sales Order is no longer editable."))
-			sales_order.set("items", [])
-			sales_order.set("payment_schedule", [])
+		sales_order = frappe.get_doc("Sales Order", sales_order_name)
+
+		if sales_order.docstatus != 0:
+			frappe.throw(_("The linked Sales Order is no longer editable."))
+
+		sales_order.set("items", [])
+		sales_order.set("payment_schedule", [])
 	else:
 		sales_order = frappe.get_doc({"doctype": "Sales Order"})
 
@@ -1092,26 +1165,48 @@ def _upsert_sales_order(
 			"order_type": "Sales",
 		}
 	)
-	_set_doc_value_if_field_exists(sales_order, "custom_delivery_slot", _clean_text(delivery_slot))
-	_set_doc_value_if_field_exists(sales_order, "custom_customer_location", _clean_text(customer_location))
+	_set_doc_value_if_field_exists(
+		sales_order,
+		"custom_delivery_slot",
+		_clean_text(delivery_slot),
+	)
+	_set_doc_value_if_field_exists(
+		sales_order,
+		"custom_customer_location",
+		_clean_text(customer_location),
+	)
+
 	for item in order_items:
 		sales_order.append("items", item)
 
-	with _as_administrator():
-		_apply_delivery_address_to_sales_order(sales_order, customer, delivery_address)
-		_normalize_payment_schedule_dates(sales_order)
+	_apply_delivery_address_to_sales_order(
+		sales_order,
+		customer,
+		delivery_address,
+		address_display=address_display,
+	)
+	address_display = _clean_text(address_display) or _build_delivery_address_display(
+		delivery_address
+	)
+	_normalize_payment_schedule_dates(sales_order)
 
-		if sales_order.is_new():
-			sales_order.owner = checkout_user
-			sales_order.insert(ignore_permissions=True)
-		else:
-			sales_order.save(ignore_permissions=True)
+	if sales_order.is_new():
+		sales_order.owner = checkout_user
+		sales_order.insert(ignore_permissions=True)
+	else:
+		sales_order.save(ignore_permissions=True)
+
+	_persist_sales_order_address_display(sales_order, address_display)
 
 	if submit:
-		with _as_administrator():
-			sales_order.flags.ignore_permissions = True
-			sales_order.submit()
-			sales_order.purchase_orders = _get_purchase_orders_for_sales_order(sales_order.name)
+		sales_order.flags.ignore_permissions = True
+		sales_order.submit()
+		_persist_sales_order_address_display(sales_order, address_display)
+
+		# The on_submit hook creates the Purchase Orders.
+		sales_order.purchase_orders = _get_purchase_orders_for_sales_order(
+			sales_order.name
+		)
 
 	return sales_order
 
@@ -1166,40 +1261,39 @@ def _submit_sales_order(sales_order_name):
 			_("Sales Order {0} does not exist.").format(sales_order_name)
 		)
 
-	with _as_administrator():
-		sales_order = frappe.get_doc("Sales Order", sales_order_name)
+	sales_order = frappe.get_doc("Sales Order", sales_order_name)
 
-		if sales_order.docstatus == 2:
-			frappe.throw(
-				_("Sales Order {0} is cancelled.").format(sales_order_name)
-			)
+	if sales_order.docstatus == 2:
+		frappe.throw(
+			_("Sales Order {0} is cancelled.").format(sales_order_name)
+		)
 
-		was_draft = sales_order.docstatus == 0
+	was_draft = sales_order.docstatus == 0
 
-		# Submit the Sales Order after successful Stripe payment
-		if sales_order.docstatus == 0:
-			sales_order.flags.ignore_permissions = True
-			sales_order.submit()
+	# Submit the Sales Order after successful Stripe payment.
+	if sales_order.docstatus == 0:
+		sales_order.flags.ignore_permissions = True
+		sales_order.submit()
 
-		# Submitted orders may come from a previous callback, so keep this path idempotent.
-		if not was_draft:
-			_create_purchase_orders_for_sales_order(sales_order)
+	# Submitted orders may come from a previous callback, so keep this path idempotent.
+	if not was_draft:
+		_create_purchase_orders_for_sales_order(sales_order)
 
-		# Force the status after ERPNext completes its submit processing
-		if sales_order.docstatus == 1:
-			frappe.db.set_value(
-				"Sales Order",
-				sales_order.name,
-				{
-					"status": "To Deliver",
-					"billing_status": "Fully Billed",
-					"per_billed": 100,
-				},
-				update_modified=False,
-			)
+	# Force the status after ERPNext completes its submit processing.
+	if sales_order.docstatus == 1:
+		frappe.db.set_value(
+			"Sales Order",
+			sales_order.name,
+			{
+				"status": "To Deliver",
+				"billing_status": "Fully Billed",
+				"per_billed": 100,
+			},
+			update_modified=False,
+		)
 
-			frappe.db.commit()
-			sales_order.reload()
+		frappe.db.commit()
+		sales_order.reload()
 
 	return sales_order
 
@@ -1298,6 +1392,7 @@ def sync_cart_sales_order(
 	delivery_date=None,
 	delivery_slot=None,
 	customer_location=None,
+	address_display=None,
 ):
 	_require_checkout_user()
 
@@ -1309,6 +1404,7 @@ def sync_cart_sales_order(
 		delivery_date=delivery_date,
 		delivery_slot=delivery_slot,
 		customer_location=customer_location,
+		address_display=address_display,
 	)
 
 	return {
@@ -1326,6 +1422,7 @@ def create_checkout_session(
 	delivery_date=None,
 	delivery_slot=None,
 	customer_location=None,
+	address_display=None,
 ):
 	_require_checkout_user()
 
@@ -1337,6 +1434,7 @@ def create_checkout_session(
 		delivery_date=delivery_date,
 		delivery_slot=delivery_slot,
 		customer_location=customer_location,
+		address_display=address_display,
 	)
 	session = _stripe_request(
 		"/checkout/sessions",
@@ -1360,6 +1458,7 @@ def create_cash_on_delivery_order(
 	delivery_date=None,
 	delivery_slot=None,
 	customer_location=None,
+	address_display=None,
 ):
 	_require_checkout_user()
 
@@ -1372,6 +1471,7 @@ def create_cash_on_delivery_order(
 		delivery_date=delivery_date,
 		delivery_slot=delivery_slot,
 		customer_location=customer_location,
+		address_display=address_display,
 	)
 	purchase_orders = getattr(sales_order, "purchase_orders", None)
 

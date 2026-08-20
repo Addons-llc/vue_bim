@@ -155,10 +155,6 @@ async function refreshCurrentSession() {
 }
 
 async function ensureCheckoutSession() {
-  if (canCheckout.value) {
-    return true
-  }
-
   const sessionReady = await refreshCurrentSession()
 
   if (sessionReady && canCheckout.value) {

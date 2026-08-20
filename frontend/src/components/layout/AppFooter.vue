@@ -1,7 +1,7 @@
 <script setup>
 const appBase = import.meta.env.BASE_URL
-const addSupplierUrl = 'https://addons-bim.m.frappe.cloud/become-a-supplier/new'
-const deliveryCompanyUrl = 'https://buyinminutes.u.frappe.cloud/Buy%20In%20Minutes/new.i'
+const addSupplierUrl = 'https://buyinminutes.u.frappe.cloud/become-a-supplier/new'
+const deliveryCompanyUrl = 'https://buyinminutes.u.frappe.cloud/Buy%20In%20Minutes/new'
 </script>
 
 <template>

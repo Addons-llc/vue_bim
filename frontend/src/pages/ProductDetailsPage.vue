@@ -92,32 +92,6 @@ function mergeProductDetails(cachedProduct, loadedProduct) {
   }
 }
 
-function buildProductImageVariants(image) {
-  if (!image) {
-    return []
-  }
-
-  const imageVariants = new Set([image])
-
-  try {
-    const imageUrl = new URL(image)
-
-    ;[
-      { width: '900', crop: 'center' },
-      { width: '900', crop: 'edges' },
-    ].forEach((variant) => {
-      const variantUrl = new URL(imageUrl)
-      variantUrl.searchParams.set('w', variant.width)
-      variantUrl.searchParams.set('crop', variant.crop)
-      imageVariants.add(variantUrl.toString())
-    })
-  } catch {
-    imageVariants.add(image)
-  }
-
-  return Array.from(imageVariants)
-}
-
 const productImages = computed(() => {
   if (!product.value) {
     return []
@@ -125,7 +99,7 @@ const productImages = computed(() => {
 
   const images = product.value.images?.length
     ? product.value.images
-    : buildProductImageVariants(product.value.bannerImage || product.value.image)
+    : [product.value.bannerImage || product.value.image].filter(Boolean)
 
   return images.filter(Boolean)
 })

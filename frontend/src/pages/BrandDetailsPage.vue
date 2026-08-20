@@ -31,7 +31,14 @@ const visibleBrandBannerImage = computed(() =>
 const brandDescription = computed(() => brandDetails.value.description || '')
 const brandInitials = computed(() => brandDisplayName.value.slice(0, 2).toUpperCase())
 const brandProducts = computed(() =>
-  loadedProducts.value.filter((product) => product.isPublished !== false),
+  loadedProducts.value
+    .filter((product) => product.isPublished !== false)
+    .sort((leftProduct, rightProduct) => {
+      const leftPopularRank = leftProduct.customPopularItems === true ? 0 : 1
+      const rightPopularRank = rightProduct.customPopularItems === true ? 0 : 1
+
+      return leftPopularRank - rightPopularRank
+    }),
 )
 const brandMainDescription = computed(() =>
   brandDescription.value || 'Browse published products available from this brand.',

@@ -23,6 +23,15 @@ function getCustomerLocationPayload() {
   return selectedLocation
 }
 
+function getSalesOrderCustomerLocationPayload() {
+  const customerLocation = getCustomerLocationPayload()
+
+  return {
+    customer_location: customerLocation,
+    custom_customer_location: customerLocation,
+  }
+}
+
 export function syncCartSalesOrder(
   cartItems,
   salesOrderName = '',
@@ -42,7 +51,7 @@ export function syncCartSalesOrder(
       delivery_address: deliveryAddress,
       delivery_date: deliveryDate,
       delivery_slot: deliverySlot,
-      customer_location: getCustomerLocationPayload(),
+      ...getSalesOrderCustomerLocationPayload(),
     }),
   })
 }

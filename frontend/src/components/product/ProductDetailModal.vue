@@ -24,32 +24,6 @@ const cartItem = computed(() =>
 )
 const productQuantity = computed(() => cartItem.value?.quantity || 0)
 
-function buildProductImageVariants(image) {
-  if (!image) {
-    return []
-  }
-
-  const imageVariants = new Set([image])
-
-  try {
-    const imageUrl = new URL(image)
-
-    ;[
-      { width: '900', crop: 'center' },
-      { width: '900', crop: 'edges' },
-    ].forEach((variant) => {
-      const variantUrl = new URL(imageUrl)
-      variantUrl.searchParams.set('w', variant.width)
-      variantUrl.searchParams.set('crop', variant.crop)
-      imageVariants.add(variantUrl.toString())
-    })
-  } catch {
-    imageVariants.add(image)
-  }
-
-  return Array.from(imageVariants)
-}
-
 const productImages = computed(() => {
   if (!props.product) {
     return []
@@ -57,7 +31,7 @@ const productImages = computed(() => {
 
   const images = props.product.images?.length
     ? props.product.images
-    : buildProductImageVariants(props.product.image)
+    : [props.product.image].filter(Boolean)
 
   return images.filter(Boolean)
 })

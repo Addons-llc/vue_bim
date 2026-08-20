@@ -3,13 +3,11 @@ import { loadGoogleMaps } from './googleMaps'
 
 const SELECTED_LOCATION_STORAGE_KEY = 'buyInMinutesSelectedLocation'
 const CURRENT_LOCATION_COORDS_STORAGE_KEY = 'buyInMinutesCurrentLocationCoords'
+const UAE_COUNTRY_CODE = 'AE'
 const ETA_CACHE = new Map()
 const ETA_PROMISE_CACHE = new Map()
 const GEOCODE_CACHE = new Map()
-
-const MIN_DELIVERY_MINUTES = 8
-const AVERAGE_DELIVERY_SPEED_KMH = 24
-const ROAD_DISTANCE_MULTIPLIER = 1.22
+const ROUTE_DURATION_CACHE = new Map()
 
 export const LOCATION_UPDATED_EVENT = 'buy-in-minutes:location-updated'
 
@@ -21,6 +19,27 @@ function toFiniteNumber(value) {
 
 function normalizeLocationText(value = '') {
   return String(value).trim().replace(/\s+/g, ' ')
+}
+
+function getCoordinatePair(latitudeValue, longitudeValue) {
+  const latitude = toFiniteNumber(latitudeValue)
+  const longitude = toFiniteNumber(longitudeValue)
+
+  if (latitude === null || longitude === null) {
+    return null
+  }
+
+  return {
+    lat: latitude,
+    lng: longitude,
+  }
+}
+
+function isUnitedArabEmiratesResult(result = {}) {
+  return (result.address_components || []).some((component) => (
+    (component.types || []).includes('country')
+    && String(component.short_name || '').toUpperCase() === UAE_COUNTRY_CODE
+  ))
 }
 
 function getLocationKey(coords) {
@@ -113,15 +132,6 @@ function getCustomerLocationSource() {
     }
   }
 
-  const selectedLocation = getStoredSelectedLocation()
-
-  if (selectedLocation && selectedLocation !== 'Select location') {
-    return {
-      key: `location:${selectedLocation.toLowerCase()}`,
-      address: selectedLocation,
-    }
-  }
-
   return {
     key: 'unknown',
     coords: null,
@@ -143,12 +153,26 @@ async function geocodeLocation(address) {
   try {
     const maps = await loadGoogleMaps()
     const geocoder = new maps.Geocoder()
+    const uaeBounds = new maps.LatLngBounds(
+      new maps.LatLng(22.5, 51.4),
+      new maps.LatLng(26.5, 56.8),
+    )
     const result = await new Promise((resolve) => {
       geocoder.geocode(
-        { address: normalizedAddress },
+        {
+          address: normalizedAddress,
+          bounds: uaeBounds,
+          componentRestrictions: { country: UAE_COUNTRY_CODE },
+          region: UAE_COUNTRY_CODE,
+        },
         (results, status) => {
-          if (status === 'OK' && results?.length && results[0]?.geometry?.location) {
-            const location = results[0].geometry.location
+          if (status === 'OK' && results?.length) {
+            const preferredResult = results.find(isUnitedArabEmiratesResult) || results[0]
+            if (!preferredResult?.geometry?.location || !isUnitedArabEmiratesResult(preferredResult)) {
+              resolve(null)
+              return
+            }
+            const location = preferredResult.geometry.location
 
             resolve({
               lat: location.lat(),
@@ -179,54 +203,127 @@ async function getCustomerCoordinates() {
     return customerLocation.coords
   }
 
-  if (!customerLocation.address) {
-    return null
+  return null
+}
+
+async function getSupplierCoordinates(product = {}) {
+  const supplierCoords = getCoordinatePair(
+    product?.supplierDetails?.customLatitude
+      || product?.supplierDetails?.custom_latitude
+      || product?.supplierLatitude
+      || product?.custom_latitude,
+    product?.supplierDetails?.customLongitude
+      || product?.supplierDetails?.custom_longitude
+      || product?.supplierLongitude
+      || product?.custom_longitude,
+  )
+
+  if (supplierCoords) {
+    return supplierCoords
   }
 
-  return geocodeLocation(customerLocation.address)
-}
-
-async function getSupplierCoordinates(supplierAddress) {
-  return geocodeLocation(supplierAddress)
-}
-
-function getDistanceKm(origin, destination) {
-  const earthRadiusKm = 6371
-  const latitudeDelta = ((destination.lat - origin.lat) * Math.PI) / 180
-  const longitudeDelta = ((destination.lng - origin.lng) * Math.PI) / 180
-  const originLatitude = (origin.lat * Math.PI) / 180
-  const destinationLatitude = (destination.lat * Math.PI) / 180
-
-  const a =
-    Math.sin(latitudeDelta / 2) ** 2
-    + Math.cos(originLatitude) * Math.cos(destinationLatitude)
-      * Math.sin(longitudeDelta / 2) ** 2
-
-  return 2 * earthRadiusKm * Math.asin(Math.min(1, Math.sqrt(a)))
-}
-
-function estimateMinutes(distanceKm) {
-  const roadDistanceKm = distanceKm * ROAD_DISTANCE_MULTIPLIER
-  const travelMinutes = (roadDistanceKm / AVERAGE_DELIVERY_SPEED_KMH) * 60
-
-  return Math.max(MIN_DELIVERY_MINUTES, Math.round(travelMinutes + 6))
-}
-
-export async function getEstimatedDeliveryTimeLabel(product = {}) {
   const supplierAddress = normalizeLocationText(
     product?.supplierDetails?.customGoogleAddress
       || product?.supplierDetails?.custom_google_address
       || product?.supplierAddress
       || '',
   )
-  const fallbackDeliveryTime = normalizeLocationText(product?.deliveryTime || '')
 
   if (!supplierAddress) {
+    return null
+  }
+
+  return geocodeLocation(supplierAddress)
+}
+
+async function getRouteDurationMinutes(origin, destination) {
+  if (!origin || !destination) {
+    return null
+  }
+
+  const cacheKey = `${getLocationKey(origin)}::${getLocationKey(destination)}`
+  if (ROUTE_DURATION_CACHE.has(cacheKey)) {
+    return ROUTE_DURATION_CACHE.get(cacheKey)
+  }
+
+  try {
+    const maps = await loadGoogleMaps()
+    const directionsService = new maps.DirectionsService()
+    const route = await new Promise((resolve, reject) => {
+      directionsService.route(
+        {
+          origin,
+          destination,
+          travelMode: maps.TravelMode.DRIVING,
+          drivingOptions: {
+            departureTime: new Date(),
+          },
+          provideRouteAlternatives: false,
+        },
+        (result, status) => {
+          if (status === 'OK' && result?.routes?.length) {
+            resolve(result)
+            return
+          }
+
+          reject(new Error(status || 'DIRECTIONS_FAILED'))
+        },
+      )
+    })
+
+    const durationSeconds = route.routes
+      .flatMap((candidateRoute) => candidateRoute.legs || [])
+      .reduce((total, leg) => (
+        total + Number(
+          leg.duration_in_traffic?.value
+          ?? leg.duration?.value
+          ?? 0
+        )
+      ), 0)
+
+    if (!durationSeconds) {
+      return null
+    }
+
+    const durationMinutes = Math.max(1, Math.round(durationSeconds / 60))
+    ROUTE_DURATION_CACHE.set(cacheKey, durationMinutes)
+    return durationMinutes
+  } catch {
+    return null
+  }
+}
+
+export async function getEstimatedDeliveryTimeLabel(product = {}) {
+  const fallbackDeliveryTime = normalizeLocationText(product?.deliveryTime || '')
+
+  const customerLocation = getCustomerLocationSource()
+  const supplierCoordinateKey = [
+    product?.supplierDetails?.customLatitude
+      || product?.supplierDetails?.custom_latitude
+      || product?.supplierLatitude
+      || product?.custom_latitude
+      || '',
+    product?.supplierDetails?.customLongitude
+      || product?.supplierDetails?.custom_longitude
+      || product?.supplierLongitude
+      || product?.custom_longitude
+      || '',
+  ].join(',')
+  const supplierAddressKey = normalizeLocationText(
+    product?.supplierDetails?.customGoogleAddress
+      || product?.supplierDetails?.custom_google_address
+      || product?.supplierAddress
+      || '',
+  ).toLowerCase()
+  const supplierKey = supplierCoordinateKey !== ','
+    ? `coords:${supplierCoordinateKey}`
+    : `address:${supplierAddressKey}`
+
+  if (supplierKey === 'address:' && !supplierAddressKey) {
     return fallbackDeliveryTime
   }
 
-  const customerLocation = getCustomerLocationSource()
-  const cacheKey = `${supplierAddress.toLowerCase()}::${customerLocation.key}`
+  const cacheKey = `${supplierKey}::${customerLocation.key}`
 
   if (ETA_CACHE.has(cacheKey)) {
     return ETA_CACHE.get(cacheKey)
@@ -238,7 +335,7 @@ export async function getEstimatedDeliveryTimeLabel(product = {}) {
 
   const etaPromise = (async () => {
     const [supplierCoords, customerCoords] = await Promise.all([
-      getSupplierCoordinates(supplierAddress),
+      getSupplierCoordinates(product),
       getCustomerCoordinates(),
     ])
 
@@ -246,7 +343,12 @@ export async function getEstimatedDeliveryTimeLabel(product = {}) {
       return fallbackDeliveryTime
     }
 
-    const minutes = estimateMinutes(getDistanceKm(supplierCoords, customerCoords))
+    const minutes = await getRouteDurationMinutes(supplierCoords, customerCoords)
+
+    if (!minutes) {
+      return fallbackDeliveryTime
+    }
+
     return `${minutes} min`
   })()
 

@@ -40,6 +40,8 @@ SUPPLIER_DETAIL_FIELDS = (
 	"custom_supplier_banner",
 	"custom_supplier_banner_image",
 	"custom_google_address",
+	"custom_latitude",
+	"custom_longitude",
 	"custom_seller_since",
 )
 
@@ -191,6 +193,48 @@ def _apply_item_group_images(items):
 		item.item_group_image = item_group_images.get(item.item_group)
 
 
+def _apply_item_attachments(items, max_attachments=2):
+	item_names = [item.name for item in items if item.name]
+	if not item_names or not frappe.db.exists("DocType", "File"):
+		return
+
+	file_rows = frappe.get_all(
+		"File",
+		fields=["attached_to_name", "file_url", "file_name"],
+		filters={
+			"attached_to_doctype": "Item",
+			"attached_to_name": ["in", item_names],
+			"is_folder": 0,
+		},
+		order_by="creation asc",
+		ignore_permissions=True,
+		limit_page_length=len(item_names) * max(max_attachments, 1) * 3,
+	)
+
+	attachments_by_item = {}
+	for row in file_rows:
+		item_name = row.attached_to_name
+		file_url = row.file_url or row.file_name
+		if not item_name or not file_url:
+			continue
+
+		item_attachments = attachments_by_item.setdefault(item_name, [])
+		if any(attachment.get("file_url") == file_url for attachment in item_attachments):
+			continue
+		if len(item_attachments) >= max_attachments:
+			continue
+
+		item_attachments.append(
+			{
+				"file_url": file_url,
+				"file_name": row.file_name or file_url.rsplit("/", 1)[-1],
+			}
+		)
+
+	for item in items:
+		item.attachments = attachments_by_item.get(item.name, [])
+
+
 def _get_item_supplier_links(item_names):
 	item_names = [item_name for item_name in item_names if item_name]
 	if not item_names or not frappe.db.exists("DocType", "Item Supplier"):
@@ -271,6 +315,12 @@ def _apply_supplier_details(items):
 		item.supplier_phone = supplier.get("mobile_no")
 		item.supplier_email = supplier.get("email_id")
 		item.supplier_website = supplier.get("website")
+		item.custom_google_address = supplier.get("custom_google_address")
+		item.supplier_custom_google_address = supplier.get("custom_google_address")
+		item.custom_latitude = supplier.get("custom_latitude")
+		item.custom_longitude = supplier.get("custom_longitude")
+		item.supplier_custom_latitude = supplier.get("custom_latitude")
+		item.supplier_custom_longitude = supplier.get("custom_longitude")
 		item.supplier_image = (
 			supplier.get("image")
 			or supplier.get("supplier_logo")
@@ -572,6 +622,7 @@ def get_items(
 			"website_image",
 			"thumbnail",
 			"brand",
+			"custom_popular_items",
 			"standard_rate",
 			*ITEM_SUPPLIER_FIELDS,
 		)
@@ -609,6 +660,7 @@ def get_items(
 
 	_apply_selling_prices(items)
 	_apply_item_group_images(items)
+	_apply_item_attachments(items)
 	_apply_supplier_details(items)
 	items = _filter_items_by_item_codes(items, supplier_store_item_codes)
 	items = _filter_items_by_supplier(items, supplier)
@@ -662,6 +714,11 @@ def _can_view_sales_order(sales_order):
 	return frappe.session.user == "Administrator" or sales_order.owner == frappe.session.user
 
 
+def _is_guest_session_user():
+	user_name = str(getattr(frappe.session, "user", "") or "").strip()
+	return not user_name or user_name.lower() in {"guest", "none", "null"}
+
+
 def _get_purchase_order_names_for_sales_order(sales_order_name):
 	return frappe.get_all(
 		"Purchase Order Item",
@@ -692,7 +749,7 @@ def _ensure_purchase_orders_for_sales_order(sales_order):
 
 @frappe.whitelist(allow_guest=True, methods=["GET"])
 def get_sales_order(sales_order_name):
-	if frappe.session.user == "Guest":
+	if _is_guest_session_user():
 		frappe.throw("Please sign in to view this Sales Order.", frappe.AuthenticationError)
 
 	if not sales_order_name:
@@ -770,7 +827,7 @@ def get_order_history(limit_page_length=20):
 @frappe.whitelist()
 def get_ordered_products(limit_page_length=40):
 	limit_page_length = frappe.utils.cint(limit_page_length) or 40
-	if frappe.session.user == "Guest":
+	if _is_guest_session_user():
 		frappe.throw("Please sign in to view ordered products.")
 
 	sales_orders = frappe.get_all(
