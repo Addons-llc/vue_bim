@@ -14,6 +14,7 @@ const loadedProducts = ref([])
 const isLoadingBrandProducts = ref(false)
 const failedBrandBannerImages = ref([])
 const activeBrandBannerSlide = ref(0)
+const isMobileScrollableBanner = ref(false)
 let brandBannerSlideTimer = null
 
 const brandDetails = computed(() => ({
@@ -84,7 +85,7 @@ function stopBrandBannerAutoplay() {
 function startBrandBannerAutoplay() {
   stopBrandBannerAutoplay()
 
-  if (brandBannerImages.value.length <= 1) {
+  if (isMobileScrollableBanner.value || brandBannerImages.value.length <= 1) {
     return
   }
 
@@ -95,6 +96,20 @@ function startBrandBannerAutoplay() {
 
 function toggleBrandDescription() {
   isBrandDescriptionExpanded.value = !isBrandDescriptionExpanded.value
+}
+
+function syncBrandBannerViewport() {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  isMobileScrollableBanner.value = window.matchMedia('(max-width: 768px)').matches
+
+  if (isMobileScrollableBanner.value) {
+    stopBrandBannerAutoplay()
+  } else {
+    startBrandBannerAutoplay()
+  }
 }
 
 async function loadBrandProducts() {
@@ -120,11 +135,14 @@ async function loadBrandProducts() {
 }
 
 onMounted(() => {
+  syncBrandBannerViewport()
+  window.addEventListener('resize', syncBrandBannerViewport)
   loadBrandProducts()
 })
 
 onUnmounted(() => {
   stopBrandBannerAutoplay()
+  window.removeEventListener('resize', syncBrandBannerViewport)
 })
 
 watch(brandName, () => {
@@ -180,7 +198,8 @@ watch(brandBannerImages, (images) => {
         <div
           v-if="brandBannerImages.length"
           class="brand-banner-slider"
-          :style="{ transform: `translateX(-${activeBrandBannerSlide * 100}%)` }"
+          :class="{ 'is-mobile-scrollable': isMobileScrollableBanner }"
+          :style="isMobileScrollableBanner ? undefined : { transform: `translateX(-${activeBrandBannerSlide * 100}%)` }"
         >
           <img
             v-for="(bannerImage, index) in brandBannerImages"
