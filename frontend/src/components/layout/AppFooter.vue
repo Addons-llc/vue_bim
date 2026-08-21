@@ -1,7 +1,12 @@
 <script setup>
 const appBase = import.meta.env.BASE_URL
 const supplierPortalUrl = 'https://buyinminutes.u.frappe.cloud/supplier'
+const supplierRegistrationUrl = 'https://buyinminutes.u.frappe.cloud/become-a-supplier/new'
 const deliveryCompanyUrl = 'https://buyinminutes.u.frappe.cloud/Buy%20In%20Minutes/new'
+
+function openExternalUrl(url) {
+  window.location.assign(url)
+}
 </script>
 
 <template>
@@ -12,7 +17,15 @@ const deliveryCompanyUrl = 'https://buyinminutes.u.frappe.cloud/Buy%20In%20Minut
           <h2>SELL WITH US</h2>
           <p>Fast onboarding for trusted market partners.</p>
           <div class="supplier-card-actions">
-            <a class="supplier-card-cta" :href="supplierPortalUrl">Register</a>
+            <a
+              class="supplier-card-cta"
+              :href="supplierRegistrationUrl"
+              target="_blank"
+              rel="noreferrer"
+              @click.prevent="openExternalUrl(supplierRegistrationUrl)"
+            >
+              Register
+            </a>
             <a class="supplier-card-cta is-secondary" :href="supplierPortalUrl">Login</a>
           </div>
         </div>
