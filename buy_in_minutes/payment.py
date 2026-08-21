@@ -805,6 +805,11 @@ def _get_delivery_charge_tax_template():
 	return frappe.get_doc("Sales Taxes and Charges Template", DELIVERY_CHARGE_TAX_TEMPLATE)
 
 
+def _get_delivery_charge_tax_template_name():
+	template = _get_delivery_charge_tax_template()
+	return template.name if template else ""
+
+
 def _build_sales_order_delivery_tax_rows(delivery_fee):
 	template = _get_delivery_charge_tax_template()
 	if not template:
@@ -1302,10 +1307,11 @@ def _upsert_sales_order(
 		_clean_text(coupon_code),
 	)
 	if use_delivery_charge_tax_template:
+		delivery_charge_tax_template_name = _get_delivery_charge_tax_template_name()
 		_set_doc_value_if_field_exists(
 			sales_order,
 			"taxes_and_charges",
-			DELIVERY_CHARGE_TAX_TEMPLATE,
+			delivery_charge_tax_template_name,
 		)
 	else:
 		_set_doc_value_if_field_exists(sales_order, "taxes_and_charges", "")
@@ -1539,8 +1545,13 @@ def sync_cart_sales_order(
 	_require_checkout_user()
 
 	checkout_items = _get_checkout_items(cart_items, delivery_fee=delivery_fee)
+	sales_order_checkout_items = _get_checkout_items(
+		cart_items,
+		delivery_fee=delivery_fee,
+		include_delivery_fee_item=False,
+	)
 	sales_order = _upsert_sales_order(
-		checkout_items,
+		sales_order_checkout_items,
 		sales_order_name=sales_order_name,
 		delivery_address=delivery_address,
 		delivery_date=delivery_date,
@@ -1548,6 +1559,8 @@ def sync_cart_sales_order(
 		customer_location=customer_location,
 		address_display=address_display,
 		coupon_code=coupon_code,
+		delivery_fee=delivery_fee,
+		use_delivery_charge_tax_template=True,
 	)
 
 	return {
@@ -1573,8 +1586,13 @@ def create_checkout_session(
 	_require_checkout_user()
 
 	checkout_items = _get_checkout_items(cart_items, delivery_fee=delivery_fee)
+	sales_order_checkout_items = _get_checkout_items(
+		cart_items,
+		delivery_fee=delivery_fee,
+		include_delivery_fee_item=False,
+	)
 	sales_order = _upsert_sales_order(
-		checkout_items,
+		sales_order_checkout_items,
 		sales_order_name=sales_order_name,
 		delivery_address=delivery_address,
 		delivery_date=delivery_date,
@@ -1582,8 +1600,9 @@ def create_checkout_session(
 		customer_location=customer_location,
 		address_display=address_display,
 		coupon_code=coupon_code,
+		delivery_fee=delivery_fee,
+		use_delivery_charge_tax_template=True,
 	)
-	checkout_items = _get_checkout_items_from_sales_order(sales_order)
 	session = _stripe_request(
 		"/checkout/sessions",
 		_build_checkout_params(checkout_items, sales_order.name, return_origin=return_origin),

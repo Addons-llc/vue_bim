@@ -138,7 +138,6 @@ const productDetails = computed(() => {
       ? { label: 'Size', value: selectedProductSizeLabel.value }
       : null,
     { label: 'Category', value: product.value.category },
-    { label: 'Delivery', value: product.value.deliveryTime || '18 min' },
   ].filter((detail) => detail?.value)
 })
 
@@ -333,33 +332,7 @@ watch(productSizeOptions, (sizes) => {
             <span class="product-detail-currency">AED</span>
             {{ product.price }}
           </span>
-          <span class="product-detail-free-delivery">Free Delivery</span>
         </div>
-
-        <section class="product-detail-section">
-          <h3>Delivery Information</h3>
-          <div class="product-detail-delivery-strip">
-            <strong>express</strong>
-            <span>Get it Tomorrow</span>
-            <em>Order in 2h 19m</em>
-          </div>
-        </section>
-
-        <section class="product-detail-section">
-          <h3>Coupons</h3>
-          <div class="product-detail-coupon-row">
-            <span>Extra 15% Off</span>
-            <strong>RAK50</strong>
-          </div>
-        </section>
-
-        <section class="product-detail-section">
-          <h3>Payment Discount</h3>
-          <div class="product-detail-payment-card">
-            <strong>Earn 5%</strong>
-            <span>cashback with selected cards</span>
-          </div>
-        </section>
 
         <section v-if="productSizeOptions.length" class="product-detail-section product-size-section">
           <h3>Size</h3>
@@ -419,7 +392,6 @@ watch(productSizeOptions, (sizes) => {
         </RouterLink>
 
         <div class="product-detail-trust-list">
-          <span>▣ Free delivery on quick orders</span>
           <span>↩ Easy and hassle free returns</span>
           <span>♢ Secure payments</span>
         </div>

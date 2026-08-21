@@ -290,7 +290,7 @@ async function mapItemToProduct(item) {
     brand: item.brand || '',
     customPopularItems: isTruthyFlag(item.custom_popular_items),
     customDeliverySlots: hasCustomDeliverySlots(item),
-    description: description || 'Fresh item available for quick delivery.',
+    description: description || '',
     customSize,
     price: getItemSellingPrice(item),
     priceList: item.price_list || SELLING_PRICE_LIST,

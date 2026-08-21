@@ -461,6 +461,12 @@
   text-align: center;
 }
 
+.form-message-inline {
+  width: 100%;
+  margin: 12px 0 0;
+  text-align: left;
+}
+
 .success-message {
   background: #dcfce7;
   color: #166534;
