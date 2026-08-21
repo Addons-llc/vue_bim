@@ -900,6 +900,152 @@
     padding-top: 0;
   }
 
+  .home-rail-brands .category-grid.is-manual-scroll,
+  .home-rail-store .category-grid.is-manual-scroll {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    justify-content: stretch;
+    justify-items: center;
+    gap: 14px 8px;
+    overflow: visible;
+    padding-right: 0;
+    padding-left: 0;
+  }
+
+  .home-rail-brands .category-grid.is-manual-scroll .category-tile,
+  .home-rail-store .category-grid.is-manual-scroll .category-tile {
+    display: grid;
+    flex: none;
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+    min-height: 0;
+    border: 0;
+    padding: 0;
+    background: transparent;
+    box-shadow: none;
+    scroll-snap-align: unset;
+  }
+
+  .home-rail-brands .category-tile.is-stacked,
+  .home-rail-store .category-tile.is-stacked {
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+    min-height: 0;
+    gap: 8px;
+    padding: 0;
+    background: transparent;
+    border: 0;
+    box-shadow: none;
+  }
+
+  .home-rail-brands .category-tile:hover,
+  .home-rail-brands .category-tile:focus-visible,
+  .home-rail-brands .category-tile.is-active,
+  .home-rail-store .category-tile:hover,
+  .home-rail-store .category-tile:focus-visible,
+  .home-rail-store .category-tile.is-active {
+    background: transparent;
+    border-color: transparent;
+    box-shadow: none;
+    transform: none;
+  }
+
+  .home-rail-brands .category-image-wrap,
+  .home-rail-store .category-image-wrap,
+  .home-rail-brands .category-tile.is-stacked .category-image-wrap,
+  .home-rail-store .category-tile.is-stacked .category-image-wrap {
+    width: 100%;
+    height: auto;
+    max-width: none;
+    aspect-ratio: 1;
+    background: transparent;
+    border: 0;
+    border-radius: 50%;
+    box-shadow: none;
+    clip-path: circle(50%);
+    overflow: hidden;
+    -webkit-mask-image: radial-gradient(circle, #000 99%, transparent 100%);
+    mask-image: radial-gradient(circle, #000 99%, transparent 100%);
+  }
+
+  .home-rail-brands .category-copy,
+  .home-rail-store .category-copy,
+  .home-rail-brands .category-tile.is-stacked .category-copy,
+  .home-rail-store .category-tile.is-stacked .category-copy {
+    align-items: center;
+    justify-content: flex-start;
+    padding-top: 0;
+  }
+
+  .home-rail-brands .category-name,
+  .home-rail-store .category-name,
+  .home-rail-brands .category-tile.is-stacked .category-name,
+  .home-rail-store .category-tile.is-stacked .category-name {
+    min-height: 30px;
+    max-width: 100%;
+    text-align: center;
+    font-size: 13px;
+    line-height: 1.25;
+    display: -webkit-box;
+    overflow: hidden;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+  }
+
+  .home-rail-brands .brand-card-details,
+  .home-rail-store .item-card-details {
+    display: none;
+  }
+
+  .dashboard-hero ~ .category-section.home-rail-brands,
+  .dashboard-hero ~ .category-section.home-rail-store {
+    padding-bottom: 14px;
+  }
+
+  .dashboard-hero ~ .category-section.home-rail-brands .category-section-heading,
+  .dashboard-hero ~ .category-section.home-rail-store .category-section-heading {
+    align-items: center;
+    margin-bottom: 12px;
+  }
+
+  .dashboard-hero ~ .category-section.home-rail-brands .category-grid.is-manual-scroll,
+  .dashboard-hero ~ .category-section.home-rail-store .category-grid.is-manual-scroll {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 16px 10px;
+    overflow: visible;
+    justify-content: stretch;
+    justify-items: center;
+  }
+
+  .dashboard-hero ~ .category-section.home-rail-brands .category-grid.is-manual-scroll .category-tile,
+  .dashboard-hero ~ .category-section.home-rail-store .category-grid.is-manual-scroll .category-tile {
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+    background: transparent;
+  }
+
+  .dashboard-hero ~ .category-section.home-rail-brands .category-image-wrap,
+  .dashboard-hero ~ .category-section.home-rail-store .category-image-wrap,
+  .dashboard-hero ~ .category-section.home-rail-brands .category-tile.is-stacked .category-image-wrap,
+  .dashboard-hero ~ .category-section.home-rail-store .category-tile.is-stacked .category-image-wrap {
+    width: 100%;
+    height: auto;
+    max-width: none;
+    aspect-ratio: 1;
+    border-radius: 50%;
+    background: transparent;
+    border: 0;
+    box-shadow: none;
+    clip-path: circle(50%);
+    overflow: hidden;
+    -webkit-mask-image: radial-gradient(circle, #000 99%, transparent 100%);
+    mask-image: radial-gradient(circle, #000 99%, transparent 100%);
+  }
+
   .brand-card-details,
   .item-card-details {
     gap: 4px;
