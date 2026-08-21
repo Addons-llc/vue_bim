@@ -38,6 +38,8 @@ onMounted(async () => {
       return
     }
 
+
+    
     const restoredSession = await restoreLoginSession().catch(() => null)
     const restoredUser = restoredSession?.message?.user
 
