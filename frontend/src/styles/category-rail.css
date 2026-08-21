@@ -428,6 +428,51 @@
   border-radius: 14px;
 }
 
+.dashboard-hero ~ .category-section.home-rail-brands .category-grid.is-manual-scroll,
+.dashboard-hero ~ .category-section.home-rail-store .category-grid.is-manual-scroll {
+  gap: 18px;
+}
+
+.dashboard-hero ~ .category-section.home-rail-brands .category-grid.is-manual-scroll .category-tile,
+.dashboard-hero ~ .category-section.home-rail-store .category-grid.is-manual-scroll .category-tile {
+  display: grid;
+  flex: 0 0 132px;
+  width: 132px;
+  min-width: 132px;
+  max-width: 132px;
+  min-height: 0;
+  gap: 10px;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.dashboard-hero ~ .category-section.home-rail-brands .category-tile.is-stacked,
+.dashboard-hero ~ .category-section.home-rail-store .category-tile.is-stacked {
+  width: 132px;
+  min-width: 132px;
+  max-width: 132px;
+  min-height: 0;
+  gap: 10px;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}
+
+.dashboard-hero ~ .category-section.home-rail-brands .category-tile:hover,
+.dashboard-hero ~ .category-section.home-rail-brands .category-tile:focus-visible,
+.dashboard-hero ~ .category-section.home-rail-brands .category-tile.is-active,
+.dashboard-hero ~ .category-section.home-rail-store .category-tile:hover,
+.dashboard-hero ~ .category-section.home-rail-store .category-tile:focus-visible,
+.dashboard-hero ~ .category-section.home-rail-store .category-tile.is-active {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  transform: none;
+}
+
 .home-rail-brands .category-image-wrap {
   flex: 0 0 124px;
   width: 124px;
@@ -441,10 +486,10 @@
 
 .dashboard-hero ~ .category-section.home-rail-brands .category-image-wrap,
 .dashboard-hero ~ .category-section.home-rail-store .category-image-wrap {
-  flex: 0 0 124px;
-  width: 124px;
-  height: 124px;
-  max-width: 124px;
+  flex: 0 0 132px;
+  width: 132px;
+  height: 132px;
+  max-width: 132px;
 }
 
 .home-rail-brands .brand-card-details {
@@ -505,6 +550,19 @@
 .home-rail-brands .category-tile.is-stacked .category-name,
 .home-rail-categories .category-tile.is-stacked .category-name,
 .home-rail-store .category-tile.is-stacked .category-name {
+  text-align: center;
+}
+
+.dashboard-hero ~ .category-section.home-rail-brands .category-copy,
+.dashboard-hero ~ .category-section.home-rail-store .category-copy {
+  align-items: center;
+  justify-content: flex-start;
+  padding-top: 0;
+}
+
+.dashboard-hero ~ .category-section.home-rail-brands .category-name,
+.dashboard-hero ~ .category-section.home-rail-store .category-name {
+  max-width: 100%;
   text-align: center;
 }
 
