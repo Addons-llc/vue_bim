@@ -23,6 +23,7 @@ FREE_DELIVERY_MINIMUM = 60
 SELLING_PRICE_LIST = "Selling Price"
 STRIPE_SETTINGS_DOCTYPE = "Stripe Settings"
 CHECKOUT_RESUME_TOKEN_TTL_SECONDS = 3 * 60 * 60
+DELIVERY_CHARGE_TAX_TEMPLATE = "Delivery Charge"
 
 
 def _error(message, status_code=400):
@@ -725,7 +726,7 @@ def _apply_delivery_address_to_sales_order(
 		_set_doc_value_if_field_exists(sales_order, "shipping_address", address_display)
 
 
-def _get_checkout_items(cart_items, delivery_fee=None):
+def _get_checkout_items(cart_items, delivery_fee=None, include_delivery_fee_item=True):
 	checkout_items = []
 	for cart_item in _normalize_cart_items(cart_items):
 		item = frappe.db.get_value(
@@ -759,7 +760,12 @@ def _get_checkout_items(cart_items, delivery_fee=None):
 	if effective_delivery_fee is None and checkout_items and subtotal < FREE_DELIVERY_MINIMUM:
 		effective_delivery_fee = DELIVERY_FEE
 
-	if checkout_items and effective_delivery_fee and effective_delivery_fee > 0:
+	if (
+		include_delivery_fee_item
+		and checkout_items
+		and effective_delivery_fee
+		and effective_delivery_fee > 0
+	):
 		checkout_items.append(
 			{
 				"item_code": DELIVERY_FEE_ITEM_CODE,
@@ -771,6 +777,66 @@ def _get_checkout_items(cart_items, delivery_fee=None):
 		)
 
 	return checkout_items
+
+
+def _get_delivery_charge_tax_template():
+	if not frappe.db.exists("DocType", "Sales Taxes and Charges Template"):
+		return None
+
+	if not frappe.db.exists("Sales Taxes and Charges Template", DELIVERY_CHARGE_TAX_TEMPLATE):
+		matching_templates = frappe.get_all(
+			"Sales Taxes and Charges Template",
+			filters={
+				"name": ["like", f"{DELIVERY_CHARGE_TAX_TEMPLATE}%"],
+			},
+			fields=["name"],
+			order_by="name asc",
+			limit_page_length=1,
+			ignore_permissions=True,
+		)
+		if not matching_templates:
+			return None
+
+		return frappe.get_doc(
+			"Sales Taxes and Charges Template",
+			matching_templates[0].name,
+		)
+
+	return frappe.get_doc("Sales Taxes and Charges Template", DELIVERY_CHARGE_TAX_TEMPLATE)
+
+
+def _build_sales_order_delivery_tax_rows(delivery_fee):
+	template = _get_delivery_charge_tax_template()
+	if not template:
+		return []
+
+	sales_tax_meta = frappe.get_meta("Sales Taxes and Charges")
+	normalized_delivery_fee = _normalize_delivery_fee(delivery_fee) or 0
+	tax_rows = []
+	actual_row_applied = False
+
+	for template_row in template.get("taxes") or []:
+		row_data = {
+			fieldname: template_row.get(fieldname)
+			for fieldname in sales_tax_meta.get_valid_columns()
+			if fieldname not in {"name", "parent", "parentfield", "parenttype", "idx", "owner", "creation", "modified", "modified_by", "docstatus"}
+		}
+
+		if row_data.get("charge_type") == "Actual":
+			row_data["tax_amount"] = normalized_delivery_fee
+			row_data["base_tax_amount"] = normalized_delivery_fee
+			row_data["rate"] = 0
+			actual_row_applied = True
+
+		tax_rows.append(row_data)
+
+	if normalized_delivery_fee > 0 and tax_rows and not actual_row_applied:
+		tax_rows[0]["charge_type"] = "Actual"
+		tax_rows[0]["tax_amount"] = normalized_delivery_fee
+		tax_rows[0]["base_tax_amount"] = normalized_delivery_fee
+		tax_rows[0]["rate"] = 0
+
+	return tax_rows
 
 
 def _build_sales_order_item_rows(checkout_items, company, delivery_date=None):
@@ -1175,6 +1241,8 @@ def _upsert_sales_order(
 	customer_location=None,
 	address_display=None,
 	coupon_code=None,
+	delivery_fee=None,
+	use_delivery_charge_tax_template=False,
 ):
 	checkout_user = frappe.session.user
 	customer = _get_or_create_customer_for_user(checkout_user)
@@ -1202,6 +1270,7 @@ def _upsert_sales_order(
 			frappe.throw(_("The linked Sales Order is no longer editable."))
 
 		sales_order.set("items", [])
+		sales_order.set("taxes", [])
 		sales_order.set("payment_schedule", [])
 		if sales_order.meta.has_field("pricing_rules"):
 			sales_order.set("pricing_rules", [])
@@ -1232,9 +1301,21 @@ def _upsert_sales_order(
 		"coupon_code",
 		_clean_text(coupon_code),
 	)
+	if use_delivery_charge_tax_template:
+		_set_doc_value_if_field_exists(
+			sales_order,
+			"taxes_and_charges",
+			DELIVERY_CHARGE_TAX_TEMPLATE,
+		)
+	else:
+		_set_doc_value_if_field_exists(sales_order, "taxes_and_charges", "")
 
 	for item in order_items:
 		sales_order.append("items", item)
+
+	if use_delivery_charge_tax_template:
+		for tax_row in _build_sales_order_delivery_tax_rows(delivery_fee):
+			sales_order.append("taxes", tax_row)
 
 	_apply_delivery_address_to_sales_order(
 		sales_order,
@@ -1531,7 +1612,11 @@ def create_cash_on_delivery_order(
 ):
 	_require_checkout_user()
 
-	checkout_items = _get_checkout_items(cart_items, delivery_fee=delivery_fee)
+	checkout_items = _get_checkout_items(
+		cart_items,
+		delivery_fee=delivery_fee,
+		include_delivery_fee_item=False,
+	)
 	sales_order = _upsert_sales_order(
 		checkout_items,
 		sales_order_name=sales_order_name,
@@ -1542,6 +1627,8 @@ def create_cash_on_delivery_order(
 		customer_location=customer_location,
 		address_display=address_display,
 		coupon_code=coupon_code,
+		delivery_fee=delivery_fee,
+		use_delivery_charge_tax_template=True,
 	)
 	purchase_orders = getattr(sales_order, "purchase_orders", None)
 

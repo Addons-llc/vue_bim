@@ -1635,8 +1635,22 @@
     grid-template-columns: 1fr;
   }
 
+  .cart-page-header {
+    gap: 14px;
+  }
+
   .cart-page-header h1 {
     font-size: 28px;
+  }
+
+  .cart-page-insights {
+    margin-top: 10px;
+  }
+
+  .cart-page-pill {
+    min-height: 28px;
+    padding: 0 10px;
+    font-size: 11px;
   }
 
   .orders-page-header {
@@ -1679,6 +1693,8 @@
 
   .cart-page-item {
     grid-template-columns: 64px minmax(0, 1fr);
+    gap: 12px;
+    align-items: start;
   }
 
   .cart-page-item-image {
@@ -1686,9 +1702,40 @@
     height: 64px;
   }
 
+  .cart-page-item-head {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .cart-page-item-remove {
+    align-self: flex-start;
+  }
+
+  .cart-page-item-actions {
+    grid-column: 1 / -1;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    justify-items: stretch;
+    gap: 12px;
+    margin-top: 2px;
+  }
+
   .cart-page-item .cart-quantity {
-    grid-column: 2;
+    grid-column: auto;
     width: max-content;
+  }
+
+  .cart-page-item-final {
+    justify-self: end;
+  }
+
+  .cart-summary-heading {
+    flex-direction: column;
+    align-items: start;
+  }
+
+  .cart-summary-badge {
+    margin-top: 2px;
   }
 
   .cart-page-empty {

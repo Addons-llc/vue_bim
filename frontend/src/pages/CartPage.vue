@@ -111,6 +111,10 @@ const selectedCouponOption = computed(() =>
 const appliedCouponOption = computed(() =>
   availableCoupons.value.find((coupon) => coupon.name === appliedCouponCode.value) || null,
 )
+const totalUnits = computed(() =>
+  cartProducts.value.reduce((total, item) => total + Number(item.quantity || 0), 0),
+)
+const totalLines = computed(() => cartProducts.value.length)
 const itemSavings = computed(() =>
   cartProducts.value.reduce((total, item) => {
     if (!item.oldPrice || item.oldPrice <= item.price) {
@@ -139,6 +143,32 @@ function calculateDeliveryFee(distanceKm) {
   const roundedDistanceKm = Math.ceil(distanceKm)
 
   return roundedDistanceKm <= 10 ? 10 : 10 + (roundedDistanceKm - 10)
+}
+
+function formatCurrency(value) {
+  const amount = Number(value || 0)
+
+  if (!Number.isFinite(amount)) {
+    return 'AED 0'
+  }
+
+  return `AED ${amount}`
+}
+
+function getItemLineTotal(item) {
+  return Number(item?.price || 0) * Number(item?.quantity || 0)
+}
+
+function getItemLineSavings(item) {
+  if (!item?.oldPrice || Number(item.oldPrice) <= Number(item.price || 0)) {
+    return 0
+  }
+
+  return (Number(item.oldPrice) - Number(item.price || 0)) * Number(item.quantity || 0)
+}
+
+function removeCartItem(itemId) {
+  updateCartProductQuantity(itemId, 0)
 }
 
 function resetCouponState() {
@@ -721,6 +751,13 @@ watch(
       <div>
         <p class="section-label">Shopping cart</p>
         <h1>Review your basket</h1>
+        <div v-if="cartProducts.length" class="cart-page-insights" aria-label="Cart overview">
+          <span class="cart-page-pill">{{ totalLines }} {{ totalLines === 1 ? 'item' : 'items' }}</span>
+          <span class="cart-page-pill">{{ totalUnits }} {{ totalUnits === 1 ? 'unit' : 'units' }}</span>
+          <span class="cart-page-pill is-highlight">
+            {{ isDeliveryDistanceLoading ? 'Checking delivery...' : (deliveryFee ? `${formatCurrency(deliveryFee)} delivery` : 'Free delivery') }}
+          </span>
+        </div>
       </div>
       <button
         v-if="cartProducts.length"
@@ -742,57 +779,85 @@ watch(
           <img class="cart-page-item-image" :src="item.image" :alt="item.name" />
 
           <div class="cart-page-item-info">
-            <h2>{{ item.name }}</h2>
-            <p v-if="item.size" class="cart-page-item-size">Size: {{ item.size }}</p>
+            <div class="cart-page-item-head">
+              <div class="cart-page-item-copy">
+                <h2>{{ item.name }}</h2>
+                <p v-if="item.size" class="cart-page-item-size">Size: {{ item.size }}</p>
+              </div>
+              <button
+                class="cart-page-item-remove"
+                type="button"
+                :aria-label="`Remove ${item.name} from cart`"
+                @click="removeCartItem(item.id)"
+              >
+                Remove
+              </button>
+            </div>
             <div class="cart-page-item-price">
-              <strong>AED {{ item.price }}</strong>
+              <strong>{{ formatCurrency(item.price) }}</strong>
+              <span v-if="item.oldPrice && item.oldPrice > item.price">{{ formatCurrency(item.oldPrice) }}</span>
+            </div>
+            <div class="cart-page-item-meta">
+              <span class="cart-page-item-total">Subtotal: <strong>{{ formatCurrency(getItemLineTotal(item)) }}</strong></span>
+              <span v-if="getItemLineSavings(item)" class="cart-page-item-saving">
+                Save {{ formatCurrency(getItemLineSavings(item)) }}
+              </span>
             </div>
           </div>
 
-          <div class="cart-quantity" :aria-label="`${item.name} quantity`">
-            <button
-              type="button"
-              :aria-label="`Decrease ${item.name} quantity`"
-              @click="updateCartProductQuantity(item.id, item.quantity - 1)"
-            >
-              -
-            </button>
-            <span>{{ item.quantity }}</span>
-            <button
-              type="button"
-              :aria-label="`Increase ${item.name} quantity`"
-              @click="updateCartProductQuantity(item.id, item.quantity + 1)"
-            >
-              +
-            </button>
+          <div class="cart-page-item-actions">
+            <div class="cart-quantity" :aria-label="`${item.name} quantity`">
+              <button
+                type="button"
+                :aria-label="`Decrease ${item.name} quantity`"
+                @click="updateCartProductQuantity(item.id, item.quantity - 1)"
+              >
+                -
+              </button>
+              <span>{{ item.quantity }}</span>
+              <button
+                type="button"
+                :aria-label="`Increase ${item.name} quantity`"
+                @click="updateCartProductQuantity(item.id, item.quantity + 1)"
+              >
+                +
+              </button>
+            </div>
+            <strong class="cart-page-item-final">{{ formatCurrency(getItemLineTotal(item)) }}</strong>
           </div>
         </article>
       </section>
 
       <aside class="cart-summary-panel" aria-label="Order summary">
         <div class="cart-summary-card">
-          <h2>Order summary</h2>
+          <div class="cart-summary-heading">
+            <div>
+              <h2>Order summary</h2>
+              <p>Review totals, delivery details, and payment options.</p>
+            </div>
+            <span class="cart-summary-badge">{{ totalUnits }} {{ totalUnits === 1 ? 'unit' : 'units' }}</span>
+          </div>
           <div class="cart-summary-row">
             <span>Items total</span>
-            <strong>AED {{ cartTotal }}</strong>
+            <strong>{{ formatCurrency(cartTotal) }}</strong>
           </div>
           <div v-if="itemSavings" class="cart-summary-row cart-summary-saving">
             <span>Savings</span>
-            <strong>- AED {{ itemSavings }}</strong>
+            <strong>- {{ formatCurrency(itemSavings) }}</strong>
           </div>
-          <div class="cart-summary-row">
-            <span>Total distance</span>
+          <div class="cart-summary-row cart-summary-row--distance">
+            <span aria-hidden="true"></span>
             <strong>
               {{ isDeliveryDistanceLoading ? 'Calculating...' : (formatDistanceValue(totalDeliveryDistanceKm) ? `${formatDistanceValue(totalDeliveryDistanceKm)} km` : '-') }}
             </strong>
           </div>
           <div class="cart-summary-row">
             <span>Delivery charge</span>
-            <strong>{{ isDeliveryDistanceLoading ? 'Calculating...' : (deliveryFee ? `AED ${deliveryFee}` : 'FREE') }}</strong>
+            <strong>{{ isDeliveryDistanceLoading ? 'Calculating...' : (deliveryFee ? formatCurrency(deliveryFee) : 'FREE') }}</strong>
           </div>
           <div class="cart-summary-total">
             <span>Grand total</span>
-            <strong>AED {{ payableTotal }}</strong>
+            <strong>{{ formatCurrency(payableTotal) }}</strong>
           </div>
 
           <section class="cart-coupon-card" aria-label="Apply Coupon">
@@ -853,7 +918,7 @@ watch(
             </div>
             <div v-if="couponDiscountAmount > 0" class="cart-summary-row cart-summary-saving cart-coupon-discount">
               <span>Coupon discount</span>
-              <strong>- AED {{ couponDiscountAmount }}</strong>
+              <strong>- {{ formatCurrency(couponDiscountAmount) }}</strong>
             </div>
             <p v-if="couponFeedback" class="cart-coupon-message is-success">
               {{ couponFeedback }}
