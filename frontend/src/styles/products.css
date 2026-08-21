@@ -1461,6 +1461,24 @@
   text-align: left;
 }
 
+.brand-detail-page .supplier-store-banner {
+  min-height: 300px;
+}
+
+.brand-detail-page .brand-banner-slider {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  display: flex;
+  width: 100%;
+  height: 100%;
+  transition: transform 0.45s ease;
+}
+
+.brand-detail-page .brand-banner-slide {
+  flex: 0 0 100%;
+}
+
 .supplier-store-overview {
   display: grid;
   grid-template-columns: minmax(0, 1fr) max-content;

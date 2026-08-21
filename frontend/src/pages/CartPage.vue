@@ -6,7 +6,9 @@ import { getCustomerToSupplierDistanceKm, LOCATION_UPDATED_EVENT } from '../api/
 import {
   createCashOnDeliveryOrder,
   createStripeCheckoutSession,
+  fetchAvailableCoupons,
   resumeCheckoutSession,
+  syncCartSalesOrder,
   storeCheckoutResumeToken,
 } from '../api/paymentApi'
 import { customerAddresses } from '../data/addressStore'
@@ -24,11 +26,25 @@ const router = useRouter()
 const totalDeliveryDistanceKm = ref(null)
 const isDeliveryDistanceLoading = ref(false)
 const deliveryFee = computed(() => calculateDeliveryFee(totalDeliveryDistanceKm.value))
-const payableTotal = computed(() => cartTotal.value + deliveryFee.value)
+const salesOrderName = ref('')
+const couponCodeInput = ref('')
+const availableCoupons = ref([])
+const isLoadingCoupons = ref(false)
+const isCouponDropdownOpen = ref(false)
+const appliedCouponCode = ref('')
+const couponDiscountAmount = ref(0)
+const couponFeedback = ref('')
+const couponError = ref('')
+const isApplyingCoupon = ref(false)
+const couponDropdownRef = ref(null)
+const payableTotal = computed(() =>
+  Math.max(cartTotal.value + deliveryFee.value - couponDiscountAmount.value, 0),
+)
 const isStartingCheckout = ref(false)
 const isPlacingCodOrder = ref(false)
 const checkoutError = ref('')
 const isAddressRequired = ref(false)
+const isAddressExpanded = ref(false)
 const selectedDeliverySlot = ref('')
 const deliveryDateInput = ref(null)
 const LAST_COD_ORDER_ITEMS_STORAGE_KEY = 'buyInMinutesLastCodOrderItems'
@@ -77,6 +93,24 @@ const selectedDeliveryAddress = computed(() =>
   || customerAddresses.value[0]
   || null,
 )
+const selectedDeliveryAddressSummary = computed(() => {
+  if (!selectedDeliveryAddress.value) {
+    return ''
+  }
+
+  return [
+    selectedDeliveryAddress.value.area,
+    selectedDeliveryAddress.value.building,
+    selectedDeliveryAddress.value.street,
+    selectedDeliveryAddress.value.emirate,
+  ].filter(Boolean).slice(0, 3).join(', ')
+})
+const selectedCouponOption = computed(() =>
+  availableCoupons.value.find((coupon) => coupon.name === couponCodeInput.value) || null,
+)
+const appliedCouponOption = computed(() =>
+  availableCoupons.value.find((coupon) => coupon.name === appliedCouponCode.value) || null,
+)
 const itemSavings = computed(() =>
   cartProducts.value.reduce((total, item) => {
     if (!item.oldPrice || item.oldPrice <= item.price) {
@@ -105,6 +139,133 @@ function calculateDeliveryFee(distanceKm) {
   const roundedDistanceKm = Math.ceil(distanceKm)
 
   return roundedDistanceKm <= 10 ? 10 : 10 + (roundedDistanceKm - 10)
+}
+
+function resetCouponState() {
+  salesOrderName.value = ''
+  appliedCouponCode.value = ''
+  couponDiscountAmount.value = 0
+  couponFeedback.value = ''
+  couponError.value = ''
+}
+
+function updateCouponSummary(syncResponse) {
+  salesOrderName.value = syncResponse?.message?.sales_order || salesOrderName.value
+  appliedCouponCode.value = syncResponse?.message?.totals?.coupon_code || ''
+  couponDiscountAmount.value = Number(syncResponse?.message?.totals?.discount_amount || 0)
+}
+
+async function syncCouponPreview(couponCode = appliedCouponCode.value, options = {}) {
+  if (!canCheckout.value || !cartProducts.value.length) {
+    if (!cartProducts.value.length) {
+      resetCouponState()
+    }
+    return null
+  }
+
+  const response = await syncCartSalesOrder(
+    cartProducts.value,
+    salesOrderName.value,
+    selectedDeliveryAddress.value,
+    selectedDeliveryDate.value,
+    effectiveDeliverySlot.value,
+    deliveryFee.value,
+    couponCode,
+  )
+
+  updateCouponSummary(response)
+
+  if (!couponCode) {
+    couponFeedback.value = ''
+    couponError.value = ''
+    if (!options.keepDraftSalesOrder) {
+      salesOrderName.value = response?.message?.sales_order || salesOrderName.value
+    }
+    return response
+  }
+
+  couponFeedback.value = `Coupon ${(appliedCouponOption.value?.coupon_code || appliedCouponCode.value)} applied.`
+  couponError.value = ''
+  return response
+}
+
+async function applyCouponCode() {
+  couponFeedback.value = ''
+  couponError.value = ''
+
+  const couponCode = String(couponCodeInput.value || '').trim()
+  if (!couponCode) {
+    couponError.value = 'Choose a coupon.'
+    return
+  }
+
+  if (!(await ensureCheckoutSession())) {
+    couponError.value = 'Please login to apply a coupon.'
+    return
+  }
+
+  isApplyingCoupon.value = true
+
+  try {
+    await syncCouponPreview(couponCode)
+    couponCodeInput.value = appliedCouponCode.value
+  } catch (error) {
+    couponDiscountAmount.value = 0
+    appliedCouponCode.value = ''
+    couponError.value = error.message || 'Unable to apply coupon.'
+  } finally {
+    isApplyingCoupon.value = false
+  }
+}
+
+async function removeCouponCode() {
+  couponFeedback.value = ''
+  couponError.value = ''
+  couponCodeInput.value = ''
+
+  if (!canCheckout.value || !salesOrderName.value) {
+    resetCouponState()
+    return
+  }
+
+  isApplyingCoupon.value = true
+
+  try {
+    await syncCouponPreview('')
+  } catch (error) {
+    couponError.value = error.message || 'Unable to remove coupon.'
+  } finally {
+    isApplyingCoupon.value = false
+  }
+}
+
+function toggleCouponDropdown() {
+  if (isApplyingCoupon.value || isLoadingCoupons.value || !availableCoupons.value.length) {
+    return
+  }
+
+  isCouponDropdownOpen.value = !isCouponDropdownOpen.value
+}
+
+function selectCouponOption(couponName) {
+  couponCodeInput.value = couponName
+  isCouponDropdownOpen.value = false
+}
+
+async function loadAvailableCoupons() {
+  isLoadingCoupons.value = true
+
+  try {
+    availableCoupons.value = await fetchAvailableCoupons()
+    if (appliedCouponCode.value && !availableCoupons.value.some((coupon) => coupon.name === appliedCouponCode.value)) {
+      appliedCouponCode.value = ''
+      couponDiscountAmount.value = 0
+    }
+  } catch {
+    availableCoupons.value = []
+  } finally {
+    isLoadingCoupons.value = false
+  }
 }
 
 function getSupplierDistanceKey(item = {}) {
@@ -334,6 +495,7 @@ async function startStripeCheckout() {
       selectedDeliveryDate.value,
       effectiveDeliverySlot.value,
       deliveryFee.value,
+      appliedCouponCode.value,
     )
     console.log('Pay now checkout response', response)
     const checkoutUrl = response?.message?.checkout_url
@@ -405,6 +567,7 @@ async function placeCashOnDeliveryOrder() {
       selectedDeliveryDate.value,
       effectiveDeliverySlot.value,
       deliveryFee.value,
+      appliedCouponCode.value,
     )
     console.log('Cash on delivery order response', response)
     const salesOrder = response?.message?.sales_order
@@ -463,8 +626,23 @@ function goToAddAddress() {
   })
 }
 
+function goToManageAddresses() {
+  router.push({
+    name: 'profile',
+    query: {
+      returnTo: 'cart',
+    },
+  })
+}
+
 function handleWindowFocus() {
   refreshCurrentSession()
+}
+
+function handleDocumentClick(event) {
+  if (!couponDropdownRef.value?.contains(event.target)) {
+    isCouponDropdownOpen.value = false
+  }
 }
 
 onMounted(() => {
@@ -473,12 +651,14 @@ onMounted(() => {
   window.addEventListener('focus', handleWindowFocus)
   window.addEventListener('pageshow', handleWindowFocus)
   window.addEventListener(LOCATION_UPDATED_EVENT, refreshDeliveryDistance)
+  document.addEventListener('click', handleDocumentClick)
 })
 
 onUnmounted(() => {
   window.removeEventListener('focus', handleWindowFocus)
   window.removeEventListener('pageshow', handleWindowFocus)
   window.removeEventListener(LOCATION_UPDATED_EVENT, refreshDeliveryDistance)
+  document.removeEventListener('click', handleDocumentClick)
 })
 
 watch(
@@ -495,6 +675,43 @@ watch(
     refreshDeliveryDistance()
   },
   { deep: true },
+)
+
+watch(
+  canCheckout,
+  (isReady) => {
+    if (isReady) {
+      loadAvailableCoupons()
+      return
+    }
+
+    availableCoupons.value = []
+    couponCodeInput.value = ''
+  },
+  { immediate: true },
+)
+
+watch(
+  () => [
+    cartDistanceRefreshKey.value,
+    selectedDeliveryAddress.value?.id || '',
+    selectedDeliveryDate.value,
+    effectiveDeliverySlot.value,
+    deliveryFee.value,
+    canCheckout.value,
+    appliedCouponCode.value,
+  ],
+  async (_nextValues, _previousValues) => {
+    if (!appliedCouponCode.value || isApplyingCoupon.value) {
+      return
+    }
+
+    try {
+      await syncCouponPreview(appliedCouponCode.value, { keepDraftSalesOrder: true })
+    } catch {
+      couponDiscountAmount.value = 0
+    }
+  },
 )
 </script>
 
@@ -577,6 +794,156 @@ watch(
             <span>Grand total</span>
             <strong>AED {{ payableTotal }}</strong>
           </div>
+
+          <section class="cart-coupon-card" aria-label="Apply Coupon">
+            <div class="cart-coupon-header">
+              <h3>Apply Coupon</h3>
+              <button
+                v-if="appliedCouponCode"
+                class="cart-coupon-clear"
+                type="button"
+                :disabled="isApplyingCoupon"
+                @click="removeCouponCode"
+              >
+                Remove
+              </button>
+            </div>
+            <div class="cart-coupon-form">
+              <div ref="couponDropdownRef" class="cart-coupon-select-shell">
+                <button
+                  class="cart-coupon-input cart-coupon-select-trigger"
+                  type="button"
+                  :disabled="isApplyingCoupon || isLoadingCoupons || !availableCoupons.length"
+                  :aria-expanded="isCouponDropdownOpen"
+                  aria-haspopup="listbox"
+                  @click="toggleCouponDropdown"
+                >
+                  <span class="cart-coupon-select-text">
+                    {{
+                      isLoadingCoupons
+                        ? 'Loading coupons...'
+                        : selectedCouponOption
+                          ? `${selectedCouponOption.coupon_code}${selectedCouponOption.coupon_name && selectedCouponOption.coupon_name !== selectedCouponOption.coupon_code ? ` - ${selectedCouponOption.coupon_name}` : ''}`
+                          : (availableCoupons.length ? 'Select coupon code' : 'No coupons available')
+                    }}
+                  </span>
+                  <span class="cart-coupon-select-icon" :class="{ 'is-open': isCouponDropdownOpen }" aria-hidden="true"></span>
+                </button>
+                <div v-if="isCouponDropdownOpen" class="cart-coupon-options" role="listbox">
+                  <button
+                    v-for="coupon in availableCoupons"
+                    :key="coupon.name"
+                    class="cart-coupon-option"
+                    :class="{ 'is-selected': coupon.name === couponCodeInput }"
+                    type="button"
+                    @click="selectCouponOption(coupon.name)"
+                  >
+                    {{ coupon.coupon_code }}<template v-if="coupon.coupon_name && coupon.coupon_name !== coupon.coupon_code"> - {{ coupon.coupon_name }}</template>
+                  </button>
+                </div>
+              </div>
+              <button
+                class="cart-coupon-apply"
+                type="button"
+                :disabled="isApplyingCoupon || !couponCodeInput"
+                @click="applyCouponCode"
+              >
+                {{ isApplyingCoupon ? 'Applying...' : 'Apply' }}
+              </button>
+            </div>
+            <div v-if="couponDiscountAmount > 0" class="cart-summary-row cart-summary-saving cart-coupon-discount">
+              <span>Coupon discount</span>
+              <strong>- AED {{ couponDiscountAmount }}</strong>
+            </div>
+            <p v-if="couponFeedback" class="cart-coupon-message is-success">
+              {{ couponFeedback }}
+            </p>
+            <p v-if="couponError" class="cart-coupon-message is-error">
+              {{ couponError }}
+            </p>
+          </section>
+
+          <section class="cart-address-card" aria-label="Choose Address">
+            <div class="cart-address-header">
+              <div>
+                <h3>Choose Address</h3>
+              </div>
+              <button
+                class="cart-address-action"
+                type="button"
+                @click="hasDeliveryAddress ? goToManageAddresses() : goToAddAddress()"
+              >
+                {{ hasDeliveryAddress ? 'Change' : 'Add address' }}
+              </button>
+            </div>
+
+            <template v-if="selectedDeliveryAddress">
+              <div class="cart-address-body">
+                <div class="cart-address-summary-row">
+                  <div class="cart-address-summary-copy">
+                    <div class="cart-address-badges">
+                      <span class="cart-address-label">{{ selectedDeliveryAddress.label }}</span>
+                      <span v-if="selectedDeliveryAddress.isDefault" class="cart-address-default">Default</span>
+                    </div>
+                    <p class="cart-address-line">
+                      {{ selectedDeliveryAddress.contactName }}<span v-if="selectedDeliveryAddress.phone"> · {{ selectedDeliveryAddress.phone }}</span>
+                    </p>
+                    <p v-if="selectedDeliveryAddressSummary" class="cart-address-line">
+                      {{ selectedDeliveryAddressSummary }}
+                    </p>
+                  </div>
+                  <button
+                    class="cart-address-toggle"
+                    type="button"
+                    :aria-label="isAddressExpanded ? 'Hide full address' : 'Show full address'"
+                    :aria-expanded="isAddressExpanded"
+                    @click="isAddressExpanded = !isAddressExpanded"
+                  >
+                    <svg
+                      viewBox="0 0 20 20"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="1.8"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      :class="{ 'is-expanded': isAddressExpanded }"
+                      aria-hidden="true"
+                    >
+                      <path d="M6 8l4 4 4-4" />
+                    </svg>
+                  </button>
+                </div>
+                <div v-if="isAddressExpanded" class="cart-address-details">
+                  <p v-if="selectedDeliveryAddress.apartmentOfficeName" class="cart-address-line">
+                    {{ selectedDeliveryAddress.label === 'Office' ? 'Office name' : 'Apartment name' }}:
+                    {{ selectedDeliveryAddress.apartmentOfficeName }}
+                  </p>
+                  <p v-if="selectedDeliveryAddress.apartmentOfficeNo" class="cart-address-line">
+                    {{ selectedDeliveryAddress.label === 'Office' ? 'Office no' : 'Apartment no' }}:
+                    {{ selectedDeliveryAddress.apartmentOfficeNo }}
+                  </p>
+                  <p v-if="selectedDeliveryAddress.building" class="cart-address-line">
+                    Building / villa: {{ selectedDeliveryAddress.building }}
+                  </p>
+                  <p v-if="selectedDeliveryAddress.street" class="cart-address-line">
+                    Street: {{ selectedDeliveryAddress.street }}
+                  </p>
+                  <p v-if="selectedDeliveryAddress.area" class="cart-address-line">
+                    Area: {{ selectedDeliveryAddress.area }}
+                  </p>
+                  <p v-if="selectedDeliveryAddress.landmark" class="cart-address-line">
+                    Landmark: {{ selectedDeliveryAddress.landmark }}
+                  </p>
+                  <p v-if="selectedDeliveryAddress.emirate" class="cart-address-line">
+                    Emirate: {{ selectedDeliveryAddress.emirate }}
+                  </p>
+                </div>
+              </div>
+            </template>
+            <p v-else class="cart-address-empty">
+              No saved delivery address found. Add one before checkout.
+            </p>
+          </section>
 
           <section class="cart-delivery-options" aria-label="Delivery schedule">
             <div class="cart-delivery-heading">

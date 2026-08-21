@@ -228,6 +228,7 @@ export async function createStripeCheckoutSession(
   deliveryDate = '',
   deliverySlot = '',
   deliveryFee = 0,
+  couponCode = '',
 ) {
   const customerLocation = await getLiveCustomerLocationPayload()
 
@@ -242,6 +243,7 @@ export async function createStripeCheckoutSession(
       customer_location: customerLocation,
       custom_customer_location: customerLocation,
       delivery_fee: normalizeDeliveryFeeValue(deliveryFee),
+      coupon_code: String(couponCode || '').trim(),
       return_origin: getCheckoutReturnOrigin(),
     }),
   })
@@ -254,6 +256,7 @@ export async function createCashOnDeliveryOrder(
   deliveryDate = '',
   deliverySlot = '',
   deliveryFee = 0,
+  couponCode = '',
 ) {
   const customerLocation = await getLiveCustomerLocationPayload()
   const savedAddress = formatSavedAddress(deliveryAddress)
@@ -272,6 +275,38 @@ export async function createCashOnDeliveryOrder(
       custom_customer_location: customerLocation,
       address_display: savedAddress,
       delivery_fee: normalizeDeliveryFeeValue(deliveryFee),
+      coupon_code: String(couponCode || '').trim(),
+    }),
+  })
+}
+
+export async function syncCartSalesOrder(
+  cartItems,
+  salesOrderName = '',
+  deliveryAddress = null,
+  deliveryDate = '',
+  deliverySlot = '',
+  deliveryFee = 0,
+  couponCode = '',
+) {
+  const customerLocation = await getLiveCustomerLocationPayload()
+  const savedAddress = formatSavedAddress(deliveryAddress)
+  const serializedDeliveryAddress = serializeDeliveryAddress(deliveryAddress)
+
+  return apiRequest('/method/buy_in_minutes.payment.sync_cart_sales_order', {
+    method: 'POST',
+    body: JSON.stringify({
+      cart_items: serializeCartItems(cartItems),
+      sales_order_name: salesOrderName,
+      delivery_address: serializedDeliveryAddress,
+      delivery_date: deliveryDate,
+      delivery_slot: deliverySlot,
+      custom_delivery_slot: deliverySlot,
+      customer_location: customerLocation,
+      custom_customer_location: customerLocation,
+      address_display: savedAddress,
+      delivery_fee: normalizeDeliveryFeeValue(deliveryFee),
+      coupon_code: String(couponCode || '').trim(),
     }),
   })
 }
@@ -283,4 +318,10 @@ export function finalizeStripeCheckout(sessionId) {
       session_id: sessionId,
     }),
   })
+}
+
+export async function fetchAvailableCoupons() {
+  const response = await apiRequest('/method/buy_in_minutes.api.get_coupon_codes')
+
+  return Array.isArray(response?.message) ? response.message : []
 }

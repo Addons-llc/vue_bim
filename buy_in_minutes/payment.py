@@ -818,6 +818,42 @@ def _build_sales_order_item_rows(checkout_items, company, delivery_date=None):
 	return order_items
 
 
+def _get_checkout_items_from_sales_order(sales_order):
+	checkout_items = []
+
+	for item in sales_order.items:
+		if not item.item_code or flt(item.qty) <= 0:
+			continue
+
+		checkout_items.append(
+			{
+				"item_code": item.item_code,
+				"item_name": item.item_name or item.item_code,
+				"quantity": flt(item.qty),
+				"rate": flt(item.rate),
+				"amount": flt(item.amount),
+				"supplier": getattr(item, "supplier", None),
+				"size": getattr(item, "custom_size", None) or getattr(item, "size", None),
+			}
+		)
+
+	return checkout_items
+
+
+def _build_cart_totals_summary(sales_order, checkout_items):
+	original_total = sum(flt(item.get("amount")) for item in checkout_items or [])
+	discounted_total = sum(flt(item.get("amount")) for item in _get_checkout_items_from_sales_order(sales_order))
+	discount_amount = max(original_total - discounted_total, 0)
+
+	return {
+		"coupon_code": _clean_text(getattr(sales_order, "coupon_code", "")),
+		"original_total": original_total,
+		"discount_amount": discount_amount,
+		"discounted_total": discounted_total,
+		"grand_total": flt(sales_order.grand_total or discounted_total),
+	}
+
+
 def _resolve_sales_order_item_suppliers(sales_order):
 	company = sales_order.company or _get_default_company()
 	for item in sales_order.items:
@@ -1138,6 +1174,7 @@ def _upsert_sales_order(
 	delivery_slot=None,
 	customer_location=None,
 	address_display=None,
+	coupon_code=None,
 ):
 	checkout_user = frappe.session.user
 	customer = _get_or_create_customer_for_user(checkout_user)
@@ -1166,6 +1203,8 @@ def _upsert_sales_order(
 
 		sales_order.set("items", [])
 		sales_order.set("payment_schedule", [])
+		if sales_order.meta.has_field("pricing_rules"):
+			sales_order.set("pricing_rules", [])
 	else:
 		sales_order = frappe.get_doc({"doctype": "Sales Order"})
 
@@ -1187,6 +1226,11 @@ def _upsert_sales_order(
 		sales_order,
 		"custom_customer_location",
 		_clean_text(customer_location),
+	)
+	_set_doc_value_if_field_exists(
+		sales_order,
+		"coupon_code",
+		_clean_text(coupon_code),
 	)
 
 	for item in order_items:
@@ -1409,6 +1453,7 @@ def sync_cart_sales_order(
 	customer_location=None,
 	address_display=None,
 	delivery_fee=None,
+	coupon_code=None,
 ):
 	_require_checkout_user()
 
@@ -1421,11 +1466,13 @@ def sync_cart_sales_order(
 		delivery_slot=delivery_slot,
 		customer_location=customer_location,
 		address_display=address_display,
+		coupon_code=coupon_code,
 	)
 
 	return {
 		"success": True,
 		"sales_order": sales_order.name,
+		"totals": _build_cart_totals_summary(sales_order, checkout_items),
 	}
 
 
@@ -1440,6 +1487,7 @@ def create_checkout_session(
 	customer_location=None,
 	address_display=None,
 	delivery_fee=None,
+	coupon_code=None,
 ):
 	_require_checkout_user()
 
@@ -1452,7 +1500,9 @@ def create_checkout_session(
 		delivery_slot=delivery_slot,
 		customer_location=customer_location,
 		address_display=address_display,
+		coupon_code=coupon_code,
 	)
+	checkout_items = _get_checkout_items_from_sales_order(sales_order)
 	session = _stripe_request(
 		"/checkout/sessions",
 		_build_checkout_params(checkout_items, sales_order.name, return_origin=return_origin),
@@ -1477,6 +1527,7 @@ def create_cash_on_delivery_order(
 	customer_location=None,
 	address_display=None,
 	delivery_fee=None,
+	coupon_code=None,
 ):
 	_require_checkout_user()
 
@@ -1490,6 +1541,7 @@ def create_cash_on_delivery_order(
 		delivery_slot=delivery_slot,
 		customer_location=customer_location,
 		address_display=address_display,
+		coupon_code=coupon_code,
 	)
 	purchase_orders = getattr(sales_order, "purchase_orders", None)
 

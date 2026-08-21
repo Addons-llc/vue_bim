@@ -71,6 +71,13 @@ function mapBrand(brand = {}) {
       || brand.custom_cover_image
       || brand.custom_cover_photo,
   )
+  const bannerImages = [
+    brand.custom_brand_banner_image,
+    brand.custom_brand_banner_image_2,
+    brand.custom_brand_banner_image_3,
+  ]
+    .map((imagePath) => getImageUrl(imagePath))
+    .filter(Boolean)
   const image = getImageUrl(
     brand.image
       || brand.brand_image
@@ -86,6 +93,7 @@ function mapBrand(brand = {}) {
     description: stripHtml(brand.description || ''),
     image,
     bannerImage,
+    bannerImages: bannerImages.length ? bannerImages : (bannerImage ? [bannerImage] : []),
     rating: brand.rating || brand.average_rating || brand.review_rating || '',
     productCount: getBrandProductCount(brand),
     offerBadge: brand.offer_badge

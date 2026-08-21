@@ -1,5 +1,5 @@
 import frappe
-from frappe.utils import flt
+from frappe.utils import flt, getdate, today
 
 
 SELLING_PRICE_LIST = "Selling Price"
@@ -471,6 +471,8 @@ def get_brands(limit_page_length=24, published=1):
 			"custom_banner_image",
 			"custom_brand_banner",
 			"custom_brand_banner_image",
+			"custom_brand_banner_image_2",
+			"custom_brand_banner_image_3",
 			"custom_website_banner",
 			"custom_website_banner_image",
 			"custom_cover_image",
@@ -496,6 +498,56 @@ def get_brands(limit_page_length=24, published=1):
 		order_by="modified desc",
 		limit_page_length=limit_page_length,
 	)
+
+
+@frappe.whitelist()
+def get_coupon_codes(limit_page_length=100):
+	if frappe.session.user == "Guest":
+		frappe.throw("Please sign in before using coupons.", frappe.AuthenticationError)
+
+	if not frappe.db.exists("DocType", "Coupon Code"):
+		return []
+
+	limit_page_length = frappe.utils.cint(limit_page_length) or 100
+	coupon_fields = _get_existing_fields(
+		"Coupon Code",
+		(
+			"coupon_name",
+			"coupon_code",
+			"description",
+			"valid_from",
+			"valid_upto",
+			"maximum_use",
+			"used",
+			"pricing_rule",
+		),
+	)
+	coupon_records = frappe.get_all(
+		"Coupon Code",
+		fields=["name"] + coupon_fields,
+		ignore_permissions=True,
+		order_by="modified desc",
+		limit_page_length=limit_page_length,
+	)
+	today_value = getdate(today())
+
+	return [
+		{
+			"name": coupon.name,
+			"coupon_name": coupon.get("coupon_name") or coupon.name,
+			"coupon_code": coupon.get("coupon_code") or coupon.name,
+			"description": coupon.get("description") or "",
+			"pricing_rule": coupon.get("pricing_rule") or "",
+		}
+		for coupon in coupon_records
+		if coupon.get("pricing_rule")
+		and (not coupon.get("valid_from") or getdate(coupon.get("valid_from")) <= today_value)
+		and (not coupon.get("valid_upto") or getdate(coupon.get("valid_upto")) >= today_value)
+		and (
+			not coupon.get("maximum_use")
+			or flt(coupon.get("used")) < flt(coupon.get("maximum_use"))
+		)
+	]
 
 
 @frappe.whitelist(allow_guest=True)

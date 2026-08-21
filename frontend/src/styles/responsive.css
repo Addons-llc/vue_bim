@@ -1214,6 +1214,10 @@
     text-align: left;
   }
 
+  .brand-detail-page .supplier-store-banner {
+    min-height: 180px;
+  }
+
   .supplier-store-overview {
     grid-template-columns: 1fr;
     gap: 14px;
@@ -1323,6 +1327,10 @@
 
     .supplier-store-banner {
       min-height: 104px;
+    }
+
+    .brand-detail-page .supplier-store-banner {
+      min-height: 160px;
     }
 
     .supplier-products-panel {
