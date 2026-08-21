@@ -784,21 +784,12 @@ watch(
                 <h2>{{ item.name }}</h2>
                 <p v-if="item.size" class="cart-page-item-size">Size: {{ item.size }}</p>
               </div>
-              <button
-                class="cart-page-item-remove"
-                type="button"
-                :aria-label="`Remove ${item.name} from cart`"
-                @click="removeCartItem(item.id)"
-              >
-                Remove
-              </button>
             </div>
             <div class="cart-page-item-price">
               <strong>{{ formatCurrency(item.price) }}</strong>
               <span v-if="item.oldPrice && item.oldPrice > item.price">{{ formatCurrency(item.oldPrice) }}</span>
             </div>
             <div class="cart-page-item-meta">
-              <span class="cart-page-item-total">Subtotal: <strong>{{ formatCurrency(getItemLineTotal(item)) }}</strong></span>
               <span v-if="getItemLineSavings(item)" class="cart-page-item-saving">
                 Save {{ formatCurrency(getItemLineSavings(item)) }}
               </span>
@@ -823,7 +814,6 @@ watch(
                 +
               </button>
             </div>
-            <strong class="cart-page-item-final">{{ formatCurrency(getItemLineTotal(item)) }}</strong>
           </div>
         </article>
       </section>
@@ -845,12 +835,6 @@ watch(
             <span>Savings</span>
             <strong>- {{ formatCurrency(itemSavings) }}</strong>
           </div>
-          <div class="cart-summary-row cart-summary-row--distance">
-            <span aria-hidden="true"></span>
-            <strong>
-              {{ isDeliveryDistanceLoading ? 'Calculating...' : (formatDistanceValue(totalDeliveryDistanceKm) ? `${formatDistanceValue(totalDeliveryDistanceKm)} km` : '-') }}
-            </strong>
-          </div>
           <div class="cart-summary-row">
             <span>Delivery charge</span>
             <strong>{{ isDeliveryDistanceLoading ? 'Calculating...' : (deliveryFee ? formatCurrency(deliveryFee) : 'FREE') }}</strong>
@@ -863,15 +847,6 @@ watch(
           <section class="cart-coupon-card" aria-label="Apply Coupon">
             <div class="cart-coupon-header">
               <h3>Apply Coupon</h3>
-              <button
-                v-if="appliedCouponCode"
-                class="cart-coupon-clear"
-                type="button"
-                :disabled="isApplyingCoupon"
-                @click="removeCouponCode"
-              >
-                Remove
-              </button>
             </div>
             <div class="cart-coupon-form">
               <div ref="couponDropdownRef" class="cart-coupon-select-shell">

@@ -1725,10 +1725,6 @@
     width: max-content;
   }
 
-  .cart-page-item-final {
-    justify-self: end;
-  }
-
   .cart-summary-heading {
     flex-direction: column;
     align-items: start;
