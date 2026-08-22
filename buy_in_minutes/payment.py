@@ -334,11 +334,11 @@ def _apply_coupon_additional_discount_to_sales_order(sales_order, coupon_code_na
 	if pricing_rule.apply_on != "Transaction" or pricing_rule.price_or_product_discount != "Price":
 		return
 
-	apply_discount_on = pricing_rule.apply_discount_on or "Net Total"
 	discount_percentage = flt(pricing_rule.discount_percentage)
 	discount_amount = flt(pricing_rule.discount_amount)
 
-	_set_doc_value_if_field_exists(sales_order, "apply_discount_on", apply_discount_on)
+	# Keep delivery charges outside coupon discounts on cart/checkout flows.
+	_set_doc_value_if_field_exists(sales_order, "apply_discount_on", "Net Total")
 
 	if discount_percentage > 0:
 		_set_doc_value_if_field_exists(
@@ -1015,6 +1015,83 @@ def _build_cart_totals_summary(sales_order, checkout_items):
 	}
 
 
+def _build_cart_coupon_item_pricing(sales_order, checkout_items):
+	non_delivery_items = [
+		item for item in (checkout_items or []) if item.get("item_code") != DELIVERY_FEE_ITEM_CODE
+	]
+	if not non_delivery_items:
+		return []
+
+	item_prices = []
+	total_original_amount = 0
+
+	for item in non_delivery_items:
+		quantity = max(flt(item.get("quantity")), 0)
+		original_amount = max(flt(item.get("amount")), 0)
+		original_rate = flt(item.get("rate"))
+
+		if quantity and not original_rate and original_amount:
+			original_rate = flt(original_amount / quantity, 6)
+
+		item_prices.append(
+			{
+				"item_code": item.get("item_code"),
+				"supplier": item.get("supplier"),
+				"size": item.get("size"),
+				"quantity": quantity,
+				"original_rate": original_rate,
+				"original_amount": original_amount,
+			}
+		)
+		total_original_amount += original_amount
+
+	total_discount_amount = flt(_build_cart_totals_summary(sales_order, checkout_items).get("discount_amount"))
+	total_discount_amount = min(max(total_discount_amount, 0), total_original_amount)
+	if total_discount_amount <= 0 or total_original_amount <= 0:
+		return [
+			{
+				**item_price,
+				"discount_amount": 0,
+				"discounted_amount": item_price["original_amount"],
+				"discounted_rate": item_price["original_rate"],
+			}
+			for item_price in item_prices
+		]
+
+	allocated_discount = 0
+	last_index = len(item_prices) - 1
+
+	for index, item_price in enumerate(item_prices):
+		if index == last_index:
+			discount_amount = flt(total_discount_amount - allocated_discount, 2)
+		else:
+			proportional_discount = (
+				(item_price["original_amount"] / total_original_amount) * total_discount_amount
+				if total_original_amount
+				else 0
+			)
+			discount_amount = flt(proportional_discount, 2)
+			allocated_discount += discount_amount
+
+		discount_amount = min(max(discount_amount, 0), item_price["original_amount"])
+		discounted_amount = flt(item_price["original_amount"] - discount_amount, 2)
+		discounted_rate = (
+			flt(discounted_amount / item_price["quantity"], 6)
+			if item_price["quantity"] > 0
+			else item_price["original_rate"]
+		)
+
+		item_price.update(
+			{
+				"discount_amount": discount_amount,
+				"discounted_amount": discounted_amount,
+				"discounted_rate": discounted_rate,
+			}
+		)
+
+	return item_prices
+
+
 def _resolve_sales_order_item_suppliers(sales_order):
 	company = sales_order.company or _get_default_company()
 	for item in sales_order.items:
@@ -1661,6 +1738,7 @@ def sync_cart_sales_order(
 		"success": True,
 		"sales_order": sales_order.name,
 		"totals": _build_cart_totals_summary(sales_order, checkout_items),
+		"item_pricing": _build_cart_coupon_item_pricing(sales_order, checkout_items),
 	}
 
 

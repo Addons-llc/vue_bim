@@ -15,7 +15,6 @@ import { clearCurrentUser, currentUser, isAuthReady, setCurrentUser } from '../d
 import { clearCart } from '../data/cartStore'
 import {
   cartProducts,
-  cartTotal,
   updateCartProductQuantity,
 } from '../data/cartStore'
 
@@ -29,11 +28,15 @@ const salesOrderName = ref('')
 const couponCodeInput = ref('')
 const appliedCouponCode = ref('')
 const couponDiscountAmount = ref(0)
+const couponItemPricing = ref([])
 const couponFeedback = ref('')
 const couponError = ref('')
 const isApplyingCoupon = ref(false)
+const discountedItemsTotal = computed(() =>
+  cartProducts.value.reduce((total, item, index) => total + getDisplayItemLineTotal(item, index), 0),
+)
 const payableTotal = computed(() =>
-  Math.max(cartTotal.value + deliveryFee.value - couponDiscountAmount.value, 0),
+  Math.max(discountedItemsTotal.value + deliveryFee.value, 0),
 )
 const isStartingCheckout = ref(false)
 const isPlacingCodOrder = ref(false)
@@ -104,13 +107,20 @@ const totalUnits = computed(() =>
   cartProducts.value.reduce((total, item) => total + Number(item.quantity || 0), 0),
 )
 const totalLines = computed(() => cartProducts.value.length)
+const cartDistanceRefreshKey = computed(() =>
+  cartProducts.value
+    .map((item) => [item.id, item.quantity, item.price, item.size || ''].join(':'))
+    .join('|'),
+)
 const itemSavings = computed(() =>
-  cartProducts.value.reduce((total, item) => {
-    if (!item.oldPrice || item.oldPrice <= item.price) {
+  cartProducts.value.reduce((total, item, index) => {
+    const displayUnitPrice = getDisplayItemUnitPrice(item, index)
+
+    if (!item.oldPrice || item.oldPrice <= displayUnitPrice) {
       return total
     }
 
-    return total + (item.oldPrice - item.price) * item.quantity
+    return total + (item.oldPrice - displayUnitPrice) * item.quantity
   }, 0),
 )
 
@@ -148,12 +158,40 @@ function getItemLineTotal(item) {
   return Number(item?.price || 0) * Number(item?.quantity || 0)
 }
 
-function getItemLineSavings(item) {
-  if (!item?.oldPrice || Number(item.oldPrice) <= Number(item.price || 0)) {
+function getCouponItemPricing(index) {
+  return couponItemPricing.value[index] || null
+}
+
+function getDisplayItemUnitPrice(item, index) {
+  const discountedRate = Number(getCouponItemPricing(index)?.discounted_rate)
+
+  return Number.isFinite(discountedRate) && discountedRate >= 0
+    ? discountedRate
+    : Number(item?.price || 0)
+}
+
+function getDisplayItemLineTotal(item, index) {
+  const discountedAmount = Number(getCouponItemPricing(index)?.discounted_amount)
+
+  return Number.isFinite(discountedAmount) && discountedAmount >= 0
+    ? discountedAmount
+    : getItemLineTotal(item)
+}
+
+function getItemCouponDiscount(item, index) {
+  const discountAmount = Number(getCouponItemPricing(index)?.discount_amount)
+
+  return Number.isFinite(discountAmount) && discountAmount > 0 ? discountAmount : 0
+}
+
+function getItemLineSavings(item, index) {
+  const displayUnitPrice = getDisplayItemUnitPrice(item, index)
+
+  if (!item?.oldPrice || Number(item.oldPrice) <= displayUnitPrice) {
     return 0
   }
 
-  return (Number(item.oldPrice) - Number(item.price || 0)) * Number(item.quantity || 0)
+  return (Number(item.oldPrice) - displayUnitPrice) * Number(item.quantity || 0)
 }
 
 function removeCartItem(itemId) {
@@ -164,6 +202,7 @@ function resetCouponState() {
   salesOrderName.value = ''
   appliedCouponCode.value = ''
   couponDiscountAmount.value = 0
+  couponItemPricing.value = []
   couponFeedback.value = ''
   couponError.value = ''
 }
@@ -172,6 +211,9 @@ function updateCouponSummary(syncResponse) {
   salesOrderName.value = syncResponse?.message?.sales_order || salesOrderName.value
   appliedCouponCode.value = syncResponse?.message?.totals?.coupon_code || ''
   couponDiscountAmount.value = Number(syncResponse?.message?.totals?.discount_amount || 0)
+  couponItemPricing.value = Array.isArray(syncResponse?.message?.item_pricing)
+    ? syncResponse.message.item_pricing
+    : []
 }
 
 async function syncCouponPreview(couponCode = appliedCouponCode.value, options = {}) {
@@ -197,7 +239,7 @@ async function syncCouponPreview(couponCode = appliedCouponCode.value, options =
   if (!couponCode) {
     couponFeedback.value = ''
     couponError.value = ''
-  if (!options.keepDraftSalesOrder) {
+    if (!options.keepDraftSalesOrder) {
       salesOrderName.value = response?.message?.sales_order || salesOrderName.value
     }
     return response
@@ -231,6 +273,7 @@ async function applyCouponCode() {
   } catch (error) {
     couponDiscountAmount.value = 0
     appliedCouponCode.value = ''
+    couponItemPricing.value = []
     couponError.value = error.message || 'Unable to apply coupon.'
   } finally {
     isApplyingCoupon.value = false
@@ -720,7 +763,7 @@ watch(
     <div v-if="cartProducts.length" class="cart-page-grid">
       <section class="cart-items-panel" aria-label="Cart items">
         <article
-          v-for="item in cartProducts"
+          v-for="(item, index) in cartProducts"
           :key="item.id"
           class="cart-page-item"
         >
@@ -734,12 +777,15 @@ watch(
               </div>
             </div>
             <div class="cart-page-item-price">
-              <strong>{{ formatCurrency(item.price) }}</strong>
-              <span v-if="item.oldPrice && item.oldPrice > item.price">{{ formatCurrency(item.oldPrice) }}</span>
+              <strong>{{ formatCurrency(getDisplayItemUnitPrice(item, index)) }}</strong>
+              <span v-if="item.oldPrice && item.oldPrice > getDisplayItemUnitPrice(item, index)">{{ formatCurrency(item.oldPrice) }}</span>
             </div>
             <div class="cart-page-item-meta">
-              <span v-if="getItemLineSavings(item)" class="cart-page-item-saving">
-                Save {{ formatCurrency(getItemLineSavings(item)) }}
+              <span v-if="getItemLineSavings(item, index)" class="cart-page-item-saving">
+                Save {{ formatCurrency(getItemLineSavings(item, index)) }}
+              </span>
+              <span v-if="getItemCouponDiscount(item, index)" class="cart-page-item-saving">
+                Coupon -{{ formatCurrency(getItemCouponDiscount(item, index)) }}
               </span>
             </div>
           </div>
@@ -777,7 +823,7 @@ watch(
           </div>
           <div class="cart-summary-row">
             <span>Items total</span>
-            <strong>{{ formatCurrency(cartTotal) }}</strong>
+            <strong>{{ formatCurrency(discountedItemsTotal) }}</strong>
           </div>
           <div v-if="itemSavings" class="cart-summary-row cart-summary-saving">
             <span>Savings</span>
