@@ -6,7 +6,6 @@ import { getCustomerToSupplierDistanceKm, LOCATION_UPDATED_EVENT } from '../api/
 import {
   createCashOnDeliveryOrder,
   createStripeCheckoutSession,
-  fetchAvailableCoupons,
   resumeCheckoutSession,
   syncCartSalesOrder,
   storeCheckoutResumeToken,
@@ -28,15 +27,11 @@ const isDeliveryDistanceLoading = ref(false)
 const deliveryFee = computed(() => calculateDeliveryFee(totalDeliveryDistanceKm.value))
 const salesOrderName = ref('')
 const couponCodeInput = ref('')
-const availableCoupons = ref([])
-const isLoadingCoupons = ref(false)
-const isCouponDropdownOpen = ref(false)
 const appliedCouponCode = ref('')
 const couponDiscountAmount = ref(0)
 const couponFeedback = ref('')
 const couponError = ref('')
 const isApplyingCoupon = ref(false)
-const couponDropdownRef = ref(null)
 const payableTotal = computed(() =>
   Math.max(cartTotal.value + deliveryFee.value - couponDiscountAmount.value, 0),
 )
@@ -105,12 +100,6 @@ const selectedDeliveryAddressSummary = computed(() => {
     selectedDeliveryAddress.value.emirate,
   ].filter(Boolean).slice(0, 3).join(', ')
 })
-const selectedCouponOption = computed(() =>
-  availableCoupons.value.find((coupon) => coupon.name === couponCodeInput.value) || null,
-)
-const appliedCouponOption = computed(() =>
-  availableCoupons.value.find((coupon) => coupon.name === appliedCouponCode.value) || null,
-)
 const totalUnits = computed(() =>
   cartProducts.value.reduce((total, item) => total + Number(item.quantity || 0), 0),
 )
@@ -208,13 +197,13 @@ async function syncCouponPreview(couponCode = appliedCouponCode.value, options =
   if (!couponCode) {
     couponFeedback.value = ''
     couponError.value = ''
-    if (!options.keepDraftSalesOrder) {
+  if (!options.keepDraftSalesOrder) {
       salesOrderName.value = response?.message?.sales_order || salesOrderName.value
     }
     return response
   }
 
-  couponFeedback.value = `Coupon ${(appliedCouponOption.value?.coupon_code || appliedCouponCode.value)} applied.`
+  couponFeedback.value = `Coupon ${appliedCouponCode.value} applied.`
   couponError.value = ''
   return response
 }
@@ -225,7 +214,7 @@ async function applyCouponCode() {
 
   const couponCode = String(couponCodeInput.value || '').trim()
   if (!couponCode) {
-    couponError.value = 'Choose a coupon.'
+    couponError.value = 'Enter a coupon code.'
     return
   }
 
@@ -238,7 +227,7 @@ async function applyCouponCode() {
 
   try {
     await syncCouponPreview(couponCode)
-    couponCodeInput.value = appliedCouponCode.value
+    couponCodeInput.value = couponCode
   } catch (error) {
     couponDiscountAmount.value = 0
     appliedCouponCode.value = ''
@@ -266,35 +255,6 @@ async function removeCouponCode() {
     couponError.value = error.message || 'Unable to remove coupon.'
   } finally {
     isApplyingCoupon.value = false
-  }
-}
-
-function toggleCouponDropdown() {
-  if (isApplyingCoupon.value || isLoadingCoupons.value || !availableCoupons.value.length) {
-    return
-  }
-
-  isCouponDropdownOpen.value = !isCouponDropdownOpen.value
-}
-
-function selectCouponOption(couponName) {
-  couponCodeInput.value = couponName
-  isCouponDropdownOpen.value = false
-}
-
-async function loadAvailableCoupons() {
-  isLoadingCoupons.value = true
-
-  try {
-    availableCoupons.value = await fetchAvailableCoupons()
-    if (appliedCouponCode.value && !availableCoupons.value.some((coupon) => coupon.name === appliedCouponCode.value)) {
-      appliedCouponCode.value = ''
-      couponDiscountAmount.value = 0
-    }
-  } catch {
-    availableCoupons.value = []
-  } finally {
-    isLoadingCoupons.value = false
   }
 }
 
@@ -669,26 +629,18 @@ function handleWindowFocus() {
   refreshCurrentSession()
 }
 
-function handleDocumentClick(event) {
-  if (!couponDropdownRef.value?.contains(event.target)) {
-    isCouponDropdownOpen.value = false
-  }
-}
-
 onMounted(() => {
   refreshCurrentSession()
   refreshDeliveryDistance()
   window.addEventListener('focus', handleWindowFocus)
   window.addEventListener('pageshow', handleWindowFocus)
   window.addEventListener(LOCATION_UPDATED_EVENT, refreshDeliveryDistance)
-  document.addEventListener('click', handleDocumentClick)
 })
 
 onUnmounted(() => {
   window.removeEventListener('focus', handleWindowFocus)
   window.removeEventListener('pageshow', handleWindowFocus)
   window.removeEventListener(LOCATION_UPDATED_EVENT, refreshDeliveryDistance)
-  document.removeEventListener('click', handleDocumentClick)
 })
 
 watch(
@@ -710,13 +662,9 @@ watch(
 watch(
   canCheckout,
   (isReady) => {
-    if (isReady) {
-      loadAvailableCoupons()
-      return
+    if (!isReady) {
+      couponCodeInput.value = ''
     }
-
-    availableCoupons.value = []
-    couponCodeInput.value = ''
   },
   { immediate: true },
 )
@@ -849,43 +797,19 @@ watch(
               <h3>Apply Coupon</h3>
             </div>
             <div class="cart-coupon-form">
-              <div ref="couponDropdownRef" class="cart-coupon-select-shell">
-                <button
-                  class="cart-coupon-input cart-coupon-select-trigger"
-                  type="button"
-                  :disabled="isApplyingCoupon || isLoadingCoupons || !availableCoupons.length"
-                  :aria-expanded="isCouponDropdownOpen"
-                  aria-haspopup="listbox"
-                  @click="toggleCouponDropdown"
-                >
-                  <span class="cart-coupon-select-text">
-                    {{
-                      isLoadingCoupons
-                        ? 'Loading coupons...'
-                        : selectedCouponOption
-                          ? `${selectedCouponOption.coupon_code}${selectedCouponOption.coupon_name && selectedCouponOption.coupon_name !== selectedCouponOption.coupon_code ? ` - ${selectedCouponOption.coupon_name}` : ''}`
-                          : (availableCoupons.length ? 'Select coupon code' : 'No coupons available')
-                    }}
-                  </span>
-                  <span class="cart-coupon-select-icon" :class="{ 'is-open': isCouponDropdownOpen }" aria-hidden="true"></span>
-                </button>
-                <div v-if="isCouponDropdownOpen" class="cart-coupon-options" role="listbox">
-                  <button
-                    v-for="coupon in availableCoupons"
-                    :key="coupon.name"
-                    class="cart-coupon-option"
-                    :class="{ 'is-selected': coupon.name === couponCodeInput }"
-                    type="button"
-                    @click="selectCouponOption(coupon.name)"
-                  >
-                    {{ coupon.coupon_code }}<template v-if="coupon.coupon_name && coupon.coupon_name !== coupon.coupon_code"> - {{ coupon.coupon_name }}</template>
-                  </button>
-                </div>
-              </div>
+              <input
+                v-model.trim="couponCodeInput"
+                class="cart-coupon-input"
+                type="text"
+                inputmode="text"
+                autocomplete="off"
+                placeholder="Enter coupon code"
+                :disabled="isApplyingCoupon"
+              />
               <button
                 class="cart-coupon-apply"
                 type="button"
-                :disabled="isApplyingCoupon || !couponCodeInput"
+                :disabled="isApplyingCoupon || !couponCodeInput.trim()"
                 @click="applyCouponCode"
               >
                 {{ isApplyingCoupon ? 'Applying...' : 'Apply' }}

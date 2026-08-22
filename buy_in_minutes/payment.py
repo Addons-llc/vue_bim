@@ -277,6 +277,86 @@ def _clean_text(value):
 	return str(value or "").strip()
 
 
+def _resolve_coupon_code_name(coupon_code):
+	coupon_code = _clean_text(coupon_code)
+	if not coupon_code or not frappe.db.exists("DocType", "Coupon Code"):
+		return coupon_code
+
+	if frappe.db.exists("Coupon Code", coupon_code):
+		return coupon_code
+
+	matched_coupon_name = frappe.db.get_value("Coupon Code", {"coupon_code": coupon_code}, "name")
+	if matched_coupon_name:
+		return matched_coupon_name
+
+	case_insensitive_match = frappe.db.sql(
+		"""
+		select name
+		from `tabCoupon Code`
+		where lower(name) = lower(%s) or lower(coupon_code) = lower(%s)
+		order by modified desc
+		limit 1
+		""",
+		(coupon_code, coupon_code),
+	)
+	if case_insensitive_match:
+		return case_insensitive_match[0][0]
+
+	return coupon_code
+
+
+def _get_coupon_pricing_rule(coupon_code_name):
+	coupon_code_name = _clean_text(coupon_code_name)
+	if not coupon_code_name or not frappe.db.exists("Coupon Code", coupon_code_name):
+		return None
+
+	pricing_rule_name = frappe.db.get_value("Coupon Code", coupon_code_name, "pricing_rule")
+	if not pricing_rule_name or not frappe.db.exists("Pricing Rule", pricing_rule_name):
+		return None
+
+	return frappe.get_cached_doc("Pricing Rule", pricing_rule_name)
+
+
+def _reset_sales_order_additional_discount(sales_order):
+	_set_doc_value_if_field_exists(sales_order, "apply_discount_on", "")
+	_set_doc_value_if_field_exists(sales_order, "additional_discount_percentage", 0)
+	_set_doc_value_if_field_exists(sales_order, "discount_amount", 0)
+	_set_doc_value_if_field_exists(sales_order, "ignore_pricing_rule", 0)
+
+
+def _apply_coupon_additional_discount_to_sales_order(sales_order, coupon_code_name):
+	_reset_sales_order_additional_discount(sales_order)
+
+	pricing_rule = _get_coupon_pricing_rule(coupon_code_name)
+	if not pricing_rule:
+		return
+
+	if pricing_rule.apply_on != "Transaction" or pricing_rule.price_or_product_discount != "Price":
+		return
+
+	apply_discount_on = pricing_rule.apply_discount_on or "Net Total"
+	discount_percentage = flt(pricing_rule.discount_percentage)
+	discount_amount = flt(pricing_rule.discount_amount)
+
+	_set_doc_value_if_field_exists(sales_order, "apply_discount_on", apply_discount_on)
+
+	if discount_percentage > 0:
+		_set_doc_value_if_field_exists(
+			sales_order,
+			"additional_discount_percentage",
+			discount_percentage,
+		)
+		_set_doc_value_if_field_exists(sales_order, "discount_amount", 0)
+	elif discount_amount > 0:
+		_set_doc_value_if_field_exists(sales_order, "additional_discount_percentage", 0)
+		_set_doc_value_if_field_exists(sales_order, "discount_amount", discount_amount)
+	else:
+		return
+
+	# Prevent ERPNext from applying the same coupon-linked transaction rule twice.
+	_set_doc_value_if_field_exists(sales_order, "ignore_pricing_rule", 1)
+
+
 def _normalize_delivery_fee(delivery_fee):
 	if delivery_fee in (None, ""):
 		return None
@@ -912,9 +992,19 @@ def _get_checkout_items_from_sales_order(sales_order):
 
 
 def _build_cart_totals_summary(sales_order, checkout_items):
-	original_total = sum(flt(item.get("amount")) for item in checkout_items or [])
-	discounted_total = sum(flt(item.get("amount")) for item in _get_checkout_items_from_sales_order(sales_order))
-	discount_amount = max(original_total - discounted_total, 0)
+	original_total = sum(
+		flt(item.get("amount"))
+		for item in checkout_items or []
+		if item.get("item_code") != DELIVERY_FEE_ITEM_CODE
+	)
+	discounted_total = sum(
+		flt(item.get("amount"))
+		for item in _get_checkout_items_from_sales_order(sales_order)
+		if item.get("item_code") != DELIVERY_FEE_ITEM_CODE
+	)
+	item_level_discount_amount = max(original_total - discounted_total, 0)
+	document_level_discount_amount = flt(getattr(sales_order, "discount_amount", 0))
+	discount_amount = max(item_level_discount_amount, document_level_discount_amount)
 
 	return {
 		"coupon_code": _clean_text(getattr(sales_order, "coupon_code", "")),
@@ -1304,7 +1394,11 @@ def _upsert_sales_order(
 	_set_doc_value_if_field_exists(
 		sales_order,
 		"coupon_code",
-		_clean_text(coupon_code),
+		_resolve_coupon_code_name(coupon_code),
+	)
+	_apply_coupon_additional_discount_to_sales_order(
+		sales_order,
+		_clean_text(getattr(sales_order, "coupon_code", "")),
 	)
 	if use_delivery_charge_tax_template:
 		delivery_charge_tax_template_name = _get_delivery_charge_tax_template_name()

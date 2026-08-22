@@ -323,10 +323,6 @@
   gap: 8px;
 }
 
-.cart-coupon-select-shell {
-  position: relative;
-}
-
 .cart-coupon-input {
   min-height: 40px;
   border: 1px solid #d1d5db;
@@ -334,72 +330,7 @@
   padding: 0 12px;
   background: #ffffff;
   color: #111827;
-}
-
-.cart-coupon-select-trigger {
   width: 100%;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  text-align: left;
-}
-
-.cart-coupon-select-text {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.cart-coupon-select-icon {
-  flex: 0 0 auto;
-  width: 10px;
-  height: 10px;
-  border-right: 2px solid #6b7280;
-  border-bottom: 2px solid #6b7280;
-  transform: rotate(45deg) translateY(-1px);
-  transition: transform 0.18s ease, border-color 0.18s ease;
-}
-
-.cart-coupon-select-icon.is-open {
-  transform: rotate(225deg) translateY(-1px);
-}
-
-.cart-coupon-options {
-  position: absolute;
-  top: calc(100% + 6px);
-  left: 0;
-  right: 0;
-  z-index: 5;
-  display: grid;
-  gap: 4px;
-  max-height: 220px;
-  overflow-y: auto;
-  border: 1px solid #d1d5db;
-  border-radius: 10px;
-  padding: 6px;
-  background: #ffffff;
-  box-shadow: 0 14px 28px rgba(17, 24, 39, 0.12);
-}
-
-.cart-coupon-option {
-  min-height: 36px;
-  border: 0;
-  border-radius: 8px;
-  padding: 0 10px;
-  background: transparent;
-  color: #111827;
-  cursor: pointer;
-  font-size: 12px;
-  font-weight: 700;
-  text-align: left;
-}
-
-.cart-coupon-option:hover,
-.cart-coupon-option.is-selected {
-  background: #eff6ff;
-  color: #1d4ed8;
 }
 
 .cart-coupon-input::placeholder {
