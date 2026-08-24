@@ -143,6 +143,9 @@ function mergeProductDetails(cachedProduct, loadedProduct) {
     ...loadedProduct,
     image: loadedProduct.image || cachedProduct.image,
     bannerImage: loadedProduct.bannerImage || cachedProduct.bannerImage,
+    attachmentImages: loadedProduct.attachmentImages?.length
+      ? loadedProduct.attachmentImages
+      : (cachedProduct.attachmentImages || []),
     images: loadedProduct.images?.length ? loadedProduct.images : cachedProduct.images,
     price: loadedProduct.price || cachedProduct.price,
     oldPrice: loadedProduct.oldPrice || cachedProduct.oldPrice,
@@ -172,16 +175,14 @@ const productImages = computed(() => {
     return []
   }
 
-  const images = product.value.images?.length
-    ? product.value.images
-    : [product.value.bannerImage || product.value.image].filter(Boolean)
+  const images = product.value.attachmentImages?.length
+    ? product.value.attachmentImages
+    : []
 
   return images.filter(Boolean)
 })
 const activeProductImage = computed(() =>
   productImages.value[activeImageIndex.value]
-    || product.value?.bannerImage
-    || product.value?.image
     || '',
 )
 
@@ -562,6 +563,27 @@ onUnmounted(() => {
           {{ brandName }}
         </RouterLink>
         <p v-else class="product-detail-category">{{ supplierName }}</p>
+        <!-- Source listing is kept in productDetails below; avoid duplicating Brand under the brand link. -->
+        <!--
+        <p v-if="sourceListing" class="product-detail-category">
+          {{ sourceListing.label }}: {{ sourceListing.name }}
+        </p>
+        -->
+        <h2 :id="`product-detail-title-${product.id}`">{{ product.name }}</h2>
+
+        <div class="product-detail-rating-row">
+          <span>{{ product.rating }}</span>
+          <span class="product-detail-stars">{{ ratingStars }}</span>
+          <a href="#product-details">3 Ratings</a>
+        </div>
+
+        <div class="product-detail-price-row">
+          <span class="product-detail-price">
+            <span class="product-detail-currency">AED</span>
+            {{ product.price }}
+          </span>
+        </div>
+
         <section
           v-if="showVariantDropdowns"
           class="product-detail-section product-variant-dropdown-section"
@@ -591,26 +613,6 @@ onUnmounted(() => {
           </div>
           <p v-if="isLoadingVariants" class="product-variant-status">Loading options...</p>
         </section>
-        <!-- Source listing is kept in productDetails below; avoid duplicating Brand under the brand link. -->
-        <!--
-        <p v-if="sourceListing" class="product-detail-category">
-          {{ sourceListing.label }}: {{ sourceListing.name }}
-        </p>
-        -->
-        <h2 :id="`product-detail-title-${product.id}`">{{ product.name }}</h2>
-
-        <div class="product-detail-rating-row">
-          <span>{{ product.rating }}</span>
-          <span class="product-detail-stars">{{ ratingStars }}</span>
-          <a href="#product-details">3 Ratings</a>
-        </div>
-
-        <div class="product-detail-price-row">
-          <span class="product-detail-price">
-            <span class="product-detail-currency">AED</span>
-            {{ product.price }}
-          </span>
-        </div>
 
         <section
           v-if="productSizeOptions.length && !showVariantDropdowns"

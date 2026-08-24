@@ -70,7 +70,15 @@ const {
 
 const discoveryBrands = computed(() => brands.value.slice(0, 12))
 const discoveryStores = computed(() => stores.value.slice(0, 12))
-const discoveryCategories = computed(() => categories.value.slice(0, 12))
+const discoveryCategories = computed(() =>
+  categories.value
+    .filter((category) => {
+      const parentItemGroup = String(category.parentItemGroup || '').trim()
+
+      return !parentItemGroup || parentItemGroup === 'All Item Groups'
+    })
+    .slice(0, 12),
+)
 const brandsTabRoute = { name: 'categories', query: { tab: 'brands' } }
 const storesTabRoute = { name: 'categories', query: { tab: 'stores' } }
 const categoriesTabRoute = { name: 'categories', query: { tab: 'categories' } }

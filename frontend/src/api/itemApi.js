@@ -214,30 +214,28 @@ function getVariantLabel(item) {
   return stripHtml(item.item_name || item.item_code || item.name || '')
 }
 
-function getAttachmentFieldValue(record) {
-  if (!record || typeof record !== 'object') {
-    return ''
-  }
-
-  return getImageUrl(
-    record.image
-      || record.image_url
-      || record.image_path
-      || record.attachment
-      || record.attachment_url
-      || record.file
-      || record.file_url
-      || record.file_name
-      || record.url
-      || record.photo
-      || record.thumbnail,
-  )
-}
-
 function getItemAttachmentImages(item) {
+  const attachments = Array.isArray(item?.attachments) ? item.attachments : []
   const images = []
   const seenImages = new Set()
-  const imageFieldPattern = /(attachment|attachments|gallery|slider|carousel|image)/i
+
+  attachments.forEach((attachment) => {
+    const imageUrl = getImageUrl(attachment?.file_url || attachment?.file_name || '')
+
+    if (!imageUrl || seenImages.has(imageUrl)) {
+      return
+    }
+
+    seenImages.add(imageUrl)
+    images.push(imageUrl)
+  })
+
+  return images.slice(0, 6)
+}
+
+function getItemGalleryImages(item) {
+  const images = []
+  const seenImages = new Set()
   const pushImage = (image) => {
     const imageUrl = getImageUrl(image)
 
@@ -264,34 +262,6 @@ function getItemAttachmentImages(item) {
 
   primaryImageCandidates.forEach(pushImage)
 
-  Object.entries(item || {}).forEach(([fieldname, value]) => {
-    if (!imageFieldPattern.test(fieldname)) {
-      return
-    }
-
-    if (typeof value === 'string') {
-      pushImage(value)
-      return
-    }
-
-    if (!Array.isArray(value)) {
-      return
-    }
-
-    value.forEach((entry) => {
-      if (typeof entry === 'string') {
-        pushImage(entry)
-        return
-      }
-
-      const imageUrl = getAttachmentFieldValue(entry)
-
-      if (imageUrl) {
-        pushImage(imageUrl)
-      }
-    })
-  })
-
   return images.slice(0, 3)
 }
 
@@ -307,7 +277,8 @@ async function mapItemToProduct(item) {
   const stockQuantity = getStockQuantity(item)
   const reviewCount = getReviewCount(item)
   const supplierDetails = getSupplierDetails(item)
-  const images = getItemAttachmentImages(item)
+  const attachmentImages = getItemAttachmentImages(item)
+  const images = getItemGalleryImages(item)
   const deliveryTime = await getEstimatedDeliveryTimeLabel({
     supplierDetails,
   })
@@ -342,6 +313,7 @@ async function mapItemToProduct(item) {
     deliveryTime,
     image,
     bannerImage,
+    attachmentImages,
     images,
     categoryImage,
     imageLabel: item.item_group || 'Item',
