@@ -9,7 +9,6 @@ import {
 import { getBrands } from '../api/brandApi'
 import { getSupplierStores } from '../api/supplierStoreApi'
 import {
-  getChildCategories,
   openCategoryOrProduct,
 } from '../utils/categoryNavigation'
 
@@ -40,13 +39,15 @@ const activeParentCategory = computed(() =>
   ),
 )
 const visibleCategories = computed(() => {
-  if (!activeParentCategory.value) {
-    return categories.value
+  if (activeParentCategory.value) {
+    return [activeParentCategory.value]
   }
 
-  const children = getChildCategories(activeParentCategory.value, categories.value)
+  return categories.value.filter((category) => {
+    const parentItemGroup = String(category.parentItemGroup || '').trim()
 
-  return children.length ? children : categories.value
+    return !parentItemGroup || parentItemGroup === 'All Item Groups'
+  })
 })
 const visibleItems = computed(() => {
   if (activeTab.value === 'brands') {
