@@ -184,6 +184,36 @@ function getItemSize(item) {
   )
 }
 
+function getVariantAttributes(item) {
+  const rawAttributes = Array.isArray(item?.variant_attributes)
+    ? item.variant_attributes
+    : Array.isArray(item?.attributes)
+      ? item.attributes
+      : []
+
+  return rawAttributes
+    .map((attribute) => ({
+      attribute: stripHtml(attribute?.attribute || attribute?.label || ''),
+      value: stripHtml(attribute?.value || attribute?.attribute_value || ''),
+    }))
+    .filter((attribute) => attribute.attribute && attribute.value)
+}
+
+function getVariantLabel(item) {
+  const explicitSize = getItemSize(item)
+
+  if (explicitSize) {
+    return explicitSize
+  }
+
+  const variantAttributes = getVariantAttributes(item)
+  if (variantAttributes.length) {
+    return variantAttributes.map((attribute) => attribute.value).join(' / ')
+  }
+
+  return stripHtml(item.item_name || item.item_code || item.name || '')
+}
+
 function getAttachmentFieldValue(record) {
   if (!record || typeof record !== 'object') {
     return ''
@@ -304,6 +334,10 @@ async function mapItemToProduct(item) {
     stockQuantity,
     inStock: stockQuantity > 0 || item.disabled === 0,
     isPublished: isPublishedItem(item),
+    hasVariants: isTruthyFlag(item.has_variants ?? item.hasVariants),
+    variantOf: item.variant_of || item.variantOf || '',
+    variantLabel: getVariantLabel(item),
+    variantAttributes: getVariantAttributes(item),
     deliveryTime,
     image,
     bannerImage,
@@ -372,6 +406,10 @@ export async function getItemMasterItems(params = {}) {
     query.set('item', params.item)
   }
 
+  if (params.variant_of) {
+    query.set('variant_of', params.variant_of)
+  }
+
   if (params.brand) {
     query.set('brand', params.brand)
   }
@@ -434,6 +472,17 @@ export async function getItemMasterItem(itemName) {
 
     throw error
   }
+}
+
+export async function getItemMasterVariants(templateItemName) {
+  if (!templateItemName) {
+    return []
+  }
+
+  return getItemMasterItems({
+    variant_of: templateItemName,
+    limit_page_length: 100,
+  })
 }
 
 export async function getItemMasterCategories() {

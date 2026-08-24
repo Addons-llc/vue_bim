@@ -235,6 +235,39 @@ def _apply_item_attachments(items, max_attachments=2):
 		item.attachments = attachments_by_item.get(item.name, [])
 
 
+def _apply_item_variant_metadata(items):
+	item_names = [item.name for item in items if item.name]
+	if not item_names or not frappe.db.exists("DocType", "Item Variant Attribute"):
+		return
+
+	variant_attribute_rows = frappe.get_all(
+		"Item Variant Attribute",
+		fields=["parent", "attribute", "attribute_value", "idx"],
+		filters={
+			"parent": ["in", item_names],
+			"parenttype": "Item",
+		},
+		order_by="parent asc, idx asc",
+		ignore_permissions=True,
+		limit_page_length=len(item_names) * 10,
+	)
+
+	attributes_by_item = {}
+	for row in variant_attribute_rows:
+		if not row.parent:
+			continue
+
+		attributes_by_item.setdefault(row.parent, []).append(
+			{
+				"attribute": row.attribute,
+				"value": row.attribute_value,
+			}
+		)
+
+	for item in items:
+		item.variant_attributes = attributes_by_item.get(item.name, [])
+
+
 def _get_item_supplier_links(item_names):
 	item_names = [item_name for item_name in item_names if item_name]
 	if not item_names or not frappe.db.exists("DocType", "Item Supplier"):
@@ -635,6 +668,7 @@ def get_items(
 	search=None,
 	item_group=None,
 	item=None,
+	variant_of=None,
 	brand=None,
 	supplier=None,
 	supplier_store=None,
@@ -657,6 +691,9 @@ def get_items(
 
 	if item:
 		filters["name"] = item
+
+	if variant_of and item_meta.has_field("variant_of"):
+		filters["variant_of"] = variant_of
 
 	if item_group:
 		filters["item_group"] = item_group
@@ -682,6 +719,11 @@ def get_items(
 			"website_image",
 			"thumbnail",
 			"brand",
+			"has_variants",
+			"variant_of",
+			"custom_size",
+			"custom_size_options",
+			"custom_sizes",
 			"custom_popular_items",
 			"custom_delivery_slots",
 			"standard_rate",
@@ -722,6 +764,7 @@ def get_items(
 	_apply_selling_prices(items)
 	_apply_item_group_images(items)
 	_apply_item_attachments(items)
+	_apply_item_variant_metadata(items)
 	_apply_supplier_details(items)
 	items = _filter_items_by_item_codes(items, supplier_store_item_codes)
 	items = _filter_items_by_supplier(items, supplier)

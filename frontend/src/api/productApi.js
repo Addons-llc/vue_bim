@@ -2,6 +2,7 @@ import {
   getItemMasterCategories,
   getItemMasterItem,
   getItemMasterItems,
+  getItemMasterVariants,
   searchItemMasterItems,
 } from './itemApi'
 
@@ -24,6 +25,10 @@ export function getProducts(params = {}) {
 
 export function getProductById(productId) {
   return getItemMasterItem(productId)
+}
+
+export function getProductVariants(templateItemName) {
+  return getItemMasterVariants(templateItemName)
 }
 
 export function searchProducts(searchText) {

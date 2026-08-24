@@ -1,18 +1,21 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import {
   addProductToCart,
   cartProducts,
   updateCartProductQuantity,
 } from '../data/cartStore'
-import { getSelectedProduct } from '../data/productSelectionStore'
+import { getSelectedProduct, saveSelectedProduct } from '../data/productSelectionStore'
 import { saveSelectedSupplier } from '../data/supplierSelectionStore'
-import { getProductById } from '../api/productApi'
+import { getProductById, getProductVariants } from '../api/productApi'
 
 const route = useRoute()
+const router = useRouter()
 const product = ref(null)
+const productVariants = ref([])
 const isLoading = ref(false)
+const isLoadingVariants = ref(false)
 const loadError = ref('')
 const hasProductDetailLoaded = ref(false)
 const activeImageIndex = ref(0)
@@ -43,6 +46,11 @@ const ratingStars = computed(() => {
 })
 const productDescription = computed(() => product.value?.description || '')
 const isProductDescriptionLong = computed(() => productDescription.value.length > 120)
+const variantTemplateId = computed(() =>
+  product.value?.variantOf || (product.value?.hasVariants ? product.value.id : ''),
+)
+const selectedVariantId = computed(() => product.value?.id || '')
+const hasProductVariants = computed(() => productVariants.value.length > 0)
 const productSizeOptions = computed(() => {
   const rawSize = product.value?.customSize || product.value?.custom_size || ''
 
@@ -90,6 +98,12 @@ function mergeProductDetails(cachedProduct, loadedProduct) {
     inStock: loadedProduct.inStock ?? cachedProduct.inStock,
     customDeliverySlots: loadedProduct.customDeliverySlots ?? cachedProduct.customDeliverySlots,
     customSize: loadedProduct.customSize || cachedProduct.customSize || loadedProduct.custom_size || cachedProduct.custom_size,
+    hasVariants: loadedProduct.hasVariants ?? cachedProduct.hasVariants,
+    variantOf: loadedProduct.variantOf || cachedProduct.variantOf || '',
+    variantLabel: loadedProduct.variantLabel || cachedProduct.variantLabel || '',
+    variantAttributes: loadedProduct.variantAttributes?.length
+      ? loadedProduct.variantAttributes
+      : (cachedProduct.variantAttributes || []),
   }
 }
 
@@ -141,6 +155,42 @@ const productDetails = computed(() => {
   ].filter((detail) => detail?.value)
 })
 
+async function loadVariantsForProduct(loadedProduct) {
+  const templateItemName = loadedProduct?.variantOf || (loadedProduct?.hasVariants ? loadedProduct.id : '')
+
+  if (!templateItemName) {
+    productVariants.value = []
+    return false
+  }
+
+  isLoadingVariants.value = true
+
+  try {
+    const variants = await getProductVariants(templateItemName)
+    productVariants.value = variants
+
+    if (loadedProduct?.hasVariants && !loadedProduct?.variantOf && variants.length) {
+      const defaultVariant = variants.find((variant) => variant.inStock) || variants[0]
+
+      if (defaultVariant?.id && defaultVariant.id !== route.params.productId) {
+        saveSelectedProduct(defaultVariant)
+        await router.replace({
+          name: 'product-details',
+          params: { productId: defaultVariant.id },
+        })
+        return true
+      }
+    }
+
+    return false
+  } catch {
+    productVariants.value = []
+    return false
+  } finally {
+    isLoadingVariants.value = false
+  }
+}
+
 async function loadProduct() {
   if (!productId.value) {
     loadError.value = 'Product not found.'
@@ -150,6 +200,7 @@ async function loadProduct() {
   hasProductDetailLoaded.value = false
   const cachedProduct = getSelectedProduct(productId.value)
   product.value = cachedProduct
+  productVariants.value = []
   isLoading.value = !cachedProduct
   loadError.value = ''
 
@@ -162,12 +213,19 @@ async function loadProduct() {
     }
 
     product.value = mergeProductDetails(cachedProduct, loadedProduct)
+    const redirectedToVariant = await loadVariantsForProduct(product.value)
+    if (redirectedToVariant) {
+      return
+    }
+
+    saveSelectedProduct(product.value)
     activeImageIndex.value = 0
     isProductDescriptionExpanded.value = false
     hasProductDetailLoaded.value = true
   } catch (error) {
     if (!cachedProduct) {
       product.value = null
+      productVariants.value = []
       loadError.value = error.message || 'Unable to load product details.'
     }
   } finally {
@@ -206,6 +264,18 @@ function decreaseSelectedProductQuantity() {
 
 function selectProductSize(size) {
   selectedProductSize.value = size
+}
+
+async function selectProductVariant(variant) {
+  if (!variant?.id || variant.id === productId.value) {
+    return
+  }
+
+  saveSelectedProduct(variant)
+  await router.push({
+    name: 'product-details',
+    params: { productId: variant.id },
+  })
 }
 
 function toggleProductDescription() {
@@ -334,7 +404,31 @@ watch(productSizeOptions, (sizes) => {
           </span>
         </div>
 
-        <section v-if="productSizeOptions.length" class="product-detail-section product-size-section">
+        <section
+          v-if="hasProductVariants"
+          class="product-detail-section product-variant-section"
+        >
+          <h3>Available Options</h3>
+          <div class="product-variant-options" role="group" aria-label="Choose product option">
+            <button
+              v-for="variant in productVariants"
+              :key="variant.id"
+              class="product-variant-option"
+              :class="{ 'is-selected': selectedVariantId === variant.id }"
+              type="button"
+              @click="selectProductVariant(variant)"
+            >
+              <strong>{{ variant.variantLabel || variant.name }}</strong>
+              <span>AED {{ variant.price }}</span>
+            </button>
+          </div>
+          <p v-if="isLoadingVariants" class="product-variant-status">Loading options...</p>
+        </section>
+
+        <section
+          v-if="productSizeOptions.length && !hasProductVariants"
+          class="product-detail-section product-size-section"
+        >
           <h3>Size</h3>
           <div class="product-size-options" role="group" aria-label="Choose product size">
             <button
