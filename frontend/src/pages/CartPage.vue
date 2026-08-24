@@ -32,9 +32,13 @@ const couponItemPricing = ref([])
 const couponFeedback = ref('')
 const couponError = ref('')
 const isApplyingCoupon = ref(false)
+const originalItemsTotal = computed(() =>
+  cartProducts.value.reduce((total, item) => total + getItemLineTotal(item), 0),
+)
 const discountedItemsTotal = computed(() =>
   cartProducts.value.reduce((total, item, index) => total + getDisplayItemLineTotal(item, index), 0),
 )
+const hasCouponDiscount = computed(() => couponDiscountAmount.value > 0)
 const payableTotal = computed(() =>
   Math.max(discountedItemsTotal.value + deliveryFee.value, 0),
 )
@@ -781,6 +785,10 @@ watch(
               <span v-if="item.oldPrice && item.oldPrice > getDisplayItemUnitPrice(item, index)">{{ formatCurrency(item.oldPrice) }}</span>
             </div>
             <div class="cart-page-item-meta">
+              <span v-if="getItemLineTotal(item) > getDisplayItemLineTotal(item, index)" class="cart-page-item-line-total">
+                {{ formatCurrency(getDisplayItemLineTotal(item, index)) }}
+                <span>{{ formatCurrency(getItemLineTotal(item)) }}</span>
+              </span>
               <span v-if="getItemLineSavings(item, index)" class="cart-page-item-saving">
                 Save {{ formatCurrency(getItemLineSavings(item, index)) }}
               </span>
@@ -823,7 +831,10 @@ watch(
           </div>
           <div class="cart-summary-row">
             <span>Items total</span>
-            <strong>{{ formatCurrency(discountedItemsTotal) }}</strong>
+            <strong class="cart-summary-amounts">
+              <span v-if="hasCouponDiscount" class="cart-summary-original">{{ formatCurrency(originalItemsTotal) }}</span>
+              <span>{{ formatCurrency(discountedItemsTotal) }}</span>
+            </strong>
           </div>
           <div v-if="itemSavings" class="cart-summary-row cart-summary-saving">
             <span>Savings</span>

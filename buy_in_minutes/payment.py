@@ -1005,6 +1005,7 @@ def _build_cart_totals_summary(sales_order, checkout_items):
 	item_level_discount_amount = max(original_total - discounted_total, 0)
 	document_level_discount_amount = flt(getattr(sales_order, "discount_amount", 0))
 	discount_amount = max(item_level_discount_amount, document_level_discount_amount)
+	discounted_total = max(original_total - discount_amount, 0)
 
 	return {
 		"coupon_code": _clean_text(getattr(sales_order, "coupon_code", "")),
