@@ -9,6 +9,7 @@ import {
 import { getBrands } from '../api/brandApi'
 import { getSupplierStores } from '../api/supplierStoreApi'
 import {
+  getChildCategories,
   openCategoryOrProduct,
 } from '../utils/categoryNavigation'
 
@@ -33,22 +34,23 @@ const stores = ref([])
 const categories = ref(getCachedProductCategories())
 const isLoadingCategories = ref(false)
 const categoryError = ref('')
-const activeParentCategory = computed(() =>
-  categories.value.find((category) =>
-    [category.itemGroup, category.name, category.id].includes(activeCategory.value),
-  ),
-)
-const visibleCategories = computed(() => {
-  if (activeParentCategory.value) {
-    return [activeParentCategory.value]
-  }
-
-  return categories.value.filter((category) => {
+const topLevelCategories = computed(() =>
+  categories.value.filter((category) => {
     const parentItemGroup = String(category.parentItemGroup || '').trim()
 
     return !parentItemGroup || parentItemGroup === 'All Item Groups'
-  })
-})
+  }),
+)
+const activeParentCategory = computed(() =>
+  topLevelCategories.value.find((category) =>
+    [category.itemGroup, category.name, category.id].includes(activeCategory.value),
+  ),
+)
+const childCategories = computed(() =>
+  activeParentCategory.value
+    ? getChildCategories(activeParentCategory.value, categories.value)
+    : [],
+)
 const visibleItems = computed(() => {
   if (activeTab.value === 'brands') {
     return brands.value
@@ -58,7 +60,7 @@ const visibleItems = computed(() => {
     return stores.value
   }
 
-  return visibleCategories.value
+  return topLevelCategories.value
 })
 const activeSourceType = computed(() => {
   if (activeTab.value === 'brands') {
@@ -81,6 +83,22 @@ function selectTab(tabId) {
 
 async function openSelectedItem(category) {
   categoryError.value = ''
+
+  if (activeTab.value === 'categories') {
+    const isTopLevelCategory = topLevelCategories.value.some((candidate) => candidate.id === category.id)
+
+    if (isTopLevelCategory) {
+      await router.push({
+        name: 'categories',
+        query: {
+          tab: 'categories',
+          category: category.itemGroup || category.name || category.id,
+        },
+      })
+      return
+    }
+  }
+
   await openCategoryOrProduct({
     categories: categories.value,
     item: category,
@@ -150,6 +168,15 @@ onMounted(loadCategories)
       :categories="visibleItems"
       :item-type="activeSourceType"
       :title="activeTabLabel"
+      @select="openSelectedItem"
+    />
+
+    <CategoryRail
+      v-if="activeTab === 'categories' && childCategories.length"
+      section-id="category-children"
+      title="Available Item Groups"
+      :categories="childCategories"
+      item-type="category"
       @select="openSelectedItem"
     />
   </section>
