@@ -1205,6 +1205,11 @@ def _build_manual_purchase_orders_for_sales_order(sales_order, selected_items):
 		purchase_order.supplier = supplier
 		purchase_order.company = sales_order.company
 		purchase_order.transaction_date = nowdate()
+		_set_doc_value_if_field_exists(
+			purchase_order,
+			"custom_customer_pickup",
+			1 if cint(getattr(sales_order, "custom_customer_pickup", 0)) else 0,
+		)
 		_set_doc_value_if_field_exists(purchase_order, "schedule_date", sales_order.delivery_date or nowdate())
 		_set_doc_value_if_field_exists(purchase_order, "buying_price_list", "")
 		_set_doc_value_if_field_exists(purchase_order, "ignore_pricing_rule", 1)
@@ -1335,6 +1340,25 @@ def _create_purchase_orders_for_sales_order(sales_order):
 		)
 		raise
 
+	customer_pickup_value = 1 if cint(getattr(sales_order, "custom_customer_pickup", 0)) else 0
+	for purchase_order in purchase_orders or []:
+		if not purchase_order:
+			continue
+
+		_set_doc_value_if_field_exists(
+			purchase_order,
+			"custom_customer_pickup",
+			customer_pickup_value,
+		)
+
+		if getattr(purchase_order, "name", None):
+			frappe.db.set_value(
+				purchase_order.doctype,
+				purchase_order.name,
+				{"custom_customer_pickup": customer_pickup_value},
+				update_modified=False,
+			)
+
 	_submit_purchase_orders(purchase_orders, sales_order.name)
 
 	frappe.logger("buy_in_minutes.payment").info(
@@ -1415,6 +1439,7 @@ def _upsert_sales_order(
 	address_display=None,
 	coupon_code=None,
 	delivery_fee=None,
+	customer_pickup=False,
 	use_delivery_charge_tax_template=False,
 ):
 	checkout_user = frappe.session.user
@@ -1473,6 +1498,11 @@ def _upsert_sales_order(
 		sales_order,
 		"coupon_code",
 		_resolve_coupon_code_name(coupon_code),
+	)
+	_set_doc_value_if_field_exists(
+		sales_order,
+		"custom_customer_pickup",
+		1 if customer_pickup else 0,
 	)
 	_apply_coupon_additional_discount_to_sales_order(
 		sales_order,
@@ -1713,6 +1743,7 @@ def sync_cart_sales_order(
 	address_display=None,
 	delivery_fee=None,
 	coupon_code=None,
+	customer_pickup=False,
 ):
 	_require_checkout_user()
 
@@ -1732,6 +1763,7 @@ def sync_cart_sales_order(
 		address_display=address_display,
 		coupon_code=coupon_code,
 		delivery_fee=delivery_fee,
+		customer_pickup=customer_pickup,
 		use_delivery_charge_tax_template=True,
 	)
 
@@ -1755,6 +1787,7 @@ def create_checkout_session(
 	address_display=None,
 	delivery_fee=None,
 	coupon_code=None,
+	customer_pickup=False,
 ):
 	_require_checkout_user()
 
@@ -1774,6 +1807,7 @@ def create_checkout_session(
 		address_display=address_display,
 		coupon_code=coupon_code,
 		delivery_fee=delivery_fee,
+		customer_pickup=customer_pickup,
 		use_delivery_charge_tax_template=True,
 	)
 	session = _stripe_request(
@@ -1801,6 +1835,7 @@ def create_cash_on_delivery_order(
 	address_display=None,
 	delivery_fee=None,
 	coupon_code=None,
+	customer_pickup=False,
 ):
 	_require_checkout_user()
 
@@ -1820,6 +1855,7 @@ def create_cash_on_delivery_order(
 		address_display=address_display,
 		coupon_code=coupon_code,
 		delivery_fee=delivery_fee,
+		customer_pickup=customer_pickup,
 		use_delivery_charge_tax_template=True,
 	)
 	purchase_orders = getattr(sales_order, "purchase_orders", None)

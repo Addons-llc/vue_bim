@@ -47,6 +47,7 @@ const isPlacingCodOrder = ref(false)
 const checkoutError = ref('')
 const isAddressRequired = ref(false)
 const isAddressExpanded = ref(false)
+const fulfillmentMode = ref('delivery')
 const selectedDeliverySlot = ref('')
 const deliveryDateInput = ref(null)
 const LAST_COD_ORDER_ITEMS_STORAGE_KEY = 'buyInMinutesLastCodOrderItems'
@@ -77,8 +78,30 @@ const requiresDeliverySlot = computed(() =>
 const effectiveDeliverySlot = computed(() =>
   requiresDeliverySlot.value ? selectedDeliverySlot.value : '',
 )
+const isCustomerPickup = computed(() => fulfillmentMode.value === 'pickup')
 const selectedDeliveryDateContext = computed(() =>
-  selectedDeliveryDate.value === deliveryDateMin ? 'Today' : 'Scheduled delivery',
+  selectedDeliveryDate.value === deliveryDateMin
+    ? 'Today'
+    : (isCustomerPickup.value ? 'Scheduled pickup' : 'Scheduled delivery'),
+)
+const orderScheduleTitle = computed(() =>
+  isCustomerPickup.value ? 'Choose pickup date' : 'Choose delivery date',
+)
+const orderScheduleDescription = computed(() =>
+  isCustomerPickup.value
+    ? 'Select when you want to pick up your order.'
+    : 'Select when you want this order delivered.',
+)
+const orderScheduleLabel = computed(() =>
+  isCustomerPickup.value ? 'Pickup date' : 'Delivery date',
+)
+const orderSlotTitle = computed(() =>
+  isCustomerPickup.value ? 'Choose pickup slot' : 'Choose delivery slot',
+)
+const orderSlotDescription = computed(() =>
+  isCustomerPickup.value
+    ? 'Pick the time slot that works best for pickup.'
+    : 'Pick the time window that works best.',
 )
 const canCheckout = computed(() => isAuthReady.value && Boolean(currentUser.value))
 const checkoutButtonLabel = computed(() => {
@@ -111,6 +134,33 @@ const totalUnits = computed(() =>
   cartProducts.value.reduce((total, item) => total + Number(item.quantity || 0), 0),
 )
 const totalLines = computed(() => cartProducts.value.length)
+const pickupLocations = computed(() => {
+  const locations = []
+  const seen = new Set()
+
+  cartProducts.value.forEach((item) => {
+    const supplierName = String(item?.supplierName || item?.supplier || '').trim()
+    const supplierAddress = String(
+      item?.supplierAddress
+      || item?.supplierDetails?.customGoogleAddress
+      || item?.supplierDetails?.custom_google_address
+      || '',
+    ).trim()
+    const locationKey = `${supplierName}::${supplierAddress}`
+
+    if (!supplierAddress || seen.has(locationKey)) {
+      return
+    }
+
+    seen.add(locationKey)
+    locations.push({
+      supplierName: supplierName || 'Pickup location',
+      supplierAddress,
+    })
+  })
+
+  return locations
+})
 const cartDistanceRefreshKey = computed(() =>
   cartProducts.value
     .map((item) => [item.id, item.quantity, item.price, item.size || ''].join(':'))
@@ -236,6 +286,7 @@ async function syncCouponPreview(couponCode = appliedCouponCode.value, options =
     effectiveDeliverySlot.value,
     deliveryFee.value,
     couponCode,
+    isCustomerPickup.value,
   )
 
   updateCouponSummary(response)
@@ -388,6 +439,10 @@ function selectDeliverySlot(slot) {
   selectedDeliverySlot.value = slot
 }
 
+function selectFulfillmentMode(mode) {
+  fulfillmentMode.value = mode
+}
+
 function openDeliveryDatePicker() {
   const input = deliveryDateInput.value
 
@@ -533,6 +588,7 @@ async function startStripeCheckout() {
       effectiveDeliverySlot.value,
       deliveryFee.value,
       appliedCouponCode.value,
+      isCustomerPickup.value,
     )
     console.log('Pay now checkout response', response)
     const checkoutUrl = response?.message?.checkout_url
@@ -605,6 +661,7 @@ async function placeCashOnDeliveryOrder() {
       effectiveDeliverySlot.value,
       deliveryFee.value,
       appliedCouponCode.value,
+      isCustomerPickup.value,
     )
     console.log('Cash on delivery order response', response)
     const salesOrder = response?.message?.sales_order
@@ -967,16 +1024,66 @@ watch(
           </section>
 
           <section class="cart-delivery-options" aria-label="Delivery schedule">
+            <div class="cart-fulfillment-mode" role="group" aria-label="Choose how you would like to receive your order">
+              <p class="cart-fulfillment-title">How would you like to receive your order?</p>
+              <div class="cart-fulfillment-options">
+                <button
+                  class="cart-fulfillment-option"
+                  :class="{ 'is-selected': fulfillmentMode === 'delivery' }"
+                  type="button"
+                  @click="selectFulfillmentMode('delivery')"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <circle cx="7.5" cy="18" r="1.5" />
+                    <circle cx="17.5" cy="18" r="1.5" />
+                    <path d="M2.5 4.5h10v9h-10zM12.5 8.5h4l3 3v2h-7zM5 8h3M4 11h2" />
+                  </svg>
+                  <span>Delivery</span>
+                </button>
+                <button
+                  class="cart-fulfillment-option"
+                  :class="{ 'is-selected': fulfillmentMode === 'pickup' }"
+                  type="button"
+                  @click="selectFulfillmentMode('pickup')"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M5 8.5h14v10H5zM8 8.5V7a4 4 0 0 1 8 0v1.5M9 13h6" />
+                  </svg>
+                  <span>Customer Pickup</span>
+                </button>
+              </div>
+            </div>
+
+            <div
+              v-if="isCustomerPickup && pickupLocations.length"
+              class="cart-pickup-location"
+              aria-label="Pickup location"
+            >
+              <div class="cart-pickup-location-header">
+                <h3>Pickup Location</h3>
+              </div>
+              <div class="cart-pickup-location-list">
+                <div
+                  v-for="location in pickupLocations"
+                  :key="`${location.supplierName}-${location.supplierAddress}`"
+                  class="cart-pickup-location-item"
+                >
+                  <strong>{{ location.supplierName }}</strong>
+                  <p>{{ location.supplierAddress }}</p>
+                </div>
+              </div>
+            </div>
+
             <div class="cart-delivery-heading">
               <span class="cart-delivery-step">1</span>
               <div>
-                <h3>Choose delivery date</h3>
-                <p>Select when you want this order delivered.</p>
+                <h3>{{ orderScheduleTitle }}</h3>
+                <p>{{ orderScheduleDescription }}</p>
               </div>
             </div>
 
             <div class="cart-date-picker">
-              <label class="cart-date-label" for="cart-delivery-date">Delivery date</label>
+              <label class="cart-date-label" for="cart-delivery-date">{{ orderScheduleLabel }}</label>
               <div class="cart-date-input-shell" @click="openDeliveryDatePicker">
                 <div class="cart-date-display">
                   <span class="cart-date-icon" aria-hidden="true">
@@ -1007,12 +1114,12 @@ watch(
               <div class="cart-delivery-heading cart-slot-heading">
                 <span class="cart-delivery-step">2</span>
                 <div>
-                  <h3>Choose delivery slot</h3>
-                  <p>Pick the time window that works best.</p>
+                  <h3>{{ orderSlotTitle }}</h3>
+                  <p>{{ orderSlotDescription }}</p>
                 </div>
               </div>
 
-              <div class="cart-slot-options" role="group" aria-label="Choose delivery slot">
+              <div class="cart-slot-options" role="group" :aria-label="orderSlotTitle">
                 <button
                   v-for="slot in deliverySlots"
                   :key="slot"
@@ -1025,7 +1132,7 @@ watch(
                 </button>
               </div>
               <p v-if="!selectedDeliverySlot" class="cart-slot-prompt">
-                Select a delivery slot to continue.
+                Select a {{ isCustomerPickup ? 'pickup' : 'delivery' }} slot to continue.
               </p>
             </template>
 
@@ -1033,7 +1140,7 @@ watch(
               v-if="selectedDeliveryDate && effectiveDeliverySlot"
               class="cart-delivery-selection"
             >
-              Delivery selected for
+              {{ isCustomerPickup ? 'Pickup selected for' : 'Delivery selected for' }}
               <strong>{{ selectedDeliveryDateLabel }}</strong>
               between <strong>{{ effectiveDeliverySlot }}</strong>.
             </p>
@@ -1041,7 +1148,7 @@ watch(
               v-else-if="selectedDeliveryDate"
               class="cart-delivery-selection"
             >
-              Delivery date selected for <strong>{{ selectedDeliveryDateLabel }}</strong>.
+              {{ isCustomerPickup ? 'Pickup date selected for' : 'Delivery date selected for' }} <strong>{{ selectedDeliveryDateLabel }}</strong>.
             </p>
             <label v-if="requiresDeliverySlot" class="visually-hidden" for="cart-delivery-slot">
               Choose Delivery Slot

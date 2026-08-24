@@ -229,6 +229,7 @@ export async function createStripeCheckoutSession(
   deliverySlot = '',
   deliveryFee = 0,
   couponCode = '',
+  customerPickup = false,
 ) {
   const customerLocation = await getLiveCustomerLocationPayload()
 
@@ -244,6 +245,8 @@ export async function createStripeCheckoutSession(
       custom_customer_location: customerLocation,
       delivery_fee: normalizeDeliveryFeeValue(deliveryFee),
       coupon_code: String(couponCode || '').trim(),
+      customer_pickup: Boolean(customerPickup),
+      custom_customer_pickup: Boolean(customerPickup),
       return_origin: getCheckoutReturnOrigin(),
     }),
   })
@@ -257,6 +260,7 @@ export async function createCashOnDeliveryOrder(
   deliverySlot = '',
   deliveryFee = 0,
   couponCode = '',
+  customerPickup = false,
 ) {
   const customerLocation = await getLiveCustomerLocationPayload()
   const savedAddress = formatSavedAddress(deliveryAddress)
@@ -276,6 +280,8 @@ export async function createCashOnDeliveryOrder(
       address_display: savedAddress,
       delivery_fee: normalizeDeliveryFeeValue(deliveryFee),
       coupon_code: String(couponCode || '').trim(),
+      customer_pickup: Boolean(customerPickup),
+      custom_customer_pickup: Boolean(customerPickup),
     }),
   })
 }
@@ -288,6 +294,7 @@ export async function syncCartSalesOrder(
   deliverySlot = '',
   deliveryFee = 0,
   couponCode = '',
+  customerPickup = false,
 ) {
   const customerLocation = await getLiveCustomerLocationPayload()
   const savedAddress = formatSavedAddress(deliveryAddress)
@@ -307,6 +314,8 @@ export async function syncCartSalesOrder(
       address_display: savedAddress,
       delivery_fee: normalizeDeliveryFeeValue(deliveryFee),
       coupon_code: String(couponCode || '').trim(),
+      customer_pickup: Boolean(customerPickup),
+      custom_customer_pickup: Boolean(customerPickup),
     }),
   })
 }
