@@ -1,11 +1,12 @@
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   addProductToCart,
   cartProducts,
   updateCartProductQuantity,
 } from '../data/cartStore'
+import { getCustomerToSupplierDistanceKm, LOCATION_UPDATED_EVENT } from '../api/deliveryEta'
 import { getSelectedProduct, saveSelectedProduct } from '../data/productSelectionStore'
 import { saveSelectedSupplier } from '../data/supplierSelectionStore'
 import { getProductById, getProductVariants } from '../api/productApi'
@@ -21,6 +22,10 @@ const hasProductDetailLoaded = ref(false)
 const activeImageIndex = ref(0)
 const isProductDescriptionExpanded = ref(false)
 const selectedProductSize = ref('')
+const supplierDistanceKm = ref(null)
+const isCheckingDeliverability = ref(false)
+
+const MAX_DELIVERABLE_DISTANCE_KM = 20
 
 const productId = computed(() => String(route.params.productId || ''))
 const productQuantity = computed(() => {
@@ -51,6 +56,24 @@ const variantTemplateId = computed(() =>
 )
 const selectedVariantId = computed(() => product.value?.id || '')
 const hasProductVariants = computed(() => productVariants.value.length > 0)
+const isOutOfDeliveryRange = computed(() =>
+  Number.isFinite(supplierDistanceKm.value) && supplierDistanceKm.value > MAX_DELIVERABLE_DISTANCE_KM,
+)
+const deliveryStatusMessage = computed(() => {
+  if (isCheckingDeliverability.value) {
+    return 'Checking delivery availability...'
+  }
+
+  if (isOutOfDeliveryRange.value) {
+    return 'Not deliverable to this location.'
+  }
+
+  if (Number.isFinite(supplierDistanceKm.value) && supplierDistanceKm.value > 0) {
+    return `Deliverable within ${supplierDistanceKm.value.toFixed(1).replace(/\\.0$/, '')} km.`
+  }
+
+  return ''
+})
 const productSizeOptions = computed(() => {
   const rawSize = product.value?.customSize || product.value?.custom_size || ''
 
@@ -233,6 +256,24 @@ async function loadProduct() {
   }
 }
 
+async function refreshSupplierDistance() {
+  if (!product.value) {
+    supplierDistanceKm.value = null
+    isCheckingDeliverability.value = false
+    return
+  }
+
+  isCheckingDeliverability.value = true
+
+  try {
+    supplierDistanceKm.value = await getCustomerToSupplierDistanceKm(product.value)
+  } catch {
+    supplierDistanceKm.value = null
+  } finally {
+    isCheckingDeliverability.value = false
+  }
+}
+
 function selectProductDetailImage(index) {
   activeImageIndex.value = index
 }
@@ -248,7 +289,7 @@ function moveProductDetailImage(direction) {
 }
 
 function addSelectedProductToCart() {
-  if (product.value) {
+  if (product.value && !isOutOfDeliveryRange.value) {
     addProductToCart({
       ...product.value,
       selectedSize: selectedProductSizeLabel.value,
@@ -292,6 +333,14 @@ function rememberSupplierSelection() {
 
 watch(productId, loadProduct, { immediate: true })
 
+watch(
+  () => product.value?.id || '',
+  () => {
+    refreshSupplierDistance()
+  },
+  { immediate: true },
+)
+
 watch(productSizeOptions, (sizes) => {
   if (!sizes.length) {
     selectedProductSize.value = ''
@@ -302,6 +351,14 @@ watch(productSizeOptions, (sizes) => {
     selectedProductSize.value = sizes[0]
   }
 }, { immediate: true })
+
+onMounted(() => {
+  window.addEventListener(LOCATION_UPDATED_EVENT, refreshSupplierDistance)
+})
+
+onUnmounted(() => {
+  window.removeEventListener(LOCATION_UPDATED_EVENT, refreshSupplierDistance)
+})
 </script>
 
 <template>
@@ -372,6 +429,39 @@ watch(productSizeOptions, (sizes) => {
             </span>
           </template>
         </div>
+
+        <section
+          v-if="hasProductVariants"
+          class="product-detail-media-variants"
+          aria-label="Available product options"
+        >
+          <div class="product-detail-media-variants-header">
+            <h3>Available Options</h3>
+            <p>Choose from the item variants available for this product.</p>
+          </div>
+          <div class="product-detail-variant-cards">
+            <button
+              v-for="variant in productVariants"
+              :key="variant.id"
+              class="product-detail-variant-card"
+              :class="{ 'is-selected': selectedVariantId === variant.id }"
+              type="button"
+              @click="selectProductVariant(variant)"
+            >
+              <img
+                class="product-detail-variant-card-image"
+                :src="variant.image || variant.bannerImage || product.image"
+                :alt="variant.name"
+              />
+              <div class="product-detail-variant-card-copy">
+                <strong>{{ variant.variantLabel || variant.name }}</strong>
+                <span>{{ variant.name }}</span>
+                <em>AED {{ variant.price }}</em>
+              </div>
+            </button>
+          </div>
+          <p v-if="isLoadingVariants" class="product-variant-status">Loading options...</p>
+        </section>
       </div>
 
       <div class="product-detail-content">
@@ -403,27 +493,6 @@ watch(productSizeOptions, (sizes) => {
             {{ product.price }}
           </span>
         </div>
-
-        <section
-          v-if="hasProductVariants"
-          class="product-detail-section product-variant-section"
-        >
-          <h3>Available Options</h3>
-          <div class="product-variant-options" role="group" aria-label="Choose product option">
-            <button
-              v-for="variant in productVariants"
-              :key="variant.id"
-              class="product-variant-option"
-              :class="{ 'is-selected': selectedVariantId === variant.id }"
-              type="button"
-              @click="selectProductVariant(variant)"
-            >
-              <strong>{{ variant.variantLabel || variant.name }}</strong>
-              <span>AED {{ variant.price }}</span>
-            </button>
-          </div>
-          <p v-if="isLoadingVariants" class="product-variant-status">Loading options...</p>
-        </section>
 
         <section
           v-if="productSizeOptions.length && !hasProductVariants"
@@ -491,6 +560,14 @@ watch(productSizeOptions, (sizes) => {
         </div>
 
         <div class="product-detail-footer">
+          <p
+            v-if="deliveryStatusMessage"
+            class="product-detail-delivery-status"
+            :class="{ 'is-blocked': isOutOfDeliveryRange }"
+          >
+            {{ deliveryStatusMessage }}
+          </p>
+
           <div>
             <span class="product-detail-total-label">Total</span>
             <strong class="product-detail-total-price">
@@ -514,6 +591,7 @@ watch(productSizeOptions, (sizes) => {
             <button
               type="button"
               :aria-label="`Increase ${product.name} quantity`"
+              :disabled="isOutOfDeliveryRange"
               @click="addSelectedProductToCart"
             >
               +
@@ -523,9 +601,10 @@ watch(productSizeOptions, (sizes) => {
             v-else
             class="product-detail-add-button"
             type="button"
+            :disabled="isOutOfDeliveryRange"
             @click="addSelectedProductToCart"
           >
-            Add to cart
+            {{ isOutOfDeliveryRange ? 'Not deliverable' : 'Add to cart' }}
           </button>
         </div>
       </aside>
