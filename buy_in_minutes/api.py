@@ -720,6 +720,7 @@ def get_items(
 			"thumbnail",
 			"brand",
 			"has_variants",
+			"variant_based_on",
 			"variant_of",
 			"custom_size",
 			"custom_size_options",

@@ -335,6 +335,7 @@ async function mapItemToProduct(item) {
     inStock: stockQuantity > 0 || item.disabled === 0,
     isPublished: isPublishedItem(item),
     hasVariants: isTruthyFlag(item.has_variants ?? item.hasVariants),
+    variantBasedOn: item.variant_based_on || item.variantBasedOn || '',
     variantOf: item.variant_of || item.variantOf || '',
     variantLabel: getVariantLabel(item),
     variantAttributes: getVariantAttributes(item),

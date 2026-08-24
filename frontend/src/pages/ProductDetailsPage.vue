@@ -22,6 +22,7 @@ const hasProductDetailLoaded = ref(false)
 const activeImageIndex = ref(0)
 const isProductDescriptionExpanded = ref(false)
 const selectedProductSize = ref('')
+const selectedVariantAttributes = ref({})
 const supplierDistanceKm = ref(null)
 const isCheckingDeliverability = ref(false)
 
@@ -56,6 +57,9 @@ const variantTemplateId = computed(() =>
 )
 const selectedVariantId = computed(() => product.value?.id || '')
 const hasProductVariants = computed(() => productVariants.value.length > 0)
+const showVariantDropdowns = computed(() =>
+  hasProductVariants.value && product.value?.variantBasedOn === 'Item Attribute',
+)
 const isOutOfDeliveryRange = computed(() =>
   Number.isFinite(supplierDistanceKm.value) && supplierDistanceKm.value > MAX_DELIVERABLE_DISTANCE_KM,
 )
@@ -97,6 +101,38 @@ const productSizeOptions = computed(() => {
 const selectedProductSizeLabel = computed(() =>
   selectedProductSize.value || productSizeOptions.value[0] || '',
 )
+const variantAttributeGroups = computed(() => {
+  const groups = []
+  const seenAttributes = new Set()
+  const variantRecords = productVariants.value.length
+    ? productVariants.value
+    : (product.value ? [product.value] : [])
+
+  variantRecords.forEach((variant) => {
+    ;(variant.variantAttributes || []).forEach((attributeRow) => {
+      const attributeName = String(attributeRow.attribute || '').trim()
+      const attributeValue = String(attributeRow.value || '').trim()
+
+      if (!attributeName || !attributeValue) {
+        return
+      }
+
+      let group = groups.find((entry) => entry.name === attributeName)
+      if (!group) {
+        group = { name: attributeName, options: [] }
+        groups.push(group)
+      }
+
+      if (!group.options.includes(attributeValue)) {
+        group.options.push(attributeValue)
+      }
+
+      seenAttributes.add(attributeName)
+    })
+  })
+
+  return groups.filter((group) => seenAttributes.has(group.name))
+})
 
 function mergeProductDetails(cachedProduct, loadedProduct) {
   if (!cachedProduct) {
@@ -122,6 +158,7 @@ function mergeProductDetails(cachedProduct, loadedProduct) {
     customDeliverySlots: loadedProduct.customDeliverySlots ?? cachedProduct.customDeliverySlots,
     customSize: loadedProduct.customSize || cachedProduct.customSize || loadedProduct.custom_size || cachedProduct.custom_size,
     hasVariants: loadedProduct.hasVariants ?? cachedProduct.hasVariants,
+    variantBasedOn: loadedProduct.variantBasedOn || cachedProduct.variantBasedOn || '',
     variantOf: loadedProduct.variantOf || cachedProduct.variantOf || '',
     variantLabel: loadedProduct.variantLabel || cachedProduct.variantLabel || '',
     variantAttributes: loadedProduct.variantAttributes?.length
@@ -177,6 +214,74 @@ const productDetails = computed(() => {
     { label: 'Category', value: product.value.category },
   ].filter((detail) => detail?.value)
 })
+
+function getVariantAttributeMap(variant) {
+  return Object.fromEntries(
+    (variant?.variantAttributes || [])
+      .map((attributeRow) => [
+        String(attributeRow.attribute || '').trim(),
+        String(attributeRow.value || '').trim(),
+      ])
+      .filter(([attributeName, attributeValue]) => attributeName && attributeValue),
+  )
+}
+
+function syncSelectedVariantAttributes(variant) {
+  selectedVariantAttributes.value = getVariantAttributeMap(variant)
+}
+
+function findVariantBySelections(nextSelections) {
+  if (!productVariants.value.length) {
+    return null
+  }
+
+  const exactMatch = productVariants.value.find((variant) => {
+    const attributeMap = getVariantAttributeMap(variant)
+
+    return variantAttributeGroups.value.every((group) => (
+      attributeMap[group.name] === nextSelections[group.name]
+    ))
+  })
+
+  if (exactMatch) {
+    return exactMatch
+  }
+
+  return productVariants.value.find((variant) => {
+    const attributeMap = getVariantAttributeMap(variant)
+
+    return Object.entries(nextSelections).every(([attributeName, attributeValue]) => (
+      !attributeValue || attributeMap[attributeName] === attributeValue
+    ))
+  }) || null
+}
+
+function getVariantOptionsForAttribute(attributeName) {
+  const otherSelections = Object.fromEntries(
+    Object.entries(selectedVariantAttributes.value).filter(([name]) => name !== attributeName),
+  )
+
+  const matchingVariants = productVariants.value.filter((variant) => {
+    const attributeMap = getVariantAttributeMap(variant)
+
+    return Object.entries(otherSelections).every(([name, value]) => (
+      !value || attributeMap[name] === value
+    ))
+  })
+
+  const fallbackVariants = matchingVariants.length ? matchingVariants : productVariants.value
+  const options = []
+
+  fallbackVariants.forEach((variant) => {
+    const attributeValue = getVariantAttributeMap(variant)[attributeName]
+
+    if (attributeValue && !options.includes(attributeValue)) {
+      options.push(attributeValue)
+    }
+  })
+
+  return options
+}
 
 async function loadVariantsForProduct(loadedProduct) {
   const templateItemName = loadedProduct?.variantOf || (loadedProduct?.hasVariants ? loadedProduct.id : '')
@@ -241,6 +346,7 @@ async function loadProduct() {
       return
     }
 
+    syncSelectedVariantAttributes(product.value)
     saveSelectedProduct(product.value)
     activeImageIndex.value = 0
     isProductDescriptionExpanded.value = false
@@ -312,11 +418,27 @@ async function selectProductVariant(variant) {
     return
   }
 
+  syncSelectedVariantAttributes(variant)
   saveSelectedProduct(variant)
   await router.push({
     name: 'product-details',
     params: { productId: variant.id },
   })
+}
+
+async function updateVariantSelection(attributeName, attributeValue) {
+  const nextSelections = {
+    ...selectedVariantAttributes.value,
+    [attributeName]: attributeValue,
+  }
+
+  const matchedVariant = findVariantBySelections(nextSelections)
+  if (!matchedVariant) {
+    selectedVariantAttributes.value = nextSelections
+    return
+  }
+
+  await selectProductVariant(matchedVariant)
 }
 
 function toggleProductDescription() {
@@ -429,39 +551,6 @@ onUnmounted(() => {
             </span>
           </template>
         </div>
-
-        <section
-          v-if="hasProductVariants"
-          class="product-detail-media-variants"
-          aria-label="Available product options"
-        >
-          <div class="product-detail-media-variants-header">
-            <h3>Available Options</h3>
-            <p>Choose from the item variants available for this product.</p>
-          </div>
-          <div class="product-detail-variant-cards">
-            <button
-              v-for="variant in productVariants"
-              :key="variant.id"
-              class="product-detail-variant-card"
-              :class="{ 'is-selected': selectedVariantId === variant.id }"
-              type="button"
-              @click="selectProductVariant(variant)"
-            >
-              <img
-                class="product-detail-variant-card-image"
-                :src="variant.image || variant.bannerImage || product.image"
-                :alt="variant.name"
-              />
-              <div class="product-detail-variant-card-copy">
-                <strong>{{ variant.variantLabel || variant.name }}</strong>
-                <span>{{ variant.name }}</span>
-                <em>AED {{ variant.price }}</em>
-              </div>
-            </button>
-          </div>
-          <p v-if="isLoadingVariants" class="product-variant-status">Loading options...</p>
-        </section>
       </div>
 
       <div class="product-detail-content">
@@ -473,6 +562,35 @@ onUnmounted(() => {
           {{ brandName }}
         </RouterLink>
         <p v-else class="product-detail-category">{{ supplierName }}</p>
+        <section
+          v-if="showVariantDropdowns"
+          class="product-detail-section product-variant-dropdown-section"
+        >
+          <h3>Available Options</h3>
+          <div class="product-variant-dropdown-grid">
+            <label
+              v-for="group in variantAttributeGroups"
+              :key="group.name"
+              class="product-variant-dropdown-field"
+            >
+              <span>{{ group.name }}</span>
+              <select
+                :value="selectedVariantAttributes[group.name] || ''"
+                @change="updateVariantSelection(group.name, $event.target.value)"
+              >
+                <option value="" disabled>Select {{ group.name }}</option>
+                <option
+                  v-for="option in getVariantOptionsForAttribute(group.name)"
+                  :key="`${group.name}-${option}`"
+                  :value="option"
+                >
+                  {{ option }}
+                </option>
+              </select>
+            </label>
+          </div>
+          <p v-if="isLoadingVariants" class="product-variant-status">Loading options...</p>
+        </section>
         <!-- Source listing is kept in productDetails below; avoid duplicating Brand under the brand link. -->
         <!--
         <p v-if="sourceListing" class="product-detail-category">
@@ -495,7 +613,7 @@ onUnmounted(() => {
         </div>
 
         <section
-          v-if="productSizeOptions.length && !hasProductVariants"
+          v-if="productSizeOptions.length && !showVariantDropdowns"
           class="product-detail-section product-size-section"
         >
           <h3>Size</h3>
@@ -538,6 +656,7 @@ onUnmounted(() => {
             <dd>{{ detail.value }}</dd>
           </div>
         </dl>
+
       </div>
 
       <aside class="product-detail-purchase" aria-label="Purchase options">
