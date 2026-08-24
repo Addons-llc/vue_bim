@@ -585,36 +585,6 @@ onUnmounted(() => {
         </div>
 
         <section
-          v-if="showVariantDropdowns"
-          class="product-detail-section product-variant-dropdown-section"
-        >
-          <h3>Available Options</h3>
-          <div class="product-variant-dropdown-grid">
-            <label
-              v-for="group in variantAttributeGroups"
-              :key="group.name"
-              class="product-variant-dropdown-field"
-            >
-              <span>{{ group.name }}</span>
-              <select
-                :value="selectedVariantAttributes[group.name] || ''"
-                @change="updateVariantSelection(group.name, $event.target.value)"
-              >
-                <option value="" disabled>Select {{ group.name }}</option>
-                <option
-                  v-for="option in getVariantOptionsForAttribute(group.name)"
-                  :key="`${group.name}-${option}`"
-                  :value="option"
-                >
-                  {{ option }}
-                </option>
-              </select>
-            </label>
-          </div>
-          <p v-if="isLoadingVariants" class="product-variant-status">Loading options...</p>
-        </section>
-
-        <section
           v-if="productSizeOptions.length && !showVariantDropdowns"
           class="product-detail-section product-size-section"
         >
@@ -658,6 +628,36 @@ onUnmounted(() => {
             <dd>{{ detail.value }}</dd>
           </div>
         </dl>
+
+        <section
+          v-if="showVariantDropdowns"
+          class="product-detail-section product-variant-dropdown-section"
+        >
+          <h3>Available Options</h3>
+          <div class="product-variant-dropdown-grid">
+            <label
+              v-for="group in variantAttributeGroups"
+              :key="group.name"
+              class="product-variant-dropdown-field"
+            >
+              <span>{{ group.name }}</span>
+              <select
+                :value="selectedVariantAttributes[group.name] || ''"
+                @change="updateVariantSelection(group.name, $event.target.value)"
+              >
+                <option value="" disabled>Select {{ group.name }}</option>
+                <option
+                  v-for="option in getVariantOptionsForAttribute(group.name)"
+                  :key="`${group.name}-${option}`"
+                  :value="option"
+                >
+                  {{ option }}
+                </option>
+              </select>
+            </label>
+          </div>
+          <p v-if="isLoadingVariants" class="product-variant-status">Loading options...</p>
+        </section>
 
       </div>
 
