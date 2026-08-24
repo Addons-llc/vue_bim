@@ -229,8 +229,6 @@ watch(brandBannerImages, (images) => {
         </div>
       </section>
 
-
-
       <section class="supplier-products-panel">
         <h2>Products by {{ brandDisplayName }}</h2>
         <p v-if="isLoadingBrandProducts" class="dashboard-message">
