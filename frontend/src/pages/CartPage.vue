@@ -51,13 +51,15 @@ const fulfillmentMode = ref('delivery')
 const selectedDeliverySlot = ref('')
 const deliveryDateInput = ref(null)
 const LAST_COD_ORDER_ITEMS_STORAGE_KEY = 'buyInMinutesLastCodOrderItems'
+const ALLOWED_DELIVERY_DATES = ['2026-08-29', '2026-08-30']
+const deliveryDateMin = ALLOWED_DELIVERY_DATES[0]
+const deliveryDateMax = ALLOWED_DELIVERY_DATES[ALLOWED_DELIVERY_DATES.length - 1]
 const deliverySlots = [
   '10 AM - 12 PM',
   '12 PM - 2 PM',
   '2 PM - 4 PM',
   '4 PM - 6 PM',
 ]
-const deliveryDateMin = getDubaiDateInputValue()
 const selectedDeliveryDate = ref(deliveryDateMin)
 function itemRequiresDeliverySlot(item) {
   return (
@@ -80,9 +82,7 @@ const effectiveDeliverySlot = computed(() =>
 )
 const isCustomerPickup = computed(() => fulfillmentMode.value === 'pickup')
 const selectedDeliveryDateContext = computed(() =>
-  selectedDeliveryDate.value === deliveryDateMin
-    ? 'Today'
-    : (isCustomerPickup.value ? 'Scheduled pickup' : 'Scheduled delivery'),
+  isCustomerPickup.value ? 'Scheduled pickup' : 'Scheduled delivery',
 )
 const orderScheduleTitle = computed(() =>
   isCustomerPickup.value ? 'Choose pickup date' : 'Choose delivery date',
@@ -469,13 +469,12 @@ function openDeliveryDatePicker() {
   input.click()
 }
 
-function getDubaiDateInputValue() {
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Asia/Dubai',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(new Date())
+function isAllowedDeliveryDate(dateValue) {
+  return ALLOWED_DELIVERY_DATES.includes(dateValue)
+}
+
+function normalizeDeliveryDate(dateValue) {
+  return isAllowedDeliveryDate(dateValue) ? dateValue : deliveryDateMin
 }
 
 function formatDeliveryDate(dateValue) {
@@ -773,6 +772,18 @@ watch(
   (isReady) => {
     if (!isReady) {
       couponCodeInput.value = ''
+    }
+  },
+  { immediate: true },
+)
+
+watch(
+  selectedDeliveryDate,
+  (dateValue) => {
+    const normalizedDate = normalizeDeliveryDate(dateValue)
+
+    if (normalizedDate !== dateValue) {
+      selectedDeliveryDate.value = normalizedDate
     }
   },
   { immediate: true },
@@ -1110,7 +1121,9 @@ watch(
                   class="cart-date-input"
                   type="date"
                   :min="deliveryDateMin"
+                  :max="deliveryDateMax"
                   @click="openDeliveryDatePicker"
+                  @input="selectedDeliveryDate = normalizeDeliveryDate(selectedDeliveryDate)"
                 />
               </div>
             </div>
