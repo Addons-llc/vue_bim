@@ -41,8 +41,6 @@ async function loadOrders() {
 
       if (restoredUser) {
         setCurrentUser(restoredUser)
-      } else if (currentUser.value && hasPersistedPhoneAuthState()) {
-        // Keep the local website user while a persisted phone-auth state exists.
       } else {
         clearCurrentUser()
       }

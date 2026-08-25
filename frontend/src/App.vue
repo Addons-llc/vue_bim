@@ -47,10 +47,6 @@ onMounted(async () => {
       return
     }
 
-    if (currentUser.value && hasPersistedPhoneAuthState()) {
-      return
-    }
-
     clearCurrentUser()
     return
   } catch (error) {

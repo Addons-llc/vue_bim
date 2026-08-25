@@ -520,10 +520,6 @@ async function refreshCurrentSession() {
       return true
     }
 
-    if (currentUser.value && hasPersistedPhoneAuthState()) {
-      return true
-    }
-
     clearCurrentUser()
     return false
   } catch (error) {
