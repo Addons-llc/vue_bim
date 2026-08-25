@@ -193,9 +193,18 @@ function calculateDeliveryFee(distanceKm) {
     return 0
   }
 
+  const baseDeliveryFee = cartProducts.value.reduce((highestFee, item) => {
+    const itemDeliveryFee = Number(item?.customDeliveryFee ?? item?.custom_delivery_fee)
+
+    return Number.isFinite(itemDeliveryFee) && itemDeliveryFee > highestFee
+      ? itemDeliveryFee
+      : highestFee
+  }, 0) || 10
   const roundedDistanceKm = Math.ceil(distanceKm)
 
-  return roundedDistanceKm <= 10 ? 10 : 10 + (roundedDistanceKm - 10)
+  return roundedDistanceKm <= 10
+    ? baseDeliveryFee
+    : baseDeliveryFee + (roundedDistanceKm - 10)
 }
 
 function formatCurrency(value) {

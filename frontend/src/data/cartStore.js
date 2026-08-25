@@ -6,6 +6,12 @@ function isTruthyFlag(value) {
   return value === true || value === 1 || value === '1' || value === 'Yes'
 }
 
+function toNumber(value) {
+  const numberValue = Number(value)
+
+  return Number.isFinite(numberValue) ? numberValue : 0
+}
+
 function readStoredCart() {
   try {
     const storedItems = JSON.parse(localStorage.getItem(CART_STORAGE_KEY)) || []
@@ -15,6 +21,9 @@ function readStoredCart() {
         ...item,
         customDeliverySlots: isTruthyFlag(
           item?.customDeliverySlots ?? item?.custom_delivery_slots,
+        ),
+        customDeliveryFee: toNumber(
+          item?.customDeliveryFee ?? item?.custom_delivery_fee,
         ),
       }))
       : []
@@ -53,6 +62,9 @@ export function addProductToCart(product) {
     existingItem.customDeliverySlots = isTruthyFlag(
       existingItem.customDeliverySlots ?? existingItem.custom_delivery_slots,
     ) || productRequiresDeliverySlot
+    existingItem.customDeliveryFee = toNumber(
+      existingItem.customDeliveryFee ?? product.customDeliveryFee ?? product.custom_delivery_fee,
+    )
     cartItem = existingItem
   } else {
     cartItem = {
@@ -69,6 +81,7 @@ export function addProductToCart(product) {
       supplierAddress: product.supplierAddress || product.supplierDetails?.customGoogleAddress || '',
       supplierLatitude: product.supplierLatitude || product.supplierDetails?.customLatitude || '',
       supplierLongitude: product.supplierLongitude || product.supplierDetails?.customLongitude || '',
+      customDeliveryFee: toNumber(product.customDeliveryFee ?? product.custom_delivery_fee),
       size: selectedSize,
       customDeliverySlots: productRequiresDeliverySlot,
       quantity: 1,

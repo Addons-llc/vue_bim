@@ -714,7 +714,7 @@ def get_items(
 	publish_fields = _get_item_supplier_portal_publish_fields()
 	optional_fields = [
 		fieldname
-		for fieldname in (
+	for fieldname in (
 			"image",
 			"website_image",
 			"thumbnail",
@@ -727,6 +727,7 @@ def get_items(
 			"custom_sizes",
 			"custom_popular_items",
 			"custom_delivery_slots",
+			"custom_delivery_fee",
 			"standard_rate",
 			*ITEM_SUPPLIER_FIELDS,
 		)
