@@ -491,14 +491,6 @@ onUnmounted(() => {
   <template v-else-if="product">
     <nav class="product-detail-breadcrumbs" aria-label="Product location">
       <RouterLink :to="{ name: 'home' }">Home</RouterLink>
-      <RouterLink
-        :to="{
-          name: 'home',
-          query: product.category ? { category: product.category } : {},
-        }"
-      >
-        {{ product.category || 'Products' }}
-      </RouterLink>
       <strong>{{ product.name }}</strong>
     </nav>
 
