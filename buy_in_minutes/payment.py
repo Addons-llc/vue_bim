@@ -8,7 +8,7 @@ from urllib.request import Request, urlopen
 
 import frappe
 from frappe import _
-from frappe.utils import flt, get_url, getdate, nowdate
+from frappe.utils import cint, flt, get_url, getdate, nowdate
 from erpnext.setup.doctype.brand.brand import get_brand_defaults
 from erpnext.setup.doctype.item_group.item_group import get_item_group_defaults
 from erpnext.stock.doctype.item.item import get_item_defaults
