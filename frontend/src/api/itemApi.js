@@ -88,6 +88,15 @@ function isTruthyFlag(value) {
   return value === true || value === 1 || value === '1' || value === 'Yes'
 }
 
+function hasCustomDeliverySlots(item) {
+  return isTruthyFlag(
+    item.custom_delivery_slots
+      ?? item.customDeliverySlots
+      ?? item.delivery_slots
+      ?? item.deliverySlots,
+  )
+}
+
 function hasPublishField(item) {
   return [
     'published_in_supplier_portal',
@@ -175,30 +184,58 @@ function getItemSize(item) {
   )
 }
 
-function getAttachmentFieldValue(record) {
-  if (!record || typeof record !== 'object') {
-    return ''
+function getVariantAttributes(item) {
+  const rawAttributes = Array.isArray(item?.variant_attributes)
+    ? item.variant_attributes
+    : Array.isArray(item?.attributes)
+      ? item.attributes
+      : []
+
+  return rawAttributes
+    .map((attribute) => ({
+      attribute: stripHtml(attribute?.attribute || attribute?.label || ''),
+      value: stripHtml(attribute?.value || attribute?.attribute_value || ''),
+    }))
+    .filter((attribute) => attribute.attribute && attribute.value)
+}
+
+function getVariantLabel(item) {
+  const explicitSize = getItemSize(item)
+
+  if (explicitSize) {
+    return explicitSize
   }
 
-  return getImageUrl(
-    record.image
-      || record.image_url
-      || record.image_path
-      || record.attachment
-      || record.attachment_url
-      || record.file
-      || record.file_url
-      || record.file_name
-      || record.url
-      || record.photo
-      || record.thumbnail,
-  )
+  const variantAttributes = getVariantAttributes(item)
+  if (variantAttributes.length) {
+    return variantAttributes.map((attribute) => attribute.value).join(' / ')
+  }
+
+  return stripHtml(item.item_name || item.item_code || item.name || '')
 }
 
 function getItemAttachmentImages(item) {
+  const attachments = Array.isArray(item?.attachments) ? item.attachments : []
   const images = []
   const seenImages = new Set()
-  const imageFieldPattern = /(attachment|attachments|gallery|slider|carousel|image)/i
+
+  attachments.forEach((attachment) => {
+    const imageUrl = getImageUrl(attachment?.file_url || attachment?.file_name || '')
+
+    if (!imageUrl || seenImages.has(imageUrl)) {
+      return
+    }
+
+    seenImages.add(imageUrl)
+    images.push(imageUrl)
+  })
+
+  return images.slice(0, 6)
+}
+
+function getItemGalleryImages(item) {
+  const images = []
+  const seenImages = new Set()
   const pushImage = (image) => {
     const imageUrl = getImageUrl(image)
 
@@ -225,34 +262,6 @@ function getItemAttachmentImages(item) {
 
   primaryImageCandidates.forEach(pushImage)
 
-  Object.entries(item || {}).forEach(([fieldname, value]) => {
-    if (!imageFieldPattern.test(fieldname)) {
-      return
-    }
-
-    if (typeof value === 'string') {
-      pushImage(value)
-      return
-    }
-
-    if (!Array.isArray(value)) {
-      return
-    }
-
-    value.forEach((entry) => {
-      if (typeof entry === 'string') {
-        pushImage(entry)
-        return
-      }
-
-      const imageUrl = getAttachmentFieldValue(entry)
-
-      if (imageUrl) {
-        pushImage(imageUrl)
-      }
-    })
-  })
-
   return images.slice(0, 3)
 }
 
@@ -268,7 +277,8 @@ async function mapItemToProduct(item) {
   const stockQuantity = getStockQuantity(item)
   const reviewCount = getReviewCount(item)
   const supplierDetails = getSupplierDetails(item)
-  const images = getItemAttachmentImages(item)
+  const attachmentImages = getItemAttachmentImages(item)
+  const images = getItemGalleryImages(item)
   const deliveryTime = await getEstimatedDeliveryTimeLabel({
     supplierDetails,
   })
@@ -280,7 +290,8 @@ async function mapItemToProduct(item) {
     category: itemGroup,
     brand: item.brand || '',
     customPopularItems: isTruthyFlag(item.custom_popular_items),
-    description: description || 'Fresh item available for quick delivery.',
+    customDeliverySlots: hasCustomDeliverySlots(item),
+    description: description || '',
     customSize,
     price: getItemSellingPrice(item),
     priceList: item.price_list || SELLING_PRICE_LIST,
@@ -294,9 +305,15 @@ async function mapItemToProduct(item) {
     stockQuantity,
     inStock: stockQuantity > 0 || item.disabled === 0,
     isPublished: isPublishedItem(item),
+    hasVariants: isTruthyFlag(item.has_variants ?? item.hasVariants),
+    variantBasedOn: item.variant_based_on || item.variantBasedOn || '',
+    variantOf: item.variant_of || item.variantOf || '',
+    variantLabel: getVariantLabel(item),
+    variantAttributes: getVariantAttributes(item),
     deliveryTime,
     image,
     bannerImage,
+    attachmentImages,
     images,
     categoryImage,
     imageLabel: item.item_group || 'Item',
@@ -362,6 +379,10 @@ export async function getItemMasterItems(params = {}) {
     query.set('item', params.item)
   }
 
+  if (params.variant_of) {
+    query.set('variant_of', params.variant_of)
+  }
+
   if (params.brand) {
     query.set('brand', params.brand)
   }
@@ -424,6 +445,17 @@ export async function getItemMasterItem(itemName) {
 
     throw error
   }
+}
+
+export async function getItemMasterVariants(templateItemName) {
+  if (!templateItemName) {
+    return []
+  }
+
+  return getItemMasterItems({
+    variant_of: templateItemName,
+    limit_page_length: 100,
+  })
 }
 
 export async function getItemMasterCategories() {

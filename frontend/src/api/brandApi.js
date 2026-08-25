@@ -28,6 +28,31 @@ function stripHtml(value = '') {
   return value.replace(/<[^>]*>/g, '').trim()
 }
 
+function getFirstImageUrl(brand = {}, fieldNames = []) {
+  const imagePath = fieldNames.find((fieldName) => brand[fieldName])
+  return getImageUrl(imagePath ? brand[imagePath] : '')
+}
+
+function getBrandBannerImages(brand = {}) {
+  return [
+    'custom_brand_banner_image',
+    'custom_brand_banner',
+    'custom_brand_banner_image_2',
+    'custom_brand_banner_2',
+    'custom_banner_image_2',
+    'brand_banner_image_2',
+    'website_banner_image_2',
+    'custom_brand_banner_image_3',
+    'custom_brand_banner_3',
+    'custom_banner_image_3',
+    'brand_banner_image_3',
+    'website_banner_image_3',
+  ]
+    .map((fieldName) => getImageUrl(brand[fieldName]))
+    .filter(Boolean)
+    .filter((imagePath, index, imagePaths) => imagePaths.indexOf(imagePath) === index)
+}
+
 function getBrandProductCount(brand = {}) {
   const productRows = [
     brand.products,
@@ -53,24 +78,25 @@ function getBrandProductCount(brand = {}) {
 
 function mapBrand(brand = {}) {
   const brandName = brand.brand || brand.name
-  const bannerImage = getImageUrl(
-    brand.banner
-      || brand.banner_image
-      || brand.brand_banner
-      || brand.brand_banner_image
-      || brand.website_banner
-      || brand.website_banner_image
-      || brand.cover_image
-      || brand.cover_photo
-      || brand.custom_banner
-      || brand.custom_banner_image
-      || brand.custom_brand_banner
-      || brand.custom_brand_banner_image
-      || brand.custom_website_banner
-      || brand.custom_website_banner_image
-      || brand.custom_cover_image
-      || brand.custom_cover_photo,
-  )
+  const bannerImage = getFirstImageUrl(brand, [
+    'banner',
+    'banner_image',
+    'brand_banner',
+    'brand_banner_image',
+    'website_banner',
+    'website_banner_image',
+    'cover_image',
+    'cover_photo',
+    'custom_banner',
+    'custom_banner_image',
+    'custom_brand_banner',
+    'custom_brand_banner_image',
+    'custom_website_banner',
+    'custom_website_banner_image',
+    'custom_cover_image',
+    'custom_cover_photo',
+  ])
+  const bannerImages = getBrandBannerImages(brand)
   const image = getImageUrl(
     brand.image
       || brand.brand_image
@@ -86,6 +112,7 @@ function mapBrand(brand = {}) {
     description: stripHtml(brand.description || ''),
     image,
     bannerImage,
+    bannerImages: bannerImages.length ? bannerImages : (bannerImage ? [bannerImage] : []),
     rating: brand.rating || brand.average_rating || brand.review_rating || '',
     productCount: getBrandProductCount(brand),
     offerBadge: brand.offer_badge

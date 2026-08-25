@@ -37,16 +37,13 @@ onMounted(async () => {
       setCurrentUser(message.user)
       return
     }
+//hello
 
     const restoredSession = await restoreLoginSession().catch(() => null)
     const restoredUser = restoredSession?.message?.user
 
     if (restoredUser) {
       setCurrentUser(restoredUser)
-      return
-    }
-
-    if (currentUser.value && hasPersistedPhoneAuthState()) {
       return
     }
 

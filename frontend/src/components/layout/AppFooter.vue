@@ -12,11 +12,7 @@ function openExternalUrl(url) {
 <template>
   <footer class="app-footer">
     <section class="footer-supplier-section" aria-label="Partner enrollment">
-      <a
-        class="supplier-dashboard-card"
-        :href="addSupplierUrl"
-        aria-label="SELL WITH US"
-      >
+      <article class="supplier-dashboard-card" aria-label="SELL WITH US">
         <div class="supplier-card-copy">
           <h2>SELL WITH US</h2>
           <p>Fast onboarding for trusted market partners.</p>
@@ -39,7 +35,7 @@ function openExternalUrl(url) {
           alt=""
           aria-hidden="true"
         />
-      </a>
+      </article>
 
       <a
         class="supplier-dashboard-card delivery-company-card"

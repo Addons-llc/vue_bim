@@ -1,5 +1,5 @@
 import frappe
-from frappe.utils import flt
+from frappe.utils import flt, getdate, today
 
 
 SELLING_PRICE_LIST = "Selling Price"
@@ -233,6 +233,39 @@ def _apply_item_attachments(items, max_attachments=2):
 
 	for item in items:
 		item.attachments = attachments_by_item.get(item.name, [])
+
+
+def _apply_item_variant_metadata(items):
+	item_names = [item.name for item in items if item.name]
+	if not item_names or not frappe.db.exists("DocType", "Item Variant Attribute"):
+		return
+
+	variant_attribute_rows = frappe.get_all(
+		"Item Variant Attribute",
+		fields=["parent", "attribute", "attribute_value", "idx"],
+		filters={
+			"parent": ["in", item_names],
+			"parenttype": "Item",
+		},
+		order_by="parent asc, idx asc",
+		ignore_permissions=True,
+		limit_page_length=len(item_names) * 10,
+	)
+
+	attributes_by_item = {}
+	for row in variant_attribute_rows:
+		if not row.parent:
+			continue
+
+		attributes_by_item.setdefault(row.parent, []).append(
+			{
+				"attribute": row.attribute,
+				"value": row.attribute_value,
+			}
+		)
+
+	for item in items:
+		item.variant_attributes = attributes_by_item.get(item.name, [])
 
 
 def _get_item_supplier_links(item_names):
@@ -471,6 +504,16 @@ def get_brands(limit_page_length=24, published=1):
 			"custom_banner_image",
 			"custom_brand_banner",
 			"custom_brand_banner_image",
+			"custom_brand_banner_image_2",
+			"custom_brand_banner_image_3",
+			"custom_brand_banner_2",
+			"custom_brand_banner_3",
+			"custom_banner_image_2",
+			"custom_banner_image_3",
+			"brand_banner_image_2",
+			"brand_banner_image_3",
+			"website_banner_image_2",
+			"website_banner_image_3",
 			"custom_website_banner",
 			"custom_website_banner_image",
 			"custom_cover_image",
@@ -496,6 +539,56 @@ def get_brands(limit_page_length=24, published=1):
 		order_by="modified desc",
 		limit_page_length=limit_page_length,
 	)
+
+
+@frappe.whitelist()
+def get_coupon_codes(limit_page_length=100):
+	if frappe.session.user == "Guest":
+		frappe.throw("Please sign in before using coupons.", frappe.AuthenticationError)
+
+	if not frappe.db.exists("DocType", "Coupon Code"):
+		return []
+
+	limit_page_length = frappe.utils.cint(limit_page_length) or 100
+	coupon_fields = _get_existing_fields(
+		"Coupon Code",
+		(
+			"coupon_name",
+			"coupon_code",
+			"description",
+			"valid_from",
+			"valid_upto",
+			"maximum_use",
+			"used",
+			"pricing_rule",
+		),
+	)
+	coupon_records = frappe.get_all(
+		"Coupon Code",
+		fields=["name"] + coupon_fields,
+		ignore_permissions=True,
+		order_by="modified desc",
+		limit_page_length=limit_page_length,
+	)
+	today_value = getdate(today())
+
+	return [
+		{
+			"name": coupon.name,
+			"coupon_name": coupon.get("coupon_name") or coupon.name,
+			"coupon_code": coupon.get("coupon_code") or coupon.name,
+			"description": coupon.get("description") or "",
+			"pricing_rule": coupon.get("pricing_rule") or "",
+		}
+		for coupon in coupon_records
+		if coupon.get("pricing_rule")
+		and (not coupon.get("valid_from") or getdate(coupon.get("valid_from")) <= today_value)
+		and (not coupon.get("valid_upto") or getdate(coupon.get("valid_upto")) >= today_value)
+		and (
+			not coupon.get("maximum_use")
+			or flt(coupon.get("used")) < flt(coupon.get("maximum_use"))
+		)
+	]
 
 
 @frappe.whitelist(allow_guest=True)
@@ -575,6 +668,7 @@ def get_items(
 	search=None,
 	item_group=None,
 	item=None,
+	variant_of=None,
 	brand=None,
 	supplier=None,
 	supplier_store=None,
@@ -597,6 +691,9 @@ def get_items(
 
 	if item:
 		filters["name"] = item
+
+	if variant_of and item_meta.has_field("variant_of"):
+		filters["variant_of"] = variant_of
 
 	if item_group:
 		filters["item_group"] = item_group
@@ -622,7 +719,14 @@ def get_items(
 			"website_image",
 			"thumbnail",
 			"brand",
+			"has_variants",
+			"variant_based_on",
+			"variant_of",
+			"custom_size",
+			"custom_size_options",
+			"custom_sizes",
 			"custom_popular_items",
+			"custom_delivery_slots",
 			"standard_rate",
 			*ITEM_SUPPLIER_FIELDS,
 		)
@@ -661,6 +765,7 @@ def get_items(
 	_apply_selling_prices(items)
 	_apply_item_group_images(items)
 	_apply_item_attachments(items)
+	_apply_item_variant_metadata(items)
 	_apply_supplier_details(items)
 	items = _filter_items_by_item_codes(items, supplier_store_item_codes)
 	items = _filter_items_by_supplier(items, supplier)

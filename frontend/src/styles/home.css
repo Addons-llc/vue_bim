@@ -21,9 +21,10 @@
   aspect-ratio: 16 / 9;
   min-height: 0;
   overflow: hidden;
-  border-radius: 10px;
+  border-radius: 22px;
   background: #ffffff;
   color: #061022;
+  box-shadow: 0 24px 48px rgba(15, 23, 42, 0.1);
 }
 
 .home-rail-brands {
@@ -38,10 +39,10 @@
   order: 4;
   overflow: hidden;
   border: 1px solid #e5e7eb;
-  border-radius: 14px;
+  border-radius: 20px;
   padding: 20px 18px 18px;
-  background: #ffffff;
-  box-shadow: 0 10px 24px rgba(17, 24, 39, 0.05);
+  background: linear-gradient(180deg, #ffffff 0%, #fbfcff 100%);
+  box-shadow: 0 16px 34px rgba(17, 24, 39, 0.06);
 }
 
 .page-shell:has(> .dashboard-hero) > .product-section {
@@ -153,6 +154,12 @@
   color: #111827;
 }
 
+.primary-link:hover,
+.secondary-link:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.12);
+}
+
 .hero-slide-dots {
   position: absolute;
   right: 16px;
@@ -160,22 +167,27 @@
   z-index: 2;
   display: none;
   align-items: center;
-  gap: 7px;
+  gap: 8px;
 }
 
 .hero-slide-dot {
-  width: 7px;
-  height: 7px;
+  width: 8px;
+  height: 8px;
   border: 0;
   border-radius: 999px;
   padding: 0;
   background: rgba(255, 255, 255, 0.52);
   cursor: pointer;
+  transition: transform 0.18s ease, background-color 0.18s ease, width 0.18s ease;
 }
 
 .hero-slide-dot.is-active {
-  width: 18px;
+  width: 22px;
   background: #ffffff;
+}
+
+.hero-slide-dot:hover {
+  transform: scale(1.12);
 }
 
 .supplier-dashboard-section {
@@ -196,7 +208,7 @@
   margin: 0;
   overflow: hidden;
   border: 0;
-  border-radius: 8px;
+  border-radius: 18px;
   padding: 18px 18px 18px 26px;
   background:
     linear-gradient(100deg, #bbf7d0 0%, #5eead4 52%, #22d3ee 100%);
@@ -210,9 +222,10 @@
 .supplier-dashboard-card:hover,
 .supplier-dashboard-card:focus-visible {
   box-shadow:
-    0 16px 34px rgba(17, 24, 39, 0.14),
+    0 20px 40px rgba(17, 24, 39, 0.16),
     0 0 0 3px rgba(37, 99, 235, 0.16);
   outline: 0;
+  transform: translateY(-2px);
 }
 
 .supplier-dashboard-card:active {

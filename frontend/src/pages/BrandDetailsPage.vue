@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { getBrand } from '../api/brandApi'
 import { getProducts } from '../api/productApi'
@@ -12,7 +12,9 @@ const brandName = computed(() => String(route.params.brandName || 'Brand'))
 const brandRecord = ref(null)
 const loadedProducts = ref([])
 const isLoadingBrandProducts = ref(false)
-const failedBrandBannerImage = ref('')
+const failedBrandBannerImages = ref([])
+const activeBrandBannerSlide = ref(0)
+let brandBannerSlideTimer = null
 
 const brandDetails = computed(() => ({
   displayName: brandRecord.value?.name || brandName.value,
@@ -20,13 +22,11 @@ const brandDetails = computed(() => ({
   description: brandRecord.value?.description || '',
   image: brandRecord.value?.image || '',
   bannerImage: brandRecord.value?.bannerImage || '',
+  bannerImages: brandRecord.value?.bannerImages || [],
 }))
 const brandDisplayName = computed(() => brandDetails.value.displayName || brandName.value)
-const brandBannerImage = computed(() => brandDetails.value.bannerImage || '')
-const visibleBrandBannerImage = computed(() =>
-  brandBannerImage.value && brandBannerImage.value !== failedBrandBannerImage.value
-    ? brandBannerImage.value
-    : '',
+const brandBannerImages = computed(() =>
+  brandDetails.value.bannerImages.filter((image) => !failedBrandBannerImages.value.includes(image)),
 )
 const brandDescription = computed(() => brandDetails.value.description || '')
 const brandInitials = computed(() => brandDisplayName.value.slice(0, 2).toUpperCase())
@@ -66,8 +66,31 @@ function openProductDetails(product) {
   })
 }
 
-function hideBrokenBrandBanner() {
-  failedBrandBannerImage.value = brandBannerImage.value
+function hideBrokenBrandBanner(image) {
+  if (!image || failedBrandBannerImages.value.includes(image)) {
+    return
+  }
+
+  failedBrandBannerImages.value = [...failedBrandBannerImages.value, image]
+}
+
+function stopBrandBannerAutoplay() {
+  if (brandBannerSlideTimer) {
+    clearInterval(brandBannerSlideTimer)
+    brandBannerSlideTimer = null
+  }
+}
+
+function startBrandBannerAutoplay() {
+  stopBrandBannerAutoplay()
+
+  if (brandBannerImages.value.length <= 1) {
+    return
+  }
+
+  brandBannerSlideTimer = window.setInterval(() => {
+    activeBrandBannerSlide.value = (activeBrandBannerSlide.value + 1) % brandBannerImages.value.length
+  }, 2000)
 }
 
 function toggleBrandDescription() {
@@ -96,15 +119,37 @@ async function loadBrandProducts() {
   }
 }
 
-onMounted(loadBrandProducts)
+onMounted(() => {
+  loadBrandProducts()
+})
+
+onUnmounted(() => {
+  stopBrandBannerAutoplay()
+})
 
 watch(brandName, () => {
   brandRecord.value = null
   loadedProducts.value = []
-  failedBrandBannerImage.value = ''
+  failedBrandBannerImages.value = []
+  activeBrandBannerSlide.value = 0
   isBrandDescriptionExpanded.value = false
+  stopBrandBannerAutoplay()
   loadBrandProducts()
 })
+
+watch(brandBannerImages, (images) => {
+  if (!images.length) {
+    activeBrandBannerSlide.value = 0
+    stopBrandBannerAutoplay()
+    return
+  }
+
+  if (activeBrandBannerSlide.value >= images.length) {
+    activeBrandBannerSlide.value = 0
+  }
+
+  startBrandBannerAutoplay()
+}, { immediate: true })
 </script>
 
 <template>
@@ -132,14 +177,22 @@ watch(brandName, () => {
 
     <main class="supplier-store-main">
       <div class="supplier-store-banner">
-        <img
-          v-if="visibleBrandBannerImage"
-          :key="visibleBrandBannerImage"
-          class="supplier-store-banner-image"
-          :src="visibleBrandBannerImage"
-          :alt="`${brandDisplayName} banner`"
-          @error="hideBrokenBrandBanner"
-        />
+        <div
+          v-if="brandBannerImages.length"
+          class="brand-banner-slider"
+          :style="{ transform: `translateX(-${activeBrandBannerSlide * 100}%)` }"
+        >
+          <img
+            v-for="(bannerImage, index) in brandBannerImages"
+            :key="bannerImage"
+            class="supplier-store-banner-image brand-banner-slide"
+            :src="bannerImage"
+            :alt="`${brandDisplayName} banner ${index + 1}`"
+            :loading="index === 0 ? 'eager' : 'lazy'"
+            decoding="async"
+            @error="hideBrokenBrandBanner(bannerImage)"
+          />
+        </div>
         <span class="supplier-banner-logo">
           <img
             v-if="brandDetails.image"

@@ -8,10 +8,11 @@ from urllib.request import Request, urlopen
 
 import frappe
 from frappe import _
-from frappe.utils import flt, get_url, getdate, nowdate
+from frappe.utils import cint, flt, get_url, getdate, nowdate
 from erpnext.setup.doctype.brand.brand import get_brand_defaults
 from erpnext.setup.doctype.item_group.item_group import get_item_group_defaults
 from erpnext.stock.doctype.item.item import get_item_defaults
+from buy_in_minutes.config import adaptive_pricing
 
 
 STRIPE_API_BASE_URL = "https://api.stripe.com/v1"
@@ -22,6 +23,7 @@ FREE_DELIVERY_MINIMUM = 60
 SELLING_PRICE_LIST = "Selling Price"
 STRIPE_SETTINGS_DOCTYPE = "Stripe Settings"
 CHECKOUT_RESUME_TOKEN_TTL_SECONDS = 3 * 60 * 60
+DELIVERY_CHARGE_TAX_TEMPLATE = "Delivery Charge"
 
 
 def _error(message, status_code=400):
@@ -273,6 +275,93 @@ def _resolve_supplier_name(supplier=None, supplier_name=None):
 
 def _clean_text(value):
 	return str(value or "").strip()
+
+
+def _resolve_coupon_code_name(coupon_code):
+	coupon_code = _clean_text(coupon_code)
+	if not coupon_code or not frappe.db.exists("DocType", "Coupon Code"):
+		return coupon_code
+
+	if frappe.db.exists("Coupon Code", coupon_code):
+		return coupon_code
+
+	matched_coupon_name = frappe.db.get_value("Coupon Code", {"coupon_code": coupon_code}, "name")
+	if matched_coupon_name:
+		return matched_coupon_name
+
+	case_insensitive_match = frappe.db.sql(
+		"""
+		select name
+		from `tabCoupon Code`
+		where lower(name) = lower(%s) or lower(coupon_code) = lower(%s)
+		order by modified desc
+		limit 1
+		""",
+		(coupon_code, coupon_code),
+	)
+	if case_insensitive_match:
+		return case_insensitive_match[0][0]
+
+	return coupon_code
+
+
+def _get_coupon_pricing_rule(coupon_code_name):
+	coupon_code_name = _clean_text(coupon_code_name)
+	if not coupon_code_name or not frappe.db.exists("Coupon Code", coupon_code_name):
+		return None
+
+	pricing_rule_name = frappe.db.get_value("Coupon Code", coupon_code_name, "pricing_rule")
+	if not pricing_rule_name or not frappe.db.exists("Pricing Rule", pricing_rule_name):
+		return None
+
+	return frappe.get_cached_doc("Pricing Rule", pricing_rule_name)
+
+
+def _reset_sales_order_additional_discount(sales_order):
+	_set_doc_value_if_field_exists(sales_order, "apply_discount_on", "")
+	_set_doc_value_if_field_exists(sales_order, "additional_discount_percentage", 0)
+	_set_doc_value_if_field_exists(sales_order, "discount_amount", 0)
+	_set_doc_value_if_field_exists(sales_order, "ignore_pricing_rule", 0)
+
+
+def _apply_coupon_additional_discount_to_sales_order(sales_order, coupon_code_name):
+	_reset_sales_order_additional_discount(sales_order)
+
+	pricing_rule = _get_coupon_pricing_rule(coupon_code_name)
+	if not pricing_rule:
+		return
+
+	if pricing_rule.apply_on != "Transaction" or pricing_rule.price_or_product_discount != "Price":
+		return
+
+	discount_percentage = flt(pricing_rule.discount_percentage)
+	discount_amount = flt(pricing_rule.discount_amount)
+
+	# Keep delivery charges outside coupon discounts on cart/checkout flows.
+	_set_doc_value_if_field_exists(sales_order, "apply_discount_on", "Net Total")
+
+	if discount_percentage > 0:
+		_set_doc_value_if_field_exists(
+			sales_order,
+			"additional_discount_percentage",
+			discount_percentage,
+		)
+		_set_doc_value_if_field_exists(sales_order, "discount_amount", 0)
+	elif discount_amount > 0:
+		_set_doc_value_if_field_exists(sales_order, "additional_discount_percentage", 0)
+		_set_doc_value_if_field_exists(sales_order, "discount_amount", discount_amount)
+	else:
+		return
+
+	# Prevent ERPNext from applying the same coupon-linked transaction rule twice.
+	_set_doc_value_if_field_exists(sales_order, "ignore_pricing_rule", 1)
+
+
+def _normalize_delivery_fee(delivery_fee):
+	if delivery_fee in (None, ""):
+		return None
+
+	return max(flt(delivery_fee), 0)
 
 
 def _normalize_user_name(user_name, default="Guest"):
@@ -717,7 +806,7 @@ def _apply_delivery_address_to_sales_order(
 		_set_doc_value_if_field_exists(sales_order, "shipping_address", address_display)
 
 
-def _get_checkout_items(cart_items):
+def _get_checkout_items(cart_items, delivery_fee=None, include_delivery_fee_item=True):
 	checkout_items = []
 	for cart_item in _normalize_cart_items(cart_items):
 		item = frappe.db.get_value(
@@ -745,19 +834,94 @@ def _get_checkout_items(cart_items):
 			}
 		)
 
+	normalized_delivery_fee = _normalize_delivery_fee(delivery_fee)
 	subtotal = sum(item["amount"] for item in checkout_items)
-	if checkout_items and subtotal < FREE_DELIVERY_MINIMUM:
+	effective_delivery_fee = normalized_delivery_fee
+	if effective_delivery_fee is None and checkout_items and subtotal < FREE_DELIVERY_MINIMUM:
+		effective_delivery_fee = DELIVERY_FEE
+
+	if (
+		include_delivery_fee_item
+		and checkout_items
+		and effective_delivery_fee
+		and effective_delivery_fee > 0
+	):
 		checkout_items.append(
 			{
 				"item_code": DELIVERY_FEE_ITEM_CODE,
 				"item_name": _("Delivery charge"),
 				"quantity": 1,
-				"rate": DELIVERY_FEE,
-				"amount": DELIVERY_FEE,
+				"rate": effective_delivery_fee,
+				"amount": effective_delivery_fee,
 			}
 		)
 
 	return checkout_items
+
+
+def _get_delivery_charge_tax_template():
+	if not frappe.db.exists("DocType", "Sales Taxes and Charges Template"):
+		return None
+
+	if not frappe.db.exists("Sales Taxes and Charges Template", DELIVERY_CHARGE_TAX_TEMPLATE):
+		matching_templates = frappe.get_all(
+			"Sales Taxes and Charges Template",
+			filters={
+				"name": ["like", f"{DELIVERY_CHARGE_TAX_TEMPLATE}%"],
+			},
+			fields=["name"],
+			order_by="name asc",
+			limit_page_length=1,
+			ignore_permissions=True,
+		)
+		if not matching_templates:
+			return None
+
+		return frappe.get_doc(
+			"Sales Taxes and Charges Template",
+			matching_templates[0].name,
+		)
+
+	return frappe.get_doc("Sales Taxes and Charges Template", DELIVERY_CHARGE_TAX_TEMPLATE)
+
+
+def _get_delivery_charge_tax_template_name():
+	template = _get_delivery_charge_tax_template()
+	return template.name if template else ""
+
+
+def _build_sales_order_delivery_tax_rows(delivery_fee):
+	template = _get_delivery_charge_tax_template()
+	if not template:
+		return []
+
+	sales_tax_meta = frappe.get_meta("Sales Taxes and Charges")
+	normalized_delivery_fee = _normalize_delivery_fee(delivery_fee) or 0
+	tax_rows = []
+	actual_row_applied = False
+
+	for template_row in template.get("taxes") or []:
+		row_data = {
+			fieldname: template_row.get(fieldname)
+			for fieldname in sales_tax_meta.get_valid_columns()
+			if fieldname not in {"name", "parent", "parentfield", "parenttype", "idx", "owner", "creation", "modified", "modified_by", "docstatus"}
+		}
+
+		if row_data.get("charge_type") == "Actual":
+			row_data["tax_amount"] = normalized_delivery_fee
+			row_data["base_tax_amount"] = normalized_delivery_fee
+			row_data["rate"] = 0
+			actual_row_applied = True
+
+		tax_rows.append(row_data)
+
+	if normalized_delivery_fee > 0 and tax_rows and not actual_row_applied:
+		tax_rows[0]["charge_type"] = "Actual"
+		tax_rows[0]["tax_amount"] = normalized_delivery_fee
+		tax_rows[0]["base_tax_amount"] = normalized_delivery_fee
+		tax_rows[0]["rate"] = 0
+
+	return tax_rows
 
 
 def _build_sales_order_item_rows(checkout_items, company, delivery_date=None):
@@ -803,6 +967,130 @@ def _build_sales_order_item_rows(checkout_items, company, delivery_date=None):
 		order_items.append(row)
 
 	return order_items
+
+
+def _get_checkout_items_from_sales_order(sales_order):
+	checkout_items = []
+
+	for item in sales_order.items:
+		if not item.item_code or flt(item.qty) <= 0:
+			continue
+
+		checkout_items.append(
+			{
+				"item_code": item.item_code,
+				"item_name": item.item_name or item.item_code,
+				"quantity": flt(item.qty),
+				"rate": flt(item.rate),
+				"amount": flt(item.amount),
+				"supplier": getattr(item, "supplier", None),
+				"size": getattr(item, "custom_size", None) or getattr(item, "size", None),
+			}
+		)
+
+	return checkout_items
+
+
+def _build_cart_totals_summary(sales_order, checkout_items):
+	original_total = sum(
+		flt(item.get("amount"))
+		for item in checkout_items or []
+		if item.get("item_code") != DELIVERY_FEE_ITEM_CODE
+	)
+	discounted_total = sum(
+		flt(item.get("amount"))
+		for item in _get_checkout_items_from_sales_order(sales_order)
+		if item.get("item_code") != DELIVERY_FEE_ITEM_CODE
+	)
+	item_level_discount_amount = max(original_total - discounted_total, 0)
+	document_level_discount_amount = flt(getattr(sales_order, "discount_amount", 0))
+	discount_amount = max(item_level_discount_amount, document_level_discount_amount)
+	discounted_total = max(original_total - discount_amount, 0)
+
+	return {
+		"coupon_code": _clean_text(getattr(sales_order, "coupon_code", "")),
+		"original_total": original_total,
+		"discount_amount": discount_amount,
+		"discounted_total": discounted_total,
+		"grand_total": flt(sales_order.grand_total or discounted_total),
+	}
+
+
+def _build_cart_coupon_item_pricing(sales_order, checkout_items):
+	non_delivery_items = [
+		item for item in (checkout_items or []) if item.get("item_code") != DELIVERY_FEE_ITEM_CODE
+	]
+	if not non_delivery_items:
+		return []
+
+	item_prices = []
+	total_original_amount = 0
+
+	for item in non_delivery_items:
+		quantity = max(flt(item.get("quantity")), 0)
+		original_amount = max(flt(item.get("amount")), 0)
+		original_rate = flt(item.get("rate"))
+
+		if quantity and not original_rate and original_amount:
+			original_rate = flt(original_amount / quantity, 6)
+
+		item_prices.append(
+			{
+				"item_code": item.get("item_code"),
+				"supplier": item.get("supplier"),
+				"size": item.get("size"),
+				"quantity": quantity,
+				"original_rate": original_rate,
+				"original_amount": original_amount,
+			}
+		)
+		total_original_amount += original_amount
+
+	total_discount_amount = flt(_build_cart_totals_summary(sales_order, checkout_items).get("discount_amount"))
+	total_discount_amount = min(max(total_discount_amount, 0), total_original_amount)
+	if total_discount_amount <= 0 or total_original_amount <= 0:
+		return [
+			{
+				**item_price,
+				"discount_amount": 0,
+				"discounted_amount": item_price["original_amount"],
+				"discounted_rate": item_price["original_rate"],
+			}
+			for item_price in item_prices
+		]
+
+	allocated_discount = 0
+	last_index = len(item_prices) - 1
+
+	for index, item_price in enumerate(item_prices):
+		if index == last_index:
+			discount_amount = flt(total_discount_amount - allocated_discount, 2)
+		else:
+			proportional_discount = (
+				(item_price["original_amount"] / total_original_amount) * total_discount_amount
+				if total_original_amount
+				else 0
+			)
+			discount_amount = flt(proportional_discount, 2)
+			allocated_discount += discount_amount
+
+		discount_amount = min(max(discount_amount, 0), item_price["original_amount"])
+		discounted_amount = flt(item_price["original_amount"] - discount_amount, 2)
+		discounted_rate = (
+			flt(discounted_amount / item_price["quantity"], 6)
+			if item_price["quantity"] > 0
+			else item_price["original_rate"]
+		)
+
+		item_price.update(
+			{
+				"discount_amount": discount_amount,
+				"discounted_amount": discounted_amount,
+				"discounted_rate": discounted_rate,
+			}
+		)
+
+	return item_prices
 
 
 def _resolve_sales_order_item_suppliers(sales_order):
@@ -917,6 +1205,11 @@ def _build_manual_purchase_orders_for_sales_order(sales_order, selected_items):
 		purchase_order.supplier = supplier
 		purchase_order.company = sales_order.company
 		purchase_order.transaction_date = nowdate()
+		_set_doc_value_if_field_exists(
+			purchase_order,
+			"custom_customer_pickup",
+			1 if cint(getattr(sales_order, "custom_customer_pickup", 0)) else 0,
+		)
 		_set_doc_value_if_field_exists(purchase_order, "schedule_date", sales_order.delivery_date or nowdate())
 		_set_doc_value_if_field_exists(purchase_order, "buying_price_list", "")
 		_set_doc_value_if_field_exists(purchase_order, "ignore_pricing_rule", 1)
@@ -1047,6 +1340,25 @@ def _create_purchase_orders_for_sales_order(sales_order):
 		)
 		raise
 
+	customer_pickup_value = 1 if cint(getattr(sales_order, "custom_customer_pickup", 0)) else 0
+	for purchase_order in purchase_orders or []:
+		if not purchase_order:
+			continue
+
+		_set_doc_value_if_field_exists(
+			purchase_order,
+			"custom_customer_pickup",
+			customer_pickup_value,
+		)
+
+		if getattr(purchase_order, "name", None):
+			frappe.db.set_value(
+				purchase_order.doctype,
+				purchase_order.name,
+				{"custom_customer_pickup": customer_pickup_value},
+				update_modified=False,
+			)
+
 	_submit_purchase_orders(purchase_orders, sales_order.name)
 
 	frappe.logger("buy_in_minutes.payment").info(
@@ -1125,6 +1437,10 @@ def _upsert_sales_order(
 	delivery_slot=None,
 	customer_location=None,
 	address_display=None,
+	coupon_code=None,
+	delivery_fee=None,
+	customer_pickup=False,
+	use_delivery_charge_tax_template=False,
 ):
 	checkout_user = frappe.session.user
 	customer = _get_or_create_customer_for_user(checkout_user)
@@ -1152,7 +1468,10 @@ def _upsert_sales_order(
 			frappe.throw(_("The linked Sales Order is no longer editable."))
 
 		sales_order.set("items", [])
+		sales_order.set("taxes", [])
 		sales_order.set("payment_schedule", [])
+		if sales_order.meta.has_field("pricing_rules"):
+			sales_order.set("pricing_rules", [])
 	else:
 		sales_order = frappe.get_doc({"doctype": "Sales Order"})
 
@@ -1175,9 +1494,36 @@ def _upsert_sales_order(
 		"custom_customer_location",
 		_clean_text(customer_location),
 	)
+	_set_doc_value_if_field_exists(
+		sales_order,
+		"coupon_code",
+		_resolve_coupon_code_name(coupon_code),
+	)
+	_set_doc_value_if_field_exists(
+		sales_order,
+		"custom_customer_pickup",
+		1 if customer_pickup else 0,
+	)
+	_apply_coupon_additional_discount_to_sales_order(
+		sales_order,
+		_clean_text(getattr(sales_order, "coupon_code", "")),
+	)
+	if use_delivery_charge_tax_template:
+		delivery_charge_tax_template_name = _get_delivery_charge_tax_template_name()
+		_set_doc_value_if_field_exists(
+			sales_order,
+			"taxes_and_charges",
+			delivery_charge_tax_template_name,
+		)
+	else:
+		_set_doc_value_if_field_exists(sales_order, "taxes_and_charges", "")
 
 	for item in order_items:
 		sales_order.append("items", item)
+
+	if use_delivery_charge_tax_template:
+		for tax_row in _build_sales_order_delivery_tax_rows(delivery_fee):
+			sales_order.append("taxes", tax_row)
 
 	_apply_delivery_address_to_sales_order(
 		sales_order,
@@ -1217,6 +1563,7 @@ def _build_checkout_params(checkout_items, sales_order_name=None, return_origin=
 	cancel_url = f"{return_origin}/buy-in-minutes#/payment/cancel"
 	stripe_currency = _get_stripe_settings().get("currency") or DEFAULT_CURRENCY
 	checkout_user = _normalize_user_name(frappe.session.user)
+	adaptive_pricing_enabled = bool((adaptive_pricing or {}).get("enabled"))
 	params = {
 		"mode": "payment",
 		"success_url": success_url,
@@ -1224,6 +1571,7 @@ def _build_checkout_params(checkout_items, sales_order_name=None, return_origin=
 		"client_reference_id": checkout_user,
 		"metadata[user]": checkout_user,
 		"metadata[payment_method]": "stripe",
+		"adaptive_pricing[enabled]": "true" if adaptive_pricing_enabled else "false",
 	}
 	if sales_order_name:
 		params["metadata[sales_order]"] = sales_order_name
@@ -1393,23 +1741,37 @@ def sync_cart_sales_order(
 	delivery_slot=None,
 	customer_location=None,
 	address_display=None,
+	delivery_fee=None,
+	coupon_code=None,
+	customer_pickup=False,
 ):
 	_require_checkout_user()
 
-	checkout_items = _get_checkout_items(cart_items)
+	checkout_items = _get_checkout_items(cart_items, delivery_fee=delivery_fee)
+	sales_order_checkout_items = _get_checkout_items(
+		cart_items,
+		delivery_fee=delivery_fee,
+		include_delivery_fee_item=False,
+	)
 	sales_order = _upsert_sales_order(
-		checkout_items,
+		sales_order_checkout_items,
 		sales_order_name=sales_order_name,
 		delivery_address=delivery_address,
 		delivery_date=delivery_date,
 		delivery_slot=delivery_slot,
 		customer_location=customer_location,
 		address_display=address_display,
+		coupon_code=coupon_code,
+		delivery_fee=delivery_fee,
+		customer_pickup=customer_pickup,
+		use_delivery_charge_tax_template=True,
 	)
 
 	return {
 		"success": True,
 		"sales_order": sales_order.name,
+		"totals": _build_cart_totals_summary(sales_order, checkout_items),
+		"item_pricing": _build_cart_coupon_item_pricing(sales_order, checkout_items),
 	}
 
 
@@ -1423,18 +1785,30 @@ def create_checkout_session(
 	delivery_slot=None,
 	customer_location=None,
 	address_display=None,
+	delivery_fee=None,
+	coupon_code=None,
+	customer_pickup=False,
 ):
 	_require_checkout_user()
 
-	checkout_items = _get_checkout_items(cart_items)
+	checkout_items = _get_checkout_items(cart_items, delivery_fee=delivery_fee)
+	sales_order_checkout_items = _get_checkout_items(
+		cart_items,
+		delivery_fee=delivery_fee,
+		include_delivery_fee_item=False,
+	)
 	sales_order = _upsert_sales_order(
-		checkout_items,
+		sales_order_checkout_items,
 		sales_order_name=sales_order_name,
 		delivery_address=delivery_address,
 		delivery_date=delivery_date,
 		delivery_slot=delivery_slot,
 		customer_location=customer_location,
 		address_display=address_display,
+		coupon_code=coupon_code,
+		delivery_fee=delivery_fee,
+		customer_pickup=customer_pickup,
+		use_delivery_charge_tax_template=True,
 	)
 	session = _stripe_request(
 		"/checkout/sessions",
@@ -1459,10 +1833,17 @@ def create_cash_on_delivery_order(
 	delivery_slot=None,
 	customer_location=None,
 	address_display=None,
+	delivery_fee=None,
+	coupon_code=None,
+	customer_pickup=False,
 ):
 	_require_checkout_user()
 
-	checkout_items = _get_checkout_items(cart_items)
+	checkout_items = _get_checkout_items(
+		cart_items,
+		delivery_fee=delivery_fee,
+		include_delivery_fee_item=False,
+	)
 	sales_order = _upsert_sales_order(
 		checkout_items,
 		sales_order_name=sales_order_name,
@@ -1472,6 +1853,10 @@ def create_cash_on_delivery_order(
 		delivery_slot=delivery_slot,
 		customer_location=customer_location,
 		address_display=address_display,
+		coupon_code=coupon_code,
+		delivery_fee=delivery_fee,
+		customer_pickup=customer_pickup,
+		use_delivery_charge_tax_template=True,
 	)
 	purchase_orders = getattr(sales_order, "purchase_orders", None)
 

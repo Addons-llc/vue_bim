@@ -1,23 +1,32 @@
 <script setup>
-import { computed, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import {
   addProductToCart,
   cartProducts,
   updateCartProductQuantity,
 } from '../data/cartStore'
-import { getSelectedProduct } from '../data/productSelectionStore'
+import { getCustomerToSupplierDistanceKm, LOCATION_UPDATED_EVENT } from '../api/deliveryEta'
+import { getSelectedProduct, saveSelectedProduct } from '../data/productSelectionStore'
 import { saveSelectedSupplier } from '../data/supplierSelectionStore'
-import { getProductById } from '../api/productApi'
+import { getProductById, getProductVariants } from '../api/productApi'
 
 const route = useRoute()
+const router = useRouter()
 const product = ref(null)
+const productVariants = ref([])
 const isLoading = ref(false)
+const isLoadingVariants = ref(false)
 const loadError = ref('')
 const hasProductDetailLoaded = ref(false)
 const activeImageIndex = ref(0)
 const isProductDescriptionExpanded = ref(false)
 const selectedProductSize = ref('')
+const selectedVariantAttributes = ref({})
+const supplierDistanceKm = ref(null)
+const isCheckingDeliverability = ref(false)
+
+const MAX_DELIVERABLE_DISTANCE_KM = 20
 
 const productId = computed(() => String(route.params.productId || ''))
 const productQuantity = computed(() => {
@@ -43,6 +52,32 @@ const ratingStars = computed(() => {
 })
 const productDescription = computed(() => product.value?.description || '')
 const isProductDescriptionLong = computed(() => productDescription.value.length > 120)
+const variantTemplateId = computed(() =>
+  product.value?.variantOf || (product.value?.hasVariants ? product.value.id : ''),
+)
+const selectedVariantId = computed(() => product.value?.id || '')
+const hasProductVariants = computed(() => productVariants.value.length > 0)
+const showVariantDropdowns = computed(() =>
+  hasProductVariants.value && product.value?.variantBasedOn === 'Item Attribute',
+)
+const isOutOfDeliveryRange = computed(() =>
+  Number.isFinite(supplierDistanceKm.value) && supplierDistanceKm.value > MAX_DELIVERABLE_DISTANCE_KM,
+)
+const deliveryStatusMessage = computed(() => {
+  if (isCheckingDeliverability.value) {
+    return 'Checking delivery availability...'
+  }
+
+  if (isOutOfDeliveryRange.value) {
+    return 'Not deliverable to this location.'
+  }
+
+  if (Number.isFinite(supplierDistanceKm.value) && supplierDistanceKm.value > 0) {
+    return `Deliverable within ${supplierDistanceKm.value.toFixed(1).replace(/\\.0$/, '')} km.`
+  }
+
+  return ''
+})
 const productSizeOptions = computed(() => {
   const rawSize = product.value?.customSize || product.value?.custom_size || ''
 
@@ -66,6 +101,38 @@ const productSizeOptions = computed(() => {
 const selectedProductSizeLabel = computed(() =>
   selectedProductSize.value || productSizeOptions.value[0] || '',
 )
+const variantAttributeGroups = computed(() => {
+  const groups = []
+  const seenAttributes = new Set()
+  const variantRecords = productVariants.value.length
+    ? productVariants.value
+    : (product.value ? [product.value] : [])
+
+  variantRecords.forEach((variant) => {
+    ;(variant.variantAttributes || []).forEach((attributeRow) => {
+      const attributeName = String(attributeRow.attribute || '').trim()
+      const attributeValue = String(attributeRow.value || '').trim()
+
+      if (!attributeName || !attributeValue) {
+        return
+      }
+
+      let group = groups.find((entry) => entry.name === attributeName)
+      if (!group) {
+        group = { name: attributeName, options: [] }
+        groups.push(group)
+      }
+
+      if (!group.options.includes(attributeValue)) {
+        group.options.push(attributeValue)
+      }
+
+      seenAttributes.add(attributeName)
+    })
+  })
+
+  return groups.filter((group) => seenAttributes.has(group.name))
+})
 
 function mergeProductDetails(cachedProduct, loadedProduct) {
   if (!cachedProduct) {
@@ -76,6 +143,9 @@ function mergeProductDetails(cachedProduct, loadedProduct) {
     ...loadedProduct,
     image: loadedProduct.image || cachedProduct.image,
     bannerImage: loadedProduct.bannerImage || cachedProduct.bannerImage,
+    attachmentImages: loadedProduct.attachmentImages?.length
+      ? loadedProduct.attachmentImages
+      : (cachedProduct.attachmentImages || []),
     images: loadedProduct.images?.length ? loadedProduct.images : cachedProduct.images,
     price: loadedProduct.price || cachedProduct.price,
     oldPrice: loadedProduct.oldPrice || cachedProduct.oldPrice,
@@ -88,7 +158,15 @@ function mergeProductDetails(cachedProduct, loadedProduct) {
     reviewCount: loadedProduct.reviewCount || cachedProduct.reviewCount,
     stockQuantity: loadedProduct.stockQuantity || cachedProduct.stockQuantity,
     inStock: loadedProduct.inStock ?? cachedProduct.inStock,
+    customDeliverySlots: loadedProduct.customDeliverySlots ?? cachedProduct.customDeliverySlots,
     customSize: loadedProduct.customSize || cachedProduct.customSize || loadedProduct.custom_size || cachedProduct.custom_size,
+    hasVariants: loadedProduct.hasVariants ?? cachedProduct.hasVariants,
+    variantBasedOn: loadedProduct.variantBasedOn || cachedProduct.variantBasedOn || '',
+    variantOf: loadedProduct.variantOf || cachedProduct.variantOf || '',
+    variantLabel: loadedProduct.variantLabel || cachedProduct.variantLabel || '',
+    variantAttributes: loadedProduct.variantAttributes?.length
+      ? loadedProduct.variantAttributes
+      : (cachedProduct.variantAttributes || []),
   }
 }
 
@@ -97,16 +175,14 @@ const productImages = computed(() => {
     return []
   }
 
-  const images = product.value.images?.length
-    ? product.value.images
-    : [product.value.bannerImage || product.value.image].filter(Boolean)
+  const images = product.value.attachmentImages?.length
+    ? product.value.attachmentImages
+    : []
 
   return images.filter(Boolean)
 })
 const activeProductImage = computed(() =>
   productImages.value[activeImageIndex.value]
-    || product.value?.bannerImage
-    || product.value?.image
     || '',
 )
 
@@ -137,9 +213,112 @@ const productDetails = computed(() => {
       ? { label: 'Size', value: selectedProductSizeLabel.value }
       : null,
     { label: 'Category', value: product.value.category },
-    { label: 'Delivery', value: product.value.deliveryTime || '18 min' },
   ].filter((detail) => detail?.value)
 })
+
+function getVariantAttributeMap(variant) {
+  return Object.fromEntries(
+    (variant?.variantAttributes || [])
+      .map((attributeRow) => [
+        String(attributeRow.attribute || '').trim(),
+        String(attributeRow.value || '').trim(),
+      ])
+      .filter(([attributeName, attributeValue]) => attributeName && attributeValue),
+  )
+}
+
+function syncSelectedVariantAttributes(variant) {
+  selectedVariantAttributes.value = getVariantAttributeMap(variant)
+}
+
+function findVariantBySelections(nextSelections) {
+  if (!productVariants.value.length) {
+    return null
+  }
+
+  const exactMatch = productVariants.value.find((variant) => {
+    const attributeMap = getVariantAttributeMap(variant)
+
+    return variantAttributeGroups.value.every((group) => (
+      attributeMap[group.name] === nextSelections[group.name]
+    ))
+  })
+
+  if (exactMatch) {
+    return exactMatch
+  }
+
+  return productVariants.value.find((variant) => {
+    const attributeMap = getVariantAttributeMap(variant)
+
+    return Object.entries(nextSelections).every(([attributeName, attributeValue]) => (
+      !attributeValue || attributeMap[attributeName] === attributeValue
+    ))
+  }) || null
+}
+
+function getVariantOptionsForAttribute(attributeName) {
+  const otherSelections = Object.fromEntries(
+    Object.entries(selectedVariantAttributes.value).filter(([name]) => name !== attributeName),
+  )
+
+  const matchingVariants = productVariants.value.filter((variant) => {
+    const attributeMap = getVariantAttributeMap(variant)
+
+    return Object.entries(otherSelections).every(([name, value]) => (
+      !value || attributeMap[name] === value
+    ))
+  })
+
+  const fallbackVariants = matchingVariants.length ? matchingVariants : productVariants.value
+  const options = []
+
+  fallbackVariants.forEach((variant) => {
+    const attributeValue = getVariantAttributeMap(variant)[attributeName]
+
+    if (attributeValue && !options.includes(attributeValue)) {
+      options.push(attributeValue)
+    }
+  })
+
+  return options
+}
+
+async function loadVariantsForProduct(loadedProduct) {
+  const templateItemName = loadedProduct?.variantOf || (loadedProduct?.hasVariants ? loadedProduct.id : '')
+
+  if (!templateItemName) {
+    productVariants.value = []
+    return false
+  }
+
+  isLoadingVariants.value = true
+
+  try {
+    const variants = await getProductVariants(templateItemName)
+    productVariants.value = variants
+
+    if (loadedProduct?.hasVariants && !loadedProduct?.variantOf && variants.length) {
+      const defaultVariant = variants.find((variant) => variant.inStock) || variants[0]
+
+      if (defaultVariant?.id && defaultVariant.id !== route.params.productId) {
+        saveSelectedProduct(defaultVariant)
+        await router.replace({
+          name: 'product-details',
+          params: { productId: defaultVariant.id },
+        })
+        return true
+      }
+    }
+
+    return false
+  } catch {
+    productVariants.value = []
+    return false
+  } finally {
+    isLoadingVariants.value = false
+  }
+}
 
 async function loadProduct() {
   if (!productId.value) {
@@ -150,6 +329,7 @@ async function loadProduct() {
   hasProductDetailLoaded.value = false
   const cachedProduct = getSelectedProduct(productId.value)
   product.value = cachedProduct
+  productVariants.value = []
   isLoading.value = !cachedProduct
   loadError.value = ''
 
@@ -162,16 +342,42 @@ async function loadProduct() {
     }
 
     product.value = mergeProductDetails(cachedProduct, loadedProduct)
+    const redirectedToVariant = await loadVariantsForProduct(product.value)
+    if (redirectedToVariant) {
+      return
+    }
+
+    syncSelectedVariantAttributes(product.value)
+    saveSelectedProduct(product.value)
     activeImageIndex.value = 0
     isProductDescriptionExpanded.value = false
     hasProductDetailLoaded.value = true
   } catch (error) {
     if (!cachedProduct) {
       product.value = null
+      productVariants.value = []
       loadError.value = error.message || 'Unable to load product details.'
     }
   } finally {
     isLoading.value = false
+  }
+}
+
+async function refreshSupplierDistance() {
+  if (!product.value) {
+    supplierDistanceKm.value = null
+    isCheckingDeliverability.value = false
+    return
+  }
+
+  isCheckingDeliverability.value = true
+
+  try {
+    supplierDistanceKm.value = await getCustomerToSupplierDistanceKm(product.value)
+  } catch {
+    supplierDistanceKm.value = null
+  } finally {
+    isCheckingDeliverability.value = false
   }
 }
 
@@ -190,7 +396,7 @@ function moveProductDetailImage(direction) {
 }
 
 function addSelectedProductToCart() {
-  if (product.value) {
+  if (product.value && !isOutOfDeliveryRange.value) {
     addProductToCart({
       ...product.value,
       selectedSize: selectedProductSizeLabel.value,
@@ -208,6 +414,34 @@ function selectProductSize(size) {
   selectedProductSize.value = size
 }
 
+async function selectProductVariant(variant) {
+  if (!variant?.id || variant.id === productId.value) {
+    return
+  }
+
+  syncSelectedVariantAttributes(variant)
+  saveSelectedProduct(variant)
+  await router.push({
+    name: 'product-details',
+    params: { productId: variant.id },
+  })
+}
+
+async function updateVariantSelection(attributeName, attributeValue) {
+  const nextSelections = {
+    ...selectedVariantAttributes.value,
+    [attributeName]: attributeValue,
+  }
+
+  const matchedVariant = findVariantBySelections(nextSelections)
+  if (!matchedVariant) {
+    selectedVariantAttributes.value = nextSelections
+    return
+  }
+
+  await selectProductVariant(matchedVariant)
+}
+
 function toggleProductDescription() {
   isProductDescriptionExpanded.value = !isProductDescriptionExpanded.value
 }
@@ -222,6 +456,14 @@ function rememberSupplierSelection() {
 
 watch(productId, loadProduct, { immediate: true })
 
+watch(
+  () => product.value?.id || '',
+  () => {
+    refreshSupplierDistance()
+  },
+  { immediate: true },
+)
+
 watch(productSizeOptions, (sizes) => {
   if (!sizes.length) {
     selectedProductSize.value = ''
@@ -232,6 +474,14 @@ watch(productSizeOptions, (sizes) => {
     selectedProductSize.value = sizes[0]
   }
 }, { immediate: true })
+
+onMounted(() => {
+  window.addEventListener(LOCATION_UPDATED_EVENT, refreshSupplierDistance)
+})
+
+onUnmounted(() => {
+  window.removeEventListener(LOCATION_UPDATED_EVENT, refreshSupplierDistance)
+})
 </script>
 
 <template>
@@ -331,37 +581,13 @@ watch(productSizeOptions, (sizes) => {
           <span class="product-detail-price">
             <span class="product-detail-currency">AED</span>
             {{ product.price }}
-            <span v-if="product.oldPrice">AED {{ product.oldPrice }}</span>
           </span>
-          <span class="product-detail-free-delivery">Free Delivery</span>
         </div>
 
-        <section class="product-detail-section">
-          <h3>Delivery Information</h3>
-          <div class="product-detail-delivery-strip">
-            <strong>express</strong>
-            <span>Get it Tomorrow</span>
-            <em>Order in 2h 19m</em>
-          </div>
-        </section>
-
-        <section class="product-detail-section">
-          <h3>Coupons</h3>
-          <div class="product-detail-coupon-row">
-            <span>Extra 15% Off</span>
-            <strong>RAK50</strong>
-          </div>
-        </section>
-
-        <section class="product-detail-section">
-          <h3>Payment Discount</h3>
-          <div class="product-detail-payment-card">
-            <strong>Earn 5%</strong>
-            <span>cashback with selected cards</span>
-          </div>
-        </section>
-
-        <section v-if="productSizeOptions.length" class="product-detail-section product-size-section">
+        <section
+          v-if="productSizeOptions.length && !showVariantDropdowns"
+          class="product-detail-section product-size-section"
+        >
           <h3>Size</h3>
           <div class="product-size-options" role="group" aria-label="Choose product size">
             <button
@@ -402,6 +628,37 @@ watch(productSizeOptions, (sizes) => {
             <dd>{{ detail.value }}</dd>
           </div>
         </dl>
+
+        <section
+          v-if="showVariantDropdowns"
+          class="product-detail-section product-variant-dropdown-section"
+        >
+          <h3>Available Options</h3>
+          <div class="product-variant-dropdown-grid">
+            <label
+              v-for="group in variantAttributeGroups"
+              :key="group.name"
+              class="product-variant-dropdown-field"
+            >
+              <span>{{ group.name }}</span>
+              <select
+                :value="selectedVariantAttributes[group.name] || ''"
+                @change="updateVariantSelection(group.name, $event.target.value)"
+              >
+                <option value="" disabled>Select {{ group.name }}</option>
+                <option
+                  v-for="option in getVariantOptionsForAttribute(group.name)"
+                  :key="`${group.name}-${option}`"
+                  :value="option"
+                >
+                  {{ option }}
+                </option>
+              </select>
+            </label>
+          </div>
+          <p v-if="isLoadingVariants" class="product-variant-status">Loading options...</p>
+        </section>
+
       </div>
 
       <aside class="product-detail-purchase" aria-label="Purchase options">
@@ -419,12 +676,19 @@ watch(productSizeOptions, (sizes) => {
         </RouterLink>
 
         <div class="product-detail-trust-list">
-          <span>▣ Free delivery on quick orders</span>
           <span>↩ Easy and hassle free returns</span>
           <span>♢ Secure payments</span>
         </div>
 
         <div class="product-detail-footer">
+          <p
+            v-if="deliveryStatusMessage"
+            class="product-detail-delivery-status"
+            :class="{ 'is-blocked': isOutOfDeliveryRange }"
+          >
+            {{ deliveryStatusMessage }}
+          </p>
+
           <div>
             <span class="product-detail-total-label">Total</span>
             <strong class="product-detail-total-price">
@@ -448,6 +712,7 @@ watch(productSizeOptions, (sizes) => {
             <button
               type="button"
               :aria-label="`Increase ${product.name} quantity`"
+              :disabled="isOutOfDeliveryRange"
               @click="addSelectedProductToCart"
             >
               +
@@ -457,9 +722,10 @@ watch(productSizeOptions, (sizes) => {
             v-else
             class="product-detail-add-button"
             type="button"
+            :disabled="isOutOfDeliveryRange"
             @click="addSelectedProductToCart"
           >
-            Add to cart
+            {{ isOutOfDeliveryRange ? 'Not deliverable' : 'Add to cart' }}
           </button>
         </div>
       </aside>

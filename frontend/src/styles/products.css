@@ -66,6 +66,7 @@
 
 .section-link:hover {
   color: #076516;
+  transform: translateX(2px);
 }
 
 .product-rail-wrap {
@@ -128,12 +129,12 @@
   height: 32px;
   border: 0;
   border-radius: 999px;
-  background: #ffffff;
+  background: rgba(255, 255, 255, 0.96);
   color: #111827;
   font-size: 26px;
   line-height: 1;
   cursor: pointer;
-  box-shadow: 0 6px 18px rgba(17, 24, 39, 0.16);
+  box-shadow: 0 12px 28px rgba(17, 24, 39, 0.16);
   transform: translateY(-50%);
   z-index: 2;
 }
@@ -148,6 +149,7 @@
 
 .product-rail-arrow:hover {
   color: #0c831f;
+  transform: translateY(-50%) scale(1.06);
 }
 
 .product-grid {
@@ -163,9 +165,22 @@
   overflow: hidden;
   min-width: 0;
   min-height: 340px;
-  border: 1px solid #d1d5db;
-  border-radius: 8px;
-  background: #ffffff;
+  border: 1px solid #e0e7f0;
+  border-radius: 16px;
+  background: linear-gradient(180deg, #ffffff 0%, #fcfdff 100%);
+  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.05);
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease,
+    transform 0.2s ease,
+    background-color 0.2s ease;
+}
+
+.product-card:hover,
+.product-card:focus-within {
+  border-color: #cfe0ff;
+  box-shadow: 0 20px 40px rgba(15, 23, 42, 0.1);
+  transform: translateY(-3px);
 }
 
 .product-select-area {
@@ -203,7 +218,9 @@
 .product-card.is-compact .product-image {
   aspect-ratio: auto;
   height: 160px;
-  background: #ffffff;
+  background:
+    radial-gradient(circle at top, rgba(37, 99, 235, 0.08), transparent 45%),
+    #ffffff;
   border-radius: 0;
 }
 
@@ -222,7 +239,7 @@
   background: rgba(255, 255, 255, 0.94);
   color: #6b7280;
   cursor: pointer;
-  box-shadow: 0 4px 14px rgba(17, 24, 39, 0.12);
+  box-shadow: 0 8px 20px rgba(17, 24, 39, 0.12);
 }
 
 .product-wishlist-button svg {
@@ -236,6 +253,7 @@
   border-color: #fecaca;
   background: #fff1f2;
   color: #dc2626;
+  transform: scale(1.06);
 }
 
 .product-wishlist-button.is-active {
@@ -876,6 +894,10 @@
   padding-bottom: 18px;
 }
 
+.product-variant-dropdown-section {
+  padding-bottom: 18px;
+}
+
 .product-detail-section h3 {
   margin: 0;
   color: #667085;
@@ -951,6 +973,52 @@
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
+}
+
+.product-variant-status {
+  margin: 0;
+  color: #6b7280;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.product-variant-dropdown-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.product-variant-dropdown-field {
+  display: grid;
+  gap: 6px;
+}
+
+.product-variant-dropdown-field span {
+  color: #374151;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.product-variant-dropdown-field select {
+  min-height: 44px;
+  border: 1px solid #d1d5db;
+  border-radius: 10px;
+  padding: 0 12px;
+  background: #ffffff;
+  color: #111827;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.product-variant-dropdown-field select:hover {
+  border-color: #9ca3af;
+}
+
+.product-variant-dropdown-field select:focus-visible {
+  outline: 0;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.14);
 }
 
 .product-size-option {
@@ -1135,6 +1203,24 @@
   font-size: 18px;
 }
 
+.product-detail-delivery-status {
+  margin: 0;
+  border: 1px solid #d1fae5;
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: #ecfdf5;
+  color: #166534;
+  font-size: 13px;
+  font-weight: 750;
+  line-height: 1.45;
+}
+
+.product-detail-delivery-status.is-blocked {
+  border-color: #fecaca;
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
 .product-detail-add-button {
   display: inline-flex;
   align-items: center;
@@ -1150,8 +1236,17 @@
   font-weight: 800;
 }
 
+.product-detail-add-button:disabled {
+  background: #9ca3af;
+  cursor: not-allowed;
+}
+
 .product-detail-add-button:hover {
   background: #1f2937;
+}
+
+.product-detail-add-button:disabled:hover {
+  background: #9ca3af;
 }
 
 .product-load-more {
@@ -1441,6 +1536,24 @@
   font-weight: 700;
   line-height: 1.15;
   text-align: left;
+}
+
+.brand-detail-page .supplier-store-banner {
+  min-height: 300px;
+}
+
+.brand-detail-page .brand-banner-slider {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  display: flex;
+  width: 100%;
+  height: 100%;
+  transition: transform 0.45s ease;
+}
+
+.brand-detail-page .brand-banner-slide {
+  flex: 0 0 100%;
 }
 
 .supplier-store-overview {

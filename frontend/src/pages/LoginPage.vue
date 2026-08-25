@@ -102,11 +102,12 @@ function skipSignIn() {
         </form>
       </section>
 
-      <p v-if="successMessage" class="form-message success-message">
-        {{ successMessage }}
-      </p>
       <p v-if="errorMessage" class="form-message error-message">
         {{ errorMessage }}
+      </p>
+
+      <p v-if="successMessage" class="form-message success-message">
+        {{ successMessage }}
       </p>
 
       <button class="skip-signin-button" type="button" @click="skipSignIn">

@@ -7,7 +7,7 @@ const UAE_COUNTRY_CODE = 'AE'
 const ETA_CACHE = new Map()
 const ETA_PROMISE_CACHE = new Map()
 const GEOCODE_CACHE = new Map()
-const ROUTE_DURATION_CACHE = new Map()
+const ROUTE_METRICS_CACHE = new Map()
 
 export const LOCATION_UPDATED_EVENT = 'buy-in-minutes:location-updated'
 
@@ -236,14 +236,14 @@ async function getSupplierCoordinates(product = {}) {
   return geocodeLocation(supplierAddress)
 }
 
-async function getRouteDurationMinutes(origin, destination) {
+async function getRouteMetrics(origin, destination) {
   if (!origin || !destination) {
     return null
   }
 
   const cacheKey = `${getLocationKey(origin)}::${getLocationKey(destination)}`
-  if (ROUTE_DURATION_CACHE.has(cacheKey)) {
-    return ROUTE_DURATION_CACHE.get(cacheKey)
+  if (ROUTE_METRICS_CACHE.has(cacheKey)) {
+    return ROUTE_METRICS_CACHE.get(cacheKey)
   }
 
   try {
@@ -271,8 +271,8 @@ async function getRouteDurationMinutes(origin, destination) {
       )
     })
 
-    const durationSeconds = route.routes
-      .flatMap((candidateRoute) => candidateRoute.legs || [])
+    const legs = route.routes.flatMap((candidateRoute) => candidateRoute.legs || [])
+    const durationSeconds = legs
       .reduce((total, leg) => (
         total + Number(
           leg.duration_in_traffic?.value
@@ -280,17 +280,46 @@ async function getRouteDurationMinutes(origin, destination) {
           ?? 0
         )
       ), 0)
+    const distanceMeters = legs
+      .reduce((total, leg) => (
+        total + Number(leg.distance?.value ?? 0)
+      ), 0)
 
-    if (!durationSeconds) {
+    if (!durationSeconds && !distanceMeters) {
       return null
     }
 
-    const durationMinutes = Math.max(1, Math.round(durationSeconds / 60))
-    ROUTE_DURATION_CACHE.set(cacheKey, durationMinutes)
-    return durationMinutes
+    const metrics = {
+      durationMinutes: durationSeconds ? Math.max(1, Math.round(durationSeconds / 60)) : null,
+      distanceKm: distanceMeters ? distanceMeters / 1000 : null,
+    }
+
+    ROUTE_METRICS_CACHE.set(cacheKey, metrics)
+    return metrics
   } catch {
     return null
   }
+}
+
+async function getRouteDurationMinutes(origin, destination) {
+  const metrics = await getRouteMetrics(origin, destination)
+
+  return metrics?.durationMinutes || null
+}
+
+export async function getCustomerToSupplierDistanceKm(product = {}) {
+  const [supplierCoords, customerCoords] = await Promise.all([
+    getSupplierCoordinates(product),
+    getCustomerCoordinates(),
+  ])
+
+  if (!supplierCoords || !customerCoords) {
+    return null
+  }
+
+  const metrics = await getRouteMetrics(supplierCoords, customerCoords)
+
+  return metrics?.distanceKm || null
 }
 
 export async function getEstimatedDeliveryTimeLabel(product = {}) {
