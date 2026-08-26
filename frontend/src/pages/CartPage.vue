@@ -109,6 +109,7 @@ const orderSlotDescription = computed(() =>
     ? 'Pick the time slot that works best for pickup.'
     : 'Pick the time window that works best.',
 )
+
 const canCheckout = computed(() => isAuthReady.value && Boolean(currentUser.value))
 const checkoutButtonLabel = computed(() => {
   if (!isAuthReady.value) {
