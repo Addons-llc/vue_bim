@@ -50,6 +50,7 @@ const isAddressExpanded = ref(false)
 const fulfillmentMode = ref('delivery')
 const selectedDeliverySlot = ref('')
 const deliveryDateInput = ref(null)
+const isDeliveryDatePickerVisible = ref(false)
 const LAST_COD_ORDER_ITEMS_STORAGE_KEY = 'buyInMinutesLastCodOrderItems'
 const ALLOWED_DELIVERY_DATES = [
   '2026-08-27',
@@ -66,7 +67,7 @@ const deliverySlots = [
   '2 PM - 4 PM',
   '4 PM - 6 PM',
 ]
-const selectedDeliveryDate = ref(deliveryDateMin)
+const selectedDeliveryDate = ref('')
 function itemRequiresDeliverySlot(item) {
   return (
     item?.customDeliverySlots === true
@@ -88,15 +89,7 @@ const effectiveDeliverySlot = computed(() =>
 )
 const isCustomerPickup = computed(() => fulfillmentMode.value === 'pickup')
 const selectedDeliveryDateContext = computed(() =>
-  isCustomerPickup.value ? 'Scheduled pickup' : 'Scheduled delivery',
-)
-const orderScheduleTitle = computed(() =>
-  isCustomerPickup.value ? 'Choose pickup date' : 'Choose delivery date',
-)
-const orderScheduleDescription = computed(() =>
-  isCustomerPickup.value
-    ? 'Select when you want to pick up your order.'
-    : 'Select when you want this order delivered.',
+  isCustomerPickup.value ? 'Pickup date' : 'Delivery date',
 )
 const orderScheduleLabel = computed(() =>
   isCustomerPickup.value ? 'Pickup date' : 'Delivery date',
@@ -120,6 +113,9 @@ const checkoutButtonLabel = computed(() => {
 })
 const hasDeliveryAddress = computed(() => customerAddresses.value.length > 0)
 const selectedDeliveryDateLabel = computed(() => formatDeliveryDate(selectedDeliveryDate.value))
+const deliveryDatePrompt = computed(() =>
+  isCustomerPickup.value ? 'Choose pickup date' : 'Choose delivery date',
+)
 const selectedDeliveryAddress = computed(() =>
   customerAddresses.value.find((address) => address.isDefault)
   || customerAddresses.value[0]
@@ -460,6 +456,7 @@ function selectFulfillmentMode(mode) {
 }
 
 function openDeliveryDatePicker() {
+  isDeliveryDatePickerVisible.value = true
   const input = deliveryDateInput.value
 
   if (!input) {
@@ -481,7 +478,11 @@ function isAllowedDeliveryDate(dateValue) {
 }
 
 function normalizeDeliveryDate(dateValue) {
-  return isAllowedDeliveryDate(dateValue) ? dateValue : deliveryDateMin
+  if (!dateValue) {
+    return ''
+  }
+
+  return isAllowedDeliveryDate(dateValue) ? dateValue : ''
 }
 
 function formatDeliveryDate(dateValue) {
@@ -577,6 +578,11 @@ async function startStripeCheckout() {
     return
   }
 
+  if (!selectedDeliveryDate.value) {
+    checkoutError.value = `Please choose a ${isCustomerPickup.value ? 'pickup' : 'delivery'} date before checkout.`
+    return
+  }
+
   if (requiresDeliverySlot.value && !selectedDeliverySlot.value) {
     checkoutError.value = 'Please choose a delivery slot before checkout.'
     return
@@ -647,6 +653,11 @@ async function placeCashOnDeliveryOrder() {
   if (!hasDeliveryAddress.value) {
     checkoutError.value = 'Please add a delivery address before checkout.'
     isAddressRequired.value = true
+    return
+  }
+
+  if (!selectedDeliveryDate.value) {
+    checkoutError.value = `Please choose a ${isCustomerPickup.value ? 'pickup' : 'delivery'} date before placing the order.`
     return
   }
 
@@ -791,6 +802,11 @@ watch(
 
     if (normalizedDate !== dateValue) {
       selectedDeliveryDate.value = normalizedDate
+      return
+    }
+
+    if (normalizedDate) {
+      isDeliveryDatePickerVisible.value = false
     }
   },
   { immediate: true },
@@ -1097,14 +1113,6 @@ watch(
               </div>
             </div>
 
-            <div class="cart-delivery-heading">
-              <span class="cart-delivery-step">1</span>
-              <div>
-                <h3>{{ orderScheduleTitle }}</h3>
-                <p>{{ orderScheduleDescription }}</p>
-              </div>
-            </div>
-
             <div class="cart-date-picker">
               <label class="cart-date-label" for="cart-delivery-date">{{ orderScheduleLabel }}</label>
               <div class="cart-date-input-shell" @click="openDeliveryDatePicker">
@@ -1117,11 +1125,12 @@ watch(
                   </span>
                   <div class="cart-date-copy">
                     <span>{{ selectedDeliveryDateContext }}</span>
-                    <strong>{{ selectedDeliveryDateLabel }}</strong>
+                    <strong>{{ selectedDeliveryDateLabel || deliveryDatePrompt }}</strong>
                   </div>
-                  <span class="cart-date-action" aria-hidden="true">Change</span>
+                  <span class="cart-date-action" aria-hidden="true">{{ selectedDeliveryDate ? 'Change' : 'Choose' }}</span>
                 </div>
                 <input
+                  v-if="isDeliveryDatePickerVisible"
                   id="cart-delivery-date"
                   ref="deliveryDateInput"
                   v-model="selectedDeliveryDate"
@@ -1137,7 +1146,7 @@ watch(
 
             <template v-if="requiresDeliverySlot">
               <div class="cart-delivery-heading cart-slot-heading">
-                <span class="cart-delivery-step">2</span>
+                <span class="cart-delivery-step">1</span>
                 <div>
                   <h3>{{ orderSlotTitle }}</h3>
                   <p>{{ orderSlotDescription }}</p>

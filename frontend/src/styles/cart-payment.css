@@ -726,7 +726,6 @@
 .cart-date-picker {
   display: grid;
   gap: 8px;
-  margin-left: 34px;
 }
 
 .cart-date-label {
@@ -739,6 +738,7 @@
   position: relative;
   display: flex;
   align-items: center;
+  width: 100%;
   border: 1px solid #d1d5db;
   border-radius: 12px;
   background: #ffffff;
@@ -810,6 +810,10 @@
   opacity: 0;
   box-sizing: border-box;
   cursor: pointer;
+}
+
+.cart-date-input-shell:not(:focus-within) .cart-date-input {
+  pointer-events: none;
 }
 
 .cart-date-input-shell:hover,
