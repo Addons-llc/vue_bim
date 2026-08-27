@@ -132,6 +132,15 @@ function getCustomerLocationSource() {
     }
   }
 
+  const selectedLocation = getStoredSelectedLocation()
+
+  if (selectedLocation && selectedLocation !== 'Select location') {
+    return {
+      key: `location:${selectedLocation.toLowerCase()}`,
+      address: selectedLocation,
+    }
+  }
+
   return {
     key: 'unknown',
     coords: null,
@@ -203,7 +212,11 @@ async function getCustomerCoordinates() {
     return customerLocation.coords
   }
 
-  return null
+  if (!customerLocation.address) {
+    return null
+  }
+
+  return geocodeLocation(customerLocation.address)
 }
 
 async function getSupplierCoordinates(product = {}) {

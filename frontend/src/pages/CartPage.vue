@@ -53,7 +53,6 @@ const deliveryDateInput = ref(null)
 const isDeliveryDatePickerVisible = ref(false)
 const LAST_COD_ORDER_ITEMS_STORAGE_KEY = 'buyInMinutesLastCodOrderItems'
 const ALLOWED_DELIVERY_DATES = [
-  '2026-08-27',
   '2026-08-28',
   '2026-08-29',
   '2026-08-30',
