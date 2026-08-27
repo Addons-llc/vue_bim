@@ -35,9 +35,11 @@ function getFirstImageUrl(brand = {}, fieldNames = []) {
 
 function getBrandBannerImages(brand = {}) {
   return [
+    'custom_brand_banner_image',
+    'custom_brand_banner_image_2',
+    'custom_brand_banner_image_3',
     'banner',
     'banner_image',
-    'custom_brand_banner_image',
     'custom_banner_image',
     'brand_banner',
     'brand_banner_image',
@@ -58,13 +60,11 @@ function getBrandBannerImages(brand = {}) {
     'brand_banner_image_2',
     'website_banner_2',
     'website_banner_image_2',
-    'custom_brand_banner_image_2',
     'custom_brand_banner_2',
     'banner_3',
     'banner_image_3',
     'brand_banner_3',
     'custom_banner_3',
-    'custom_brand_banner_image_3',
     'custom_banner_image_3',
     'website_banner_3',
     'brand_banner_image_3',
@@ -101,6 +101,9 @@ function getBrandProductCount(brand = {}) {
 
 function mapBrand(brand = {}) {
   const brandName = brand.brand || brand.name
+  const primaryBannerImage = getImageUrl(brand.custom_brand_banner_image || '')
+  const secondaryBannerImage = getImageUrl(brand.custom_brand_banner_image_2 || '')
+  const tertiaryBannerImage = getImageUrl(brand.custom_brand_banner_image_3 || '')
   const bannerImage = getFirstImageUrl(brand, [
     'banner',
     'banner_image',
@@ -134,6 +137,9 @@ function mapBrand(brand = {}) {
     brand: brand.name || brandName,
     description: stripHtml(brand.description || ''),
     image,
+    primaryBannerImage,
+    secondaryBannerImage,
+    tertiaryBannerImage,
     bannerImage,
     bannerImages: bannerImages.length ? bannerImages : (bannerImage ? [bannerImage] : []),
     rating: brand.rating || brand.average_rating || brand.review_rating || '',
@@ -163,12 +169,19 @@ export async function getBrand(identifier) {
     limit_page_length: 5000,
   })
   const normalizedIdentifier = String(identifier || '').toLowerCase()
-
-  return brands.find((brand) =>
+  const matchedBrand = brands.find((brand) =>
     [
       brand.id,
       brand.name,
       brand.brand,
     ].some((value) => String(value || '').toLowerCase() === normalizedIdentifier),
   ) || null
+
+  console.log('Brand banner fetch response', {
+    identifier,
+    matchedBrand,
+    banners: matchedBrand?.bannerImages || [],
+  })
+
+  return matchedBrand
 }

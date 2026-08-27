@@ -10,6 +10,7 @@ import { getCustomerToSupplierDistanceKm, LOCATION_UPDATED_EVENT } from '../api/
 import { getSelectedProduct, saveSelectedProduct } from '../data/productSelectionStore'
 import { saveSelectedSupplier } from '../data/supplierSelectionStore'
 import { getProductById, getProductVariants } from '../api/productApi'
+import ProductCard from '../components/product/ProductCard.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -25,6 +26,8 @@ const selectedProductSize = ref('')
 const selectedVariantAttributes = ref({})
 const supplierDistanceKm = ref(null)
 const isCheckingDeliverability = ref(false)
+const relatedProducts = ref([])
+const isLoadingRelatedProducts = ref(false)
 
 const MAX_DELIVERABLE_DISTANCE_KM = 20
 
@@ -226,6 +229,9 @@ const productDetails = computed(() => {
     { label: 'Category', value: product.value.category },
   ].filter((detail) => detail?.value)
 })
+const relatedProductSuggestions = computed(() =>
+  relatedProducts.value.filter((relatedProduct) => relatedProduct.id !== product.value?.id).slice(0, 8),
+)
 
 function getVariantAttributeMap(variant) {
   return Object.fromEntries(
@@ -331,6 +337,41 @@ async function loadVariantsForProduct(loadedProduct) {
   }
 }
 
+async function loadRelatedProducts(loadedProduct) {
+  if (!loadedProduct?.category) {
+    relatedProducts.value = []
+    return
+  }
+
+  isLoadingRelatedProducts.value = true
+
+  try {
+    const products = await getProducts({
+      limit_page_length: 24,
+      item_group: loadedProduct.category,
+    })
+    const currentSupplier = loadedProduct.supplierName || loadedProduct.supplier || ''
+    const currentBrand = loadedProduct.brand || ''
+
+    relatedProducts.value = products
+      .filter((candidateProduct) => candidateProduct.id !== loadedProduct.id)
+      .sort((leftProduct, rightProduct) => {
+        const leftScore = Number(leftProduct.customPopularItems === true)
+          + Number((leftProduct.brand || '') === currentBrand)
+          + Number((leftProduct.supplierName || leftProduct.supplier || '') === currentSupplier)
+        const rightScore = Number(rightProduct.customPopularItems === true)
+          + Number((rightProduct.brand || '') === currentBrand)
+          + Number((rightProduct.supplierName || rightProduct.supplier || '') === currentSupplier)
+
+        return rightScore - leftScore
+      })
+  } catch {
+    relatedProducts.value = []
+  } finally {
+    isLoadingRelatedProducts.value = false
+  }
+}
+
 async function loadProduct() {
   if (!productId.value) {
     loadError.value = 'Product not found.'
@@ -358,6 +399,7 @@ async function loadProduct() {
       return
     }
 
+    await loadRelatedProducts(product.value)
     syncSelectedVariantAttributes(product.value)
     saveSelectedProduct(product.value)
     activeImageIndex.value = 0
@@ -367,6 +409,7 @@ async function loadProduct() {
     if (!cachedProduct) {
       product.value = null
       productVariants.value = []
+      relatedProducts.value = []
       loadError.value = error.message || 'Unable to load product details.'
     }
   } finally {
@@ -740,5 +783,25 @@ onUnmounted(() => {
         </div>
       </aside>
     </article>
+
+    <section
+      v-if="isLoadingRelatedProducts || relatedProductSuggestions.length"
+      class="supplier-products-panel product-related-panel"
+      aria-label="Related products"
+    >
+      <h2>Related products</h2>
+      <p v-if="isLoadingRelatedProducts" class="dashboard-message">
+        Loading related products...
+      </p>
+      <div v-else class="product-related-row">
+        <ProductCard
+          v-for="relatedProduct in relatedProductSuggestions"
+          :key="relatedProduct.id"
+          :product="relatedProduct"
+          compact
+          @select="openProductDetails"
+        />
+      </div>
+    </section>
   </template>
 </template>

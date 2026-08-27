@@ -1568,7 +1568,11 @@
 }
 
 .brand-detail-page .brand-banner-slide {
+  position: relative;
+  inset: auto;
   flex: 0 0 100%;
+  width: 100%;
+  height: 100%;
 }
 
 .supplier-store-overview {
@@ -1693,6 +1697,24 @@
   max-width: none;
   min-width: 0;
   flex: initial;
+}
+
+.product-related-panel {
+  padding-top: 6px;
+}
+
+.product-related-row {
+  display: flex;
+  gap: 14px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  scroll-snap-type: x proximity;
+}
+
+.product-related-row .product-card.is-compact {
+  min-width: 220px;
+  max-width: 220px;
+  scroll-snap-align: start;
 }
 
 .supplier-product-action-bar {

@@ -21,13 +21,29 @@ const brandDetails = computed(() => ({
   brand: brandRecord.value?.brand || brandName.value,
   description: brandRecord.value?.description || '',
   image: brandRecord.value?.image || '',
+  primaryBannerImage: brandRecord.value?.primaryBannerImage || '',
+  secondaryBannerImage: brandRecord.value?.secondaryBannerImage || '',
+  tertiaryBannerImage: brandRecord.value?.tertiaryBannerImage || '',
   bannerImage: brandRecord.value?.bannerImage || '',
   bannerImages: brandRecord.value?.bannerImages || [],
 }))
 const brandDisplayName = computed(() => brandDetails.value.displayName || brandName.value)
-const brandBannerImages = computed(() =>
-  brandDetails.value.bannerImages.filter((image) => !failedBrandBannerImages.value.includes(image)),
-)
+const brandBannerImages = computed(() => {
+  const images = [
+    brandDetails.value.primaryBannerImage,
+    brandDetails.value.secondaryBannerImage,
+    brandDetails.value.tertiaryBannerImage,
+  ]
+    .filter(Boolean)
+
+  const sliderImages = images.length
+    ? images
+    : (brandDetails.value.bannerImages.length
+      ? brandDetails.value.bannerImages
+      : [brandDetails.value.bannerImage].filter(Boolean))
+
+  return sliderImages.filter((image) => !failedBrandBannerImages.value.includes(image))
+})
 const brandDescription = computed(() => brandDetails.value.description || '')
 const brandInitials = computed(() => brandDisplayName.value.slice(0, 2).toUpperCase())
 const brandProducts = computed(() =>
@@ -111,6 +127,15 @@ async function loadBrandProducts() {
 
     brandRecord.value = brand
     loadedProducts.value = products
+    console.log('Brand details page state', {
+      brandName: brandName.value,
+      brand,
+      primaryBannerImage: brand?.primaryBannerImage || '',
+      secondaryBannerImage: brand?.secondaryBannerImage || '',
+      tertiaryBannerImage: brand?.tertiaryBannerImage || '',
+      bannerImage: brand?.bannerImage || '',
+      bannerImages: brand?.bannerImages || [],
+    })
   } catch {
     brandRecord.value = null
     loadedProducts.value = []

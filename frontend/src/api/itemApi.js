@@ -484,37 +484,16 @@ export async function getItemMasterVariants(templateItemName) {
 }
 
 export async function getItemMasterCategories() {
-  try {
-    const itemGroups = await getDocTypeList('Item Group', {
-      fields: [
-        'name',
-        'item_group_name',
-        'parent_item_group',
-        'is_group',
-        'image',
-      ],
-      filters: [
-        ['Item Group', 'name', '!=', 'All Item Groups'],
-      ],
-      order_by: 'lft asc',
-      limit_page_length: 5000,
-    })
+  const query = new URLSearchParams({
+    limit_page_length: 5000,
+    published: 1,
+  })
+  const response = await apiRequest(`${ITEM_GROUP_API_PATH}?${query.toString()}`)
+  const itemGroups = response.message || []
 
-    return itemGroups
-      .filter(isPublishedItem)
-      .map(mapItemGroupToCategory)
-  } catch (error) {
-    const query = new URLSearchParams({
-      limit_page_length: 5000,
-      published: 1,
-    })
-    const response = await apiRequest(`${ITEM_GROUP_API_PATH}?${query.toString()}`)
-    const itemGroups = response.message || []
-
-    return itemGroups
-      .filter(isPublishedItem)
-      .map(mapItemGroupToCategory)
-  }
+  return itemGroups
+    .filter(isPublishedItem)
+    .map(mapItemGroupToCategory)
 }
 
 export async function searchItemMasterItems(searchText) {
