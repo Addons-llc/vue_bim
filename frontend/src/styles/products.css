@@ -1162,11 +1162,26 @@
   justify-content: center;
   width: 40px;
   height: 40px;
+  overflow: hidden;
+  border-radius: 12px;
   background: #ef4444;
   color: #ffffff;
   font-size: 12px;
   font-weight: 900;
-  transform: rotate(45deg);
+}
+
+.product-detail-seller-mark img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.product-detail-seller-mark > span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
 }
 
 .product-detail-seller-card span:not(.product-detail-seller-mark),

@@ -39,6 +39,17 @@ const productQuantity = computed(() => {
 const supplierName = computed(() =>
   product.value?.supplierName || product.value?.supplier || 'Supplier not set',
 )
+const supplierImage = computed(() =>
+  product.value?.supplierDetails?.image || '',
+)
+const supplierInitials = computed(() =>
+  supplierName.value
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part.charAt(0).toUpperCase())
+    .join('') || supplierName.value.slice(0, 2).toUpperCase(),
+)
 const sourceListing = computed(() => product.value?.sourceListing || null)
 const brandName = computed(() =>
   product.value?.brand
@@ -659,7 +670,14 @@ onUnmounted(() => {
           :to="{ name: 'supplier-details', params: { supplierName } }"
           @click="rememberSupplierSelection"
         >
-          <span class="product-detail-seller-mark">{{ supplierName.slice(0, 2).toUpperCase() }}</span>
+          <span class="product-detail-seller-mark">
+            <img
+              v-if="supplierImage"
+              :src="supplierImage"
+              :alt="`${supplierName} logo`"
+            />
+            <span v-else>{{ supplierInitials }}</span>
+          </span>
           <div>
             <span>Sold by</span>
             <strong>{{ supplierName }}</strong>
