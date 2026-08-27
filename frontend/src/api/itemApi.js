@@ -97,6 +97,15 @@ function hasCustomDeliverySlots(item) {
   )
 }
 
+function getCustomDeliveryFee(item) {
+  return toNumber(
+    item.custom_delivery_fee
+      ?? item.customDeliveryFee
+      ?? item.delivery_fee
+      ?? item.deliveryFee,
+  )
+}
+
 function hasPublishField(item) {
   return [
     'published_in_supplier_portal',
@@ -291,6 +300,7 @@ async function mapItemToProduct(item) {
     brand: item.brand || '',
     customPopularItems: isTruthyFlag(item.custom_popular_items),
     customDeliverySlots: hasCustomDeliverySlots(item),
+    customDeliveryFee: getCustomDeliveryFee(item),
     description: description || '',
     customSize,
     price: getItemSellingPrice(item),

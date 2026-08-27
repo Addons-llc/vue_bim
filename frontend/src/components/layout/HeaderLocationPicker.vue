@@ -1,7 +1,11 @@
 <script setup>
 import { onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { clearCurrentLocationCoords, storeCurrentLocationCoords } from '../../api/deliveryEta'
+import {
+  clearCurrentLocationCoords,
+  LOCATION_UPDATED_EVENT,
+  storeCurrentLocationCoords,
+} from '../../api/deliveryEta'
 import { loadGoogleMaps } from '../../api/googleMaps'
 
 const route = useRoute()
@@ -33,6 +37,8 @@ function setSelectedLocation(location) {
     localStorage.removeItem(LOCATION_STORAGE_KEY)
     clearCurrentLocationCoords()
   }
+
+  window.dispatchEvent(new CustomEvent(LOCATION_UPDATED_EVENT))
 }
 
 function isPlusCodeLabel(label = '') {
@@ -309,6 +315,13 @@ async function selectSuggestion(suggestion) {
 
   const displayLocation = buildReadableLocationFromComponents(placeDetails || {})
 
+  if (placeDetails?.geometry?.location) {
+    storeCurrentLocationCoords({
+      lat: placeDetails.geometry.location.lat(),
+      lng: placeDetails.geometry.location.lng(),
+    })
+  }
+
   setSelectedLocation(displayLocation || suggestion.description)
   closeLocationDialog()
 }
@@ -343,6 +356,14 @@ async function submitTypedLocation() {
       }
 
       const displayLocation = buildReadableLocationFromComponents(geocodedResult)
+      const geocodedLocation = geocodedResult.geometry?.location
+
+      if (geocodedLocation) {
+        storeCurrentLocationCoords({
+          lat: geocodedLocation.lat(),
+          lng: geocodedLocation.lng(),
+        })
+      }
 
       setSelectedLocation(displayLocation || normalizeDisplayedLocation(geocodedResult.formatted_address || location))
       closeLocationDialog()
