@@ -410,6 +410,11 @@ def _get_default_company():
 	return company
 
 
+def _get_company_currency(company):
+	company_currency = frappe.db.get_value("Company", company, "default_currency")
+	return _clean_text(company_currency) or DEFAULT_CURRENCY.upper()
+
+
 def _get_non_group_default(doctype, setting_key, label):
 	configured_value = frappe.defaults.get_global_default(setting_key)
 	if configured_value:
@@ -927,6 +932,7 @@ def _build_sales_order_delivery_tax_rows(delivery_fee):
 def _build_sales_order_item_rows(checkout_items, company, delivery_date=None):
 	order_items = []
 	delivery_date = delivery_date or nowdate()
+	company_currency = _get_company_currency(company)
 	sales_order_item_meta = frappe.get_meta("Sales Order Item")
 	for item in checkout_items:
 		if not frappe.db.exists("Item", item["item_code"]):
@@ -944,11 +950,23 @@ def _build_sales_order_item_rows(checkout_items, company, delivery_date=None):
 				)
 			)
 
+		quantity = flt(item["quantity"])
+		rate = flt(item["rate"])
+		amount = rate * quantity
 		row = {
 			"item_code": item["item_code"],
 			"item_name": item["item_name"],
-			"qty": item["quantity"],
-			"rate": item["rate"],
+			"qty": quantity,
+			"rate": rate,
+			"price_list_rate": rate,
+			"base_rate": rate,
+			"amount": amount,
+			"base_amount": amount,
+			"net_rate": rate,
+			"net_amount": amount,
+			"base_net_amount": amount,
+			"stock_uom": frappe.db.get_value("Item", item["item_code"], "stock_uom"),
+			"currency": company_currency,
 			"delivery_date": delivery_date,
 		}
 		if item.get("size"):
@@ -1479,6 +1497,11 @@ def _upsert_sales_order(
 		{
 			"customer": customer,
 			"company": company,
+			"currency": _get_company_currency(company),
+			"selling_price_list": SELLING_PRICE_LIST,
+			"price_list_currency": _get_company_currency(company),
+			"conversion_rate": 1,
+			"plc_conversion_rate": 1,
 			"transaction_date": order_date,
 			"delivery_date": delivery_date,
 			"order_type": "Sales",

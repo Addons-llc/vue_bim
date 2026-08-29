@@ -50,6 +50,8 @@ export function toggleProductWishlist(product) {
     reviewCount: product.reviewCount,
     deliveryTime: product.deliveryTime,
     inStock: product.inStock,
+    customAvailableQty: product.customAvailableQty,
+    customOutOfStock: product.customOutOfStock,
     stockQuantity: product.stockQuantity,
     supplierDetails: product.supplierDetails,
     images: product.images,

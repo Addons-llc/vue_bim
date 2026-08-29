@@ -24,6 +24,18 @@ function getStockQuantity(item) {
   return toNumber(item.actual_qty ?? item.projected_qty ?? item.stock_qty ?? item.qty_available)
 }
 
+function getAvailableQuantity(item) {
+  if (item.custom_available_qty !== undefined || item.customAvailableQty !== undefined) {
+    return toNumber(item.custom_available_qty ?? item.customAvailableQty)
+  }
+
+  return getStockQuantity(item)
+}
+
+function isOutOfStock(item, availableQuantity) {
+  return isTruthyFlag(item.custom_out_of_stock ?? item.customOutOfStock) && availableQuantity <= 0
+}
+
 function getReviewCount(item) {
   return toNumber(item.review_count ?? item.reviews_count ?? item.total_reviews)
 }
@@ -283,7 +295,8 @@ async function mapItemToProduct(item) {
   const description = stripHtml(item.description || '')
   const customSize = getItemSize(item)
   const itemCode = item.item_code || item.name
-  const stockQuantity = getStockQuantity(item)
+  const stockQuantity = getAvailableQuantity(item)
+  const outOfStock = isOutOfStock(item, stockQuantity)
   const reviewCount = getReviewCount(item)
   const supplierDetails = getSupplierDetails(item)
   const attachmentImages = getItemAttachmentImages(item)
@@ -312,8 +325,10 @@ async function mapItemToProduct(item) {
     supplier: supplierDetails.name,
     supplierName: supplierDetails.displayName || supplierDetails.name,
     supplierDetails,
+    customAvailableQty: stockQuantity,
+    customOutOfStock: outOfStock,
     stockQuantity,
-    inStock: stockQuantity > 0 || item.disabled === 0,
+    inStock: !outOfStock,
     isPublished: isPublishedItem(item),
     hasVariants: isTruthyFlag(item.has_variants ?? item.hasVariants),
     variantBasedOn: item.variant_based_on || item.variantBasedOn || '',
@@ -469,37 +484,16 @@ export async function getItemMasterVariants(templateItemName) {
 }
 
 export async function getItemMasterCategories() {
-  try {
-    const itemGroups = await getDocTypeList('Item Group', {
-      fields: [
-        'name',
-        'item_group_name',
-        'parent_item_group',
-        'is_group',
-        'image',
-      ],
-      filters: [
-        ['Item Group', 'name', '!=', 'All Item Groups'],
-      ],
-      order_by: 'lft asc',
-      limit_page_length: 5000,
-    })
+  const query = new URLSearchParams({
+    limit_page_length: 5000,
+    published: 1,
+  })
+  const response = await apiRequest(`${ITEM_GROUP_API_PATH}?${query.toString()}`)
+  const itemGroups = response.message || []
 
-    return itemGroups
-      .filter(isPublishedItem)
-      .map(mapItemGroupToCategory)
-  } catch (error) {
-    const query = new URLSearchParams({
-      limit_page_length: 5000,
-      published: 1,
-    })
-    const response = await apiRequest(`${ITEM_GROUP_API_PATH}?${query.toString()}`)
-    const itemGroups = response.message || []
-
-    return itemGroups
-      .filter(isPublishedItem)
-      .map(mapItemGroupToCategory)
-  }
+  return itemGroups
+    .filter(isPublishedItem)
+    .map(mapItemGroupToCategory)
 }
 
 export async function searchItemMasterItems(searchText) {

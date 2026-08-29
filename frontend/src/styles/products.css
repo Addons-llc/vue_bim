@@ -1162,11 +1162,26 @@
   justify-content: center;
   width: 40px;
   height: 40px;
+  overflow: hidden;
+  border-radius: 12px;
   background: #ef4444;
   color: #ffffff;
   font-size: 12px;
   font-weight: 900;
-  transform: rotate(45deg);
+}
+
+.product-detail-seller-mark img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.product-detail-seller-mark > span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
 }
 
 .product-detail-seller-card span:not(.product-detail-seller-mark),
@@ -1553,7 +1568,11 @@
 }
 
 .brand-detail-page .brand-banner-slide {
+  position: relative;
+  inset: auto;
   flex: 0 0 100%;
+  width: 100%;
+  height: 100%;
 }
 
 .supplier-store-overview {
@@ -1678,6 +1697,24 @@
   max-width: none;
   min-width: 0;
   flex: initial;
+}
+
+.product-related-panel {
+  padding-top: 6px;
+}
+
+.product-related-row {
+  display: flex;
+  gap: 14px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  scroll-snap-type: x proximity;
+}
+
+.product-related-row .product-card.is-compact {
+  min-width: 220px;
+  max-width: 220px;
+  scroll-snap-align: start;
 }
 
 .supplier-product-action-bar {

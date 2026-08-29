@@ -598,7 +598,7 @@ async function startStripeCheckout() {
     })
     const response = await createStripeCheckoutSession(
       cartProducts.value,
-      '',
+      salesOrderName.value,
       selectedDeliveryAddress.value,
       selectedDeliveryDate.value,
       effectiveDeliverySlot.value,
@@ -676,7 +676,7 @@ async function placeCashOnDeliveryOrder() {
     })
     const response = await createCashOnDeliveryOrder(
       cartProducts.value,
-      '',
+      salesOrderName.value,
       selectedDeliveryAddress.value,
       selectedDeliveryDate.value,
       effectiveDeliverySlot.value,

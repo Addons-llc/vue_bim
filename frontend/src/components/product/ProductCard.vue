@@ -28,7 +28,13 @@ const cartItem = computed(() => cartProducts.value.find((item) => item.id === pr
 const cartQuantity = computed(() => cartItem.value?.quantity || 0)
 const isWishlisted = computed(() => isProductWishlisted(props.product.id))
 const productPlaceholderImage = `${import.meta.env.BASE_URL}grocery-card-image-v3.svg?v=3`
-const stockLabel = computed(() => (props.product.inStock === false ? 'Out of stock' : 'In stock'))
+const availableQuantity = computed(() => {
+  const quantity = Number(props.product.customAvailableQty ?? props.product.stockQuantity ?? 0)
+
+  return Number.isFinite(quantity) ? quantity : 0
+})
+const isOutOfStock = computed(() => props.product.inStock === false)
+const stockLabel = computed(() => (isOutOfStock.value ? 'Out of stock' : `${availableQuantity.value} in stock`))
 const supplierName = computed(() =>
   props.product.supplierName || props.product.supplier || '',
 )
@@ -183,7 +189,7 @@ watch(
           <span class="product-card-reviews">{{ reviewLabel }}</span>
           <span
             class="product-card-stock"
-            :class="{ 'is-out': product.inStock === false }"
+            :class="{ 'is-out': isOutOfStock }"
           >
             {{ stockLabel }}
           </span>
@@ -216,7 +222,7 @@ watch(
           class="add-cart-button"
           type="button"
           :aria-label="`Add ${product.name} to cart`"
-          :disabled="product.inStock === false"
+          :disabled="isOutOfStock"
           @click.stop="handleAddToCart"
         >
           ADD TO CART
