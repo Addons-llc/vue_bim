@@ -3,7 +3,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { getProductById, getProducts } from '../api/productApi'
 import { getSupplierDetails } from '../api/supplierApi'
-import { getSupplierStore } from '../api/supplierStoreApi'
+import { getSupplierStore, getSupplierStorePortalUrl } from '../api/supplierStoreApi'
 import ProductCard from '../components/product/ProductCard.vue'
 import { saveSelectedProduct } from '../data/productSelectionStore'
 import { getSelectedSupplier } from '../data/supplierSelectionStore'
@@ -14,6 +14,7 @@ const supplierName = computed(() => String(route.params.supplierName || 'Supplie
 const selectedSupplier = computed(() => getSelectedSupplier(supplierName.value))
 const supplierRecord = ref(null)
 const supplierStore = ref(null)
+const supplierPortalUrl = ref('')
 const failedSupplierBannerImage = ref('')
 const isSupplierDescriptionExpanded = ref(false)
 const supplierDetails = computed(() => {
@@ -109,6 +110,15 @@ const storeSupplierName = computed(() => supplierDetails.value.supplier || '')
 const supplierPhone = computed(() => supplierDetails.value.phone || '')
 const supplierEmail = computed(() => supplierDetails.value.email || '')
 const supplierWebsite = computed(() => supplierDetails.value.website || '')
+const normalizedSupplierWebsite = computed(() => {
+  const website = supplierWebsite.value.trim()
+
+  if (!website) {
+    return ''
+  }
+
+  return /^https?:\/\//i.test(website) ? website : `https://${website}`
+})
 const supplierDescription = computed(() => supplierDetails.value.details || '')
 const isSupplierDescriptionLong = computed(() => supplierDescription.value.length > 120)
 const supplierSince = computed(() => supplierDetails.value.sellerSince || '')
@@ -116,8 +126,9 @@ const hasSupplierContact = computed(() =>
   Boolean(supplierPhone.value || supplierEmail.value || supplierWebsite.value),
 )
 const hasSupplierInfo = computed(() =>
-  Boolean(storeName.value || storeSupplierName.value || supplierWebsite.value),
+  Boolean(storeName.value || storeSupplierName.value || supplierWebsite.value || supplierPortalUrl.value),
 )
+const hasSupplierPortalUrl = computed(() => Boolean(supplierPortalUrl.value))
 const dummySupplierRating = {
   score: '4.7',
   reviewCount: 128,
@@ -151,6 +162,9 @@ async function loadSupplierProducts() {
 
     supplierStore.value = loadedStore
     supplierRecord.value = details
+    supplierPortalUrl.value = await getSupplierStorePortalUrl(
+      loadedStore?.storeCode || loadedStore?.id || supplierName.value,
+    ).catch(() => '')
 
     const store = supplierStore.value
     const supplierFilter = supplierRecord.value?.supplier || store?.supplier || supplierName.value
@@ -180,6 +194,7 @@ async function loadSupplierProducts() {
     loadedProducts.value = products
   } catch {
     supplierRecord.value = null
+    supplierPortalUrl.value = ''
     loadedProducts.value = []
   } finally {
     isLoadingSupplierProducts.value = false
@@ -191,6 +206,7 @@ onMounted(loadSupplierProducts)
 watch(supplierName, () => {
   supplierRecord.value = null
   supplierStore.value = null
+  supplierPortalUrl.value = ''
   loadedProducts.value = []
   failedSupplierBannerImage.value = ''
   isSupplierDescriptionExpanded.value = false
@@ -219,7 +235,7 @@ watch(supplierName, () => {
         <span v-if="supplierEmail">✉ {{ supplierEmail }}</span>
         <a
           v-if="supplierWebsite"
-          :href="supplierWebsite"
+          :href="normalizedSupplierWebsite"
           target="_blank"
           rel="noreferrer"
         >
@@ -235,6 +251,26 @@ watch(supplierName, () => {
         <div v-if="storeSupplierName" class="supplier-profile-info-row">
           <span>Supplier</span>
           <p>{{ storeSupplierName }}</p>
+        </div>
+        <div class="supplier-profile-info-row supplier-front-view-row">
+          <span>Supplier Website</span>
+          <a
+            v-if="hasSupplierPortalUrl"
+            class="supplier-front-view-link"
+            :href="supplierPortalUrl"
+            target="_blank"
+            rel="noreferrer"
+          >
+            Visit website
+          </a>
+          <button
+            v-else
+            class="supplier-front-view-link is-disabled"
+            type="button"
+            disabled
+          >
+            -
+          </button>
         </div>
       </section>
 

@@ -1399,6 +1399,7 @@
   }
 
   .supplier-ratings-panel {
+    order: 3;
     gap: 12px;
     justify-self: stretch;
     max-width: none;

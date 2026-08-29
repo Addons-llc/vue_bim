@@ -24,6 +24,24 @@ function getImageUrl(imagePath) {
     : `${SITE_BASE_URL}/${imagePath}`
 }
 
+function normalizeWebsiteUrl(url) {
+  const value = String(url || '').trim()
+
+  if (!value) {
+    return ''
+  }
+
+  if (/^(https?:|data:|blob:)/i.test(value)) {
+    return value
+  }
+
+  if (value.startsWith('/')) {
+    return `${SITE_BASE_URL}${value}`
+  }
+
+  return `https://${value}`
+}
+
 function getStoreProductIds(store = {}) {
   const productRows = [
     store.products,
@@ -143,4 +161,42 @@ export async function getSupplierStore(identifier) {
       store.storeCode,
     ].some((value) => String(value || '').toLowerCase() === normalizedIdentifier),
   ) || null
+}
+
+async function getSupplierWebsiteProfileUrlByStoreValue(supplierStore) {
+  const filters = encodeURIComponent(JSON.stringify([
+    ['supplier_store', '=', supplierStore],
+  ]))
+  const fields = encodeURIComponent(JSON.stringify(['name', 'supplier_store', 'url']))
+  const response = await apiRequest(
+    `/resource/Supplier Website Profile?fields=${fields}&filters=${filters}&limit_page_length=1`,
+  )
+  const profile = response.data?.[0]
+
+  return normalizeWebsiteUrl(profile?.url)
+}
+
+export async function getSupplierStorePortalUrl(storeIdentifier) {
+  if (!storeIdentifier) {
+    return ''
+  }
+
+  const store = await getSupplierStore(storeIdentifier).catch(() => null)
+  const candidateStoreValues = [
+    store?.storeCode,
+    store?.id,
+    store?.name,
+    store?.supplier,
+    storeIdentifier,
+  ].filter(Boolean)
+
+  for (const supplierStore of [...new Set(candidateStoreValues)]) {
+    const portalUrl = await getSupplierWebsiteProfileUrlByStoreValue(supplierStore).catch(() => '')
+
+    if (portalUrl) {
+      return portalUrl
+    }
+  }
+
+  return ''
 }
