@@ -373,11 +373,12 @@ def _normalize_user_name(user_name, default="Guest"):
 
 
 def _get_item_selling_price(item_code, fallback_rate=0):
+	selling_price_list = _get_selling_price_list()
 	price_record = frappe.db.get_value(
 		"Item Price",
 		{
 			"item_code": item_code,
-			"price_list": SELLING_PRICE_LIST,
+			"price_list": selling_price_list,
 			"selling": 1,
 		},
 		["price_list_rate"],
@@ -413,6 +414,29 @@ def _get_default_company():
 def _get_company_currency(company):
 	company_currency = frappe.db.get_value("Company", company, "default_currency")
 	return _clean_text(company_currency) or DEFAULT_CURRENCY.upper()
+
+
+def _get_selling_price_list():
+	configured_price_list = (
+		frappe.defaults.get_user_default("selling_price_list")
+		or frappe.defaults.get_global_default("selling_price_list")
+	)
+	if configured_price_list and frappe.db.get_value(
+		"Price List",
+		{"name": configured_price_list, "enabled": 1, "selling": 1},
+		"name",
+	):
+		return configured_price_list
+
+	enabled_price_list = frappe.db.get_value(
+		"Price List",
+		{"enabled": 1, "selling": 1},
+		"name",
+	)
+	if enabled_price_list:
+		return enabled_price_list
+
+	return SELLING_PRICE_LIST
 
 
 def _get_non_group_default(doctype, setting_key, label):
@@ -1498,7 +1522,7 @@ def _upsert_sales_order(
 			"customer": customer,
 			"company": company,
 			"currency": _get_company_currency(company),
-			"selling_price_list": SELLING_PRICE_LIST,
+			"selling_price_list": _get_selling_price_list(),
 			"price_list_currency": _get_company_currency(company),
 			"conversion_rate": 1,
 			"plc_conversion_rate": 1,

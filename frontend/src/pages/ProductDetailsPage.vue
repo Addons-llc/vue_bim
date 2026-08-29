@@ -74,6 +74,21 @@ const hasProductVariants = computed(() => productVariants.value.length > 0)
 const showVariantDropdowns = computed(() =>
   hasProductVariants.value && product.value?.variantBasedOn === 'Item Attribute',
 )
+const visibleVariantOptions = computed(() =>
+  productVariants.value.map((variant) => {
+    const label = variant.variantLabel
+      || variant.variantAttributes?.map((attribute) => attribute.value).filter(Boolean).join(' / ')
+      || variant.name
+
+    return {
+      id: variant.id,
+      label,
+      price: variant.price,
+      inStock: variant.inStock !== false,
+      attributes: variant.variantAttributes || [],
+    }
+  }),
+)
 const isOutOfDeliveryRange = computed(() =>
   Number.isFinite(supplierDistanceKm.value) && supplierDistanceKm.value > MAX_DELIVERABLE_DISTANCE_KM,
 )
@@ -629,6 +644,32 @@ onUnmounted(() => {
             {{ product.price }}
           </span>
         </div>
+
+        <section
+          v-if="visibleVariantOptions.length"
+          class="product-detail-section product-variant-selector-section"
+        >
+          <h3>Variants</h3>
+          <div class="product-variant-option-grid" role="list" aria-label="Choose product variant">
+            <button
+              v-for="variant in visibleVariantOptions"
+              :key="variant.id"
+              class="product-variant-option"
+              :class="{
+                'is-selected': selectedVariantId === variant.id,
+                'is-unavailable': !variant.inStock,
+              }"
+              type="button"
+              :aria-pressed="selectedVariantId === variant.id"
+              @click="selectProductVariant(productVariants.find((item) => item.id === variant.id))"
+            >
+              <strong>{{ variant.label }}</strong>
+              <span>AED {{ variant.price }}</span>
+              <small>{{ variant.inStock ? 'In stock' : 'Out of stock' }}</small>
+            </button>
+          </div>
+          <p v-if="isLoadingVariants" class="product-variant-status">Loading variants...</p>
+        </section>
 
         <section
           v-if="productSizeOptions.length && !showVariantDropdowns"

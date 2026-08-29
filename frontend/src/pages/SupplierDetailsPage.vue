@@ -164,6 +164,7 @@ async function loadSupplierProducts() {
     supplierRecord.value = details
     supplierPortalUrl.value = await getSupplierStorePortalUrl(
       loadedStore?.storeCode || loadedStore?.id || supplierName.value,
+      details?.supplier || loadedStore?.supplier || supplierName.value,
     ).catch(() => '')
 
     const store = supplierStore.value

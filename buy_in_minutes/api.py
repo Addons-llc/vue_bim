@@ -110,10 +110,35 @@ def _get_item_group_publish_fields():
 	return _get_existing_fields("Item Group", ITEM_GROUP_PUBLISH_FIELDS)
 
 
+def _get_selling_price_list():
+	configured_price_list = (
+		frappe.defaults.get_user_default("selling_price_list")
+		or frappe.defaults.get_global_default("selling_price_list")
+	)
+	if configured_price_list and frappe.db.get_value(
+		"Price List",
+		{"name": configured_price_list, "enabled": 1, "selling": 1},
+		"name",
+	):
+		return configured_price_list
+
+	enabled_price_list = frappe.db.get_value(
+		"Price List",
+		{"enabled": 1, "selling": 1},
+		"name",
+	)
+	if enabled_price_list:
+		return enabled_price_list
+
+	return SELLING_PRICE_LIST
+
+
 def _get_selling_prices(item_codes):
 	item_codes = [item_code for item_code in item_codes if item_code]
 	if not item_codes:
 		return {}
+
+	selling_price_list = _get_selling_price_list()
 
 	price_records = frappe.get_all(
 		"Item Price",
@@ -129,7 +154,7 @@ def _get_selling_prices(item_codes):
 	for price_record in price_records:
 		item_code = price_record.item_code
 		current_price_record = prices.get(item_code)
-		if not current_price_record or price_record.price_list == SELLING_PRICE_LIST:
+		if not current_price_record or price_record.price_list == selling_price_list:
 			prices[item_code] = price_record
 
 	return prices
