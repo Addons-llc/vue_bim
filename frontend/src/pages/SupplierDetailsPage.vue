@@ -109,9 +109,8 @@ const storeName = computed(() => supplierDetails.value.storeName || '')
 const storeSupplierName = computed(() => supplierDetails.value.supplier || '')
 const supplierPhone = computed(() => supplierDetails.value.phone || '')
 const supplierEmail = computed(() => supplierDetails.value.email || '')
-const supplierWebsite = computed(() => supplierPortalUrl.value || supplierDetails.value.website || '')
 const normalizedSupplierWebsite = computed(() => {
-  const website = supplierWebsite.value.trim()
+  const website = String(supplierPortalUrl.value || '').trim()
 
   if (!website) {
     return ''
@@ -123,10 +122,10 @@ const supplierDescription = computed(() => supplierDetails.value.details || '')
 const isSupplierDescriptionLong = computed(() => supplierDescription.value.length > 120)
 const supplierSince = computed(() => supplierDetails.value.sellerSince || '')
 const hasSupplierContact = computed(() =>
-  Boolean(supplierPhone.value || supplierEmail.value || supplierWebsite.value),
+  Boolean(supplierPhone.value || supplierEmail.value),
 )
 const hasSupplierInfo = computed(() =>
-  Boolean(storeName.value || storeSupplierName.value || supplierWebsite.value || supplierPortalUrl.value),
+  Boolean(storeName.value || storeSupplierName.value || supplierPortalUrl.value),
 )
 const hasSupplierWebsiteLink = computed(() => Boolean(normalizedSupplierWebsite.value))
 const dummySupplierRating = {
@@ -234,14 +233,6 @@ watch(supplierName, () => {
       <div v-if="hasSupplierContact" class="supplier-profile-contact">
         <span v-if="supplierPhone">☏ {{ supplierPhone }}</span>
         <span v-if="supplierEmail">✉ {{ supplierEmail }}</span>
-        <a
-          v-if="supplierWebsite"
-          :href="normalizedSupplierWebsite"
-          target="_blank"
-          rel="noreferrer"
-        >
-          ⌁ {{ supplierWebsite }}
-        </a>
       </div>
 
       <section v-if="hasSupplierInfo" class="supplier-profile-info" aria-label="Supplier information">

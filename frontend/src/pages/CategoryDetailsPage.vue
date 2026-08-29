@@ -153,7 +153,10 @@ function openProductDetails(product) {
       </div>
     </header>
 
-    <div class="category-detail-layout">
+    <div
+      class="category-detail-layout"
+      :class="{ 'has-no-sidebar': !isStoreDetailsPage && !sidebarCategoryItems.length }"
+    >
       <aside
         v-if="!isStoreDetailsPage && sidebarCategoryItems.length"
         class="category-detail-sidebar"

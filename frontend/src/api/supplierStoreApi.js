@@ -5,6 +5,7 @@ import {
 import { apiRequest } from './http'
 
 const supplierStorePlaceholderImage = `${import.meta.env.BASE_URL}fresh-market-placeholder.svg?v=1`
+const SUPPLIER_WEBSITE_BASE_URL = 'https://buyinminutes.u.frappe.cloud/supplier-website'
 
 function getImageUrl(imagePath) {
   if (!imagePath) {
@@ -173,7 +174,7 @@ async function getSupplierWebsiteProfileUrlByStoreValue(supplierStore) {
   )
   const profile = response.data?.[0]
 
-  return normalizeWebsiteUrl(profile?.supplier_store)
+  return buildSupplierPortalUrlFromSlug(profile?.slug)
 }
 
 async function getSupplierWebsiteProfileBySupplier(supplier) {
@@ -195,7 +196,7 @@ function buildSupplierPortalUrlFromSlug(slug) {
     return ''
   }
 
-  return `${SITE_BASE_URL}/supplier-website/${normalizedSlug}`
+  return `${SUPPLIER_WEBSITE_BASE_URL}/${normalizedSlug}`
 }
 
 export async function getSupplierStorePortalUrl(storeIdentifier, supplierName = '') {
@@ -205,10 +206,7 @@ export async function getSupplierStorePortalUrl(storeIdentifier, supplierName = 
     : null
 
   if (profile) {
-    return (
-      normalizeWebsiteUrl(profile.supplier_store)
-      || buildSupplierPortalUrlFromSlug(profile.slug)
-    )
+    return buildSupplierPortalUrlFromSlug(profile.slug)
   }
 
   if (!storeIdentifier) {
