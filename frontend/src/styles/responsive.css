@@ -1320,7 +1320,12 @@
   }
 
   .supplier-profile-panel {
-    display: none;
+    display: grid;
+    order: 1;
+    gap: 12px;
+    border-right: 0;
+    border-bottom: 1px solid #e5e7eb;
+    padding: 12px 12px 0;
   }
 
   .supplier-profile-header {
@@ -1350,7 +1355,7 @@
   }
 
   .supplier-store-main {
-    order: 1;
+    order: 2;
     gap: 14px;
     min-width: 0;
     overflow-x: clip;

@@ -57,9 +57,20 @@ const selectedCategoryRecord = computed(() =>
     [category.id, category.name, category.itemGroup].includes(selectedCategory.value),
   ) || null,
 )
-const childCategoryItems = computed(() =>
-  selectedCategoryRecord.value
-    ? getChildCategories(selectedCategoryRecord.value, categories.value)
+const parentCategoryRecord = computed(() => {
+  const parentItemGroup = String(selectedCategoryRecord.value?.parentItemGroup || '').trim()
+
+  if (!parentItemGroup || parentItemGroup === 'All Item Groups') {
+    return selectedCategoryRecord.value
+  }
+
+  return categories.value.find((category) =>
+    [category.id, category.name, category.itemGroup].includes(parentItemGroup),
+  ) || selectedCategoryRecord.value
+})
+const sidebarCategoryItems = computed(() =>
+  parentCategoryRecord.value
+    ? getChildCategories(parentCategoryRecord.value, categories.value)
     : [],
 )
 
@@ -144,15 +155,15 @@ function openProductDetails(product) {
 
     <div class="category-detail-layout">
       <aside
-        v-if="!isStoreDetailsPage && childCategoryItems.length"
+        v-if="!isStoreDetailsPage && sidebarCategoryItems.length"
         class="category-detail-sidebar"
-        aria-label="Categories"
+        aria-label="Available item groups"
       >
         <button
-          v-for="category in childCategoryItems"
+          v-for="category in sidebarCategoryItems"
           :key="category.id"
           class="category-side-item"
-          :class="{ 'is-active': activeCategory === category.name }"
+          :class="{ 'is-active': [category.id, category.name, category.itemGroup].includes(selectedCategory) }"
           type="button"
           @click="selectCategory(category)"
         >

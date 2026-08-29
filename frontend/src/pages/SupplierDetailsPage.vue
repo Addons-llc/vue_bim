@@ -109,7 +109,7 @@ const storeName = computed(() => supplierDetails.value.storeName || '')
 const storeSupplierName = computed(() => supplierDetails.value.supplier || '')
 const supplierPhone = computed(() => supplierDetails.value.phone || '')
 const supplierEmail = computed(() => supplierDetails.value.email || '')
-const supplierWebsite = computed(() => supplierDetails.value.website || '')
+const supplierWebsite = computed(() => supplierPortalUrl.value || supplierDetails.value.website || '')
 const normalizedSupplierWebsite = computed(() => {
   const website = supplierWebsite.value.trim()
 
@@ -128,7 +128,7 @@ const hasSupplierContact = computed(() =>
 const hasSupplierInfo = computed(() =>
   Boolean(storeName.value || storeSupplierName.value || supplierWebsite.value || supplierPortalUrl.value),
 )
-const hasSupplierPortalUrl = computed(() => Boolean(supplierPortalUrl.value))
+const hasSupplierWebsiteLink = computed(() => Boolean(normalizedSupplierWebsite.value))
 const dummySupplierRating = {
   score: '4.7',
   reviewCount: 128,
@@ -256,9 +256,9 @@ watch(supplierName, () => {
         <div class="supplier-profile-info-row supplier-front-view-row">
           <span>Supplier Website</span>
           <a
-            v-if="hasSupplierPortalUrl"
+            v-if="hasSupplierWebsiteLink"
             class="supplier-front-view-link"
-            :href="supplierPortalUrl"
+            :href="normalizedSupplierWebsite"
             target="_blank"
             rel="noreferrer"
           >
