@@ -42,6 +42,9 @@ const productQuantity = computed(() => {
 const supplierName = computed(() =>
   product.value?.supplierName || product.value?.supplier || 'Supplier not set',
 )
+const supplierIdentifier = computed(() =>
+  product.value?.supplier || product.value?.supplierDetails?.name || supplierName.value,
+)
 const supplierImage = computed(() =>
   product.value?.supplierDetails?.image || '',
 )
@@ -508,7 +511,7 @@ function toggleProductDescription() {
 
 function rememberSupplierSelection() {
   saveSelectedSupplier({
-    name: supplierName.value,
+    name: supplierIdentifier.value,
     details: product.value?.supplierDetails,
     product: product.value,
   })
@@ -716,7 +719,7 @@ onUnmounted(() => {
       <aside class="product-detail-purchase" aria-label="Purchase options">
         <RouterLink
           class="product-detail-seller-card"
-          :to="{ name: 'supplier-details', params: { supplierName } }"
+          :to="{ name: 'supplier-details', params: { supplierName: supplierIdentifier } }"
           @click="rememberSupplierSelection"
         >
           <span class="product-detail-seller-mark">

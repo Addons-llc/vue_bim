@@ -127,9 +127,6 @@ const supplierSince = computed(() => supplierDetails.value.sellerSince || '')
 const hasSupplierContact = computed(() =>
   Boolean(supplierPhone.value || supplierEmail.value),
 )
-const hasSupplierInfo = computed(() =>
-  Boolean(storeName.value || storeSupplierName.value || supplierWebsite.value),
-)
 const hasSupplierWebsiteLink = computed(() => Boolean(normalizedSupplierWebsite.value))
 const dummySupplierRating = {
   score: '4.7',
@@ -238,7 +235,7 @@ watch(supplierName, () => {
         <span v-if="supplierEmail">✉ {{ supplierEmail }}</span>
       </div>
 
-      <section v-if="hasSupplierInfo" class="supplier-profile-info" aria-label="Supplier information">
+      <section class="supplier-profile-info" aria-label="Supplier information">
         <div v-if="storeName" class="supplier-profile-info-row">
           <span>Store Name</span>
           <p>{{ storeName }}</p>
