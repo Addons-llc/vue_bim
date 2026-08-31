@@ -38,6 +38,10 @@ const props = defineProps({
     type: String,
     default: 'category',
   },
+  iconGrid: {
+    type: Boolean,
+    default: false,
+  },
   showBrandDetailFallbacks: {
     type: Boolean,
     default: false,
@@ -132,7 +136,7 @@ function viewAll() {
 <template>
   <section
     class="category-section"
-    :class="`category-section--${itemType}`"
+    :class="[`category-section--${itemType}`, { 'is-icon-grid': iconGrid }]"
     :id="sectionId || undefined"
   >
     <div class="category-section-heading">

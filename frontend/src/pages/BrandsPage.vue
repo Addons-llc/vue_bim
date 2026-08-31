@@ -61,6 +61,7 @@ onMounted(loadBrands)
     <CategoryRail
       v-if="brands.length"
       :categories="brands"
+      icon-grid
       horizontal
       item-type="brand"
       title="Brands"

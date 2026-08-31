@@ -53,6 +53,7 @@ onMounted(loadStores)
     <CategoryRail
       v-if="stores.length"
       :categories="stores"
+      icon-grid
       horizontal
       item-type="store"
       title="Store"
