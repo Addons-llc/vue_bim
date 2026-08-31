@@ -88,6 +88,14 @@ const deliveryStatusMessage = computed(() => {
 
   return ''
 })
+const productSupplierWebsite = computed(() =>
+  String(product.value?.supplierDetails?.website || '').trim(),
+)
+const productDeliveryTimeLabel = computed(() => {
+  const deliveryTime = String(product.value?.deliveryTime || '').trim()
+
+  return deliveryTime || 'Set delivery location to view'
+})
 const productSizeOptions = computed(() => {
   const rawSize = product.value?.customSize || product.value?.custom_size || ''
 
@@ -208,6 +216,14 @@ const productDetails = computed(() => {
       details.push({ label: 'Size', value: selectedProductSizeLabel.value })
     }
 
+    if (productSupplierWebsite.value && !details.some((detail) => detail.label === 'Supplier website')) {
+      details.push({ label: 'Supplier website', value: productSupplierWebsite.value })
+    }
+
+    if (!details.some((detail) => detail.label === 'Delivery time')) {
+      details.push({ label: 'Delivery time', value: productDeliveryTimeLabel.value })
+    }
+
     return details
   }
 
@@ -216,12 +232,14 @@ const productDetails = computed(() => {
       ? { label: sourceListing.value.label || 'Selected from', value: sourceListing.value.name }
       : null,
     { label: 'Supplier', value: supplierName.value },
+    { label: 'Supplier website', value: productSupplierWebsite.value },
     sourceListing.value?.storeCode
       ? { label: 'Store code', value: sourceListing.value.storeCode }
       : null,
     selectedProductSizeLabel.value
       ? { label: 'Size', value: selectedProductSizeLabel.value }
       : null,
+    { label: 'Delivery time', value: productDeliveryTimeLabel.value },
     { label: 'Category', value: product.value.category },
   ].filter((detail) => detail?.value)
 })

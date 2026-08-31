@@ -109,8 +109,11 @@ const storeName = computed(() => supplierDetails.value.storeName || '')
 const storeSupplierName = computed(() => supplierDetails.value.supplier || '')
 const supplierPhone = computed(() => supplierDetails.value.phone || '')
 const supplierEmail = computed(() => supplierDetails.value.email || '')
+const supplierWebsite = computed(() => String(
+  supplierPortalUrl.value || supplierDetails.value.website || '',
+).trim())
 const normalizedSupplierWebsite = computed(() => {
-  const website = String(supplierPortalUrl.value || '').trim()
+  const website = supplierWebsite.value
 
   if (!website) {
     return ''
@@ -125,7 +128,7 @@ const hasSupplierContact = computed(() =>
   Boolean(supplierPhone.value || supplierEmail.value),
 )
 const hasSupplierInfo = computed(() =>
-  Boolean(storeName.value || storeSupplierName.value || supplierPortalUrl.value),
+  Boolean(storeName.value || storeSupplierName.value || supplierWebsite.value),
 )
 const hasSupplierWebsiteLink = computed(() => Boolean(normalizedSupplierWebsite.value))
 const dummySupplierRating = {

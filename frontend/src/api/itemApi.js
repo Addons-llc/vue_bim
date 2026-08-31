@@ -118,6 +118,18 @@ function getCustomDeliveryFee(item) {
   )
 }
 
+function getItemDeliveryTime(item) {
+  return stripHtml(
+    item.delivery_time
+      || item.custom_delivery_time
+      || item.estimated_delivery_time
+      || item.custom_estimated_delivery_time
+      || item.lead_time
+      || item.custom_lead_time
+      || '',
+  )
+}
+
 function hasPublishField(item) {
   return [
     'published_in_supplier_portal',
@@ -301,8 +313,10 @@ async function mapItemToProduct(item) {
   const supplierDetails = getSupplierDetails(item)
   const attachmentImages = getItemAttachmentImages(item)
   const images = getItemGalleryImages(item)
+  const fallbackDeliveryTime = getItemDeliveryTime(item)
   const deliveryTime = await getEstimatedDeliveryTimeLabel({
     supplierDetails,
+    deliveryTime: fallbackDeliveryTime,
   })
 
   return {
