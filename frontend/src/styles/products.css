@@ -1328,6 +1328,17 @@
   font-weight: 600;
 }
 
+.product-detail-trust-reviews {
+  margin-top: -8px;
+  color: #6b7280;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.product-detail-trust-reviews:hover {
+  color: #2563eb;
+}
+
 .product-detail-total-price {
   display: block;
   margin-top: 3px;
@@ -1543,6 +1554,74 @@
   gap: 8px;
   border-top: 1px dashed #dbe3f4;
   padding-top: 12px;
+}
+
+.supplier-profile-reviews {
+  margin: 0;
+  color: #6b7280;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.supplier-profile-reviews-wrap {
+  display: grid;
+  gap: 8px;
+  width: 100%;
+}
+
+.supplier-profile-reviews-toggle {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #6b7280;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.4;
+  text-align: left;
+  cursor: pointer;
+}
+
+.supplier-profile-reviews-toggle:hover,
+.supplier-profile-reviews-toggle:focus-visible {
+  color: #2563eb;
+  outline: 0;
+}
+
+.supplier-profile-reviews-list {
+  display: grid;
+  gap: 8px;
+  width: 100%;
+}
+
+.supplier-profile-review-card {
+  padding: 10px 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.supplier-profile-review-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.supplier-profile-review-header strong {
+  color: #111827;
+  font-size: 13px;
+}
+
+.supplier-profile-review-header span,
+.supplier-profile-review-card p {
+  margin: 0;
+  color: #4b5563;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.45;
 }
 
 .supplier-front-view-link {

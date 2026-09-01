@@ -664,7 +664,7 @@ onUnmounted(() => {
         <div class="product-detail-rating-row">
           <span>{{ averageReviewRatingLabel }}</span>
           <span class="product-detail-stars">{{ ratingStars }}</span>
-          <a v-if="productReviews.length" href="#product-reviews">{{ reviewCountLabel }}</a>
+          <span v-if="productReviews.length">{{ reviewCountLabel }}</span>
         </div>
 
         <div class="product-detail-price-row">
@@ -718,32 +718,6 @@ onUnmounted(() => {
             <dd>{{ detail.value }}</dd>
           </div>
         </dl>
-
-        <section
-          v-if="productReviews.length"
-          id="product-reviews"
-          class="product-detail-section product-reviews-section"
-          aria-label="Customer reviews"
-        >
-          <div class="product-reviews-heading">
-            <h3>Customer Reviews</h3>
-            <span>{{ reviewCountLabel }}</span>
-          </div>
-
-          <div class="product-reviews-list">
-            <article
-              v-for="review in productReviews"
-              :key="review.id"
-              class="product-review-card"
-            >
-              <div class="product-review-header">
-                <strong>{{ review.customerName }}</strong>
-                <span class="product-review-stars">{{ '★'.repeat(review.rating) }}</span>
-              </div>
-              <p>{{ review.description }}</p>
-            </article>
-          </div>
-        </section>
 
         <section
           v-if="showVariantDropdowns"
@@ -801,6 +775,12 @@ onUnmounted(() => {
         <div class="product-detail-trust-list">
           <span>↩ Easy and hassle free returns</span>
           <span>♢ Secure payments</span>
+          <span
+            v-if="productReviews.length"
+            class="product-detail-trust-reviews"
+          >
+            Customer Reviews: {{ reviewCountLabel }}
+          </span>
         </div>
 
         <div class="product-detail-footer">
