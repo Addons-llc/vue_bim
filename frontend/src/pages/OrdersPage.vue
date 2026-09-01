@@ -237,13 +237,25 @@ onMounted(loadOrders)
                 <div class="ordered-product-review-actions">
                   <strong>{{ formatCurrency(item.amount, order.currency) }}</strong>
                   <button
+                    v-if="!getSubmittedReview(order.name, item)"
                     class="ordered-product-review-toggle"
                     type="button"
-                    @click="toggleReviewExpanded(order.name, item.item_code)"
+                    @click.stop="toggleReviewExpanded(order.name, item.item_code)"
                   >
-                    {{ getSubmittedReview(order.name, item) ? 'View review' : 'Add review' }}
+                    Add review
                   </button>
                 </div>
+              </div>
+
+              <div
+                v-if="getSubmittedReview(order.name, item)"
+                class="ordered-product-submitted-review is-inline"
+              >
+                <div class="ordered-product-submitted-review-header">
+                  <span>Submitted review</span>
+                  <strong>{{ '★'.repeat(getSubmittedReview(order.name, item).rating) }}</strong>
+                </div>
+                <p>{{ getSubmittedReview(order.name, item).description }}</p>
               </div>
 
               <div
@@ -261,7 +273,7 @@ onMounted(loadOrders)
                         'is-selected': getReviewForm(order.name, item.item_code).rating === ratingOption,
                       }"
                       type="button"
-                      @click="updateReviewRating(order.name, item.item_code, ratingOption)"
+                      @click.stop="updateReviewRating(order.name, item.item_code, ratingOption)"
                     >
                       <span class="ordered-product-rating-stars">{{ '★'.repeat(ratingOption) }}</span>
                       <span>{{ ratingOption }}</span>
@@ -275,6 +287,7 @@ onMounted(loadOrders)
                     rows="3"
                     placeholder="Share what you liked, quality, delivery, or anything useful"
                     :value="getReviewForm(order.name, item.item_code).description"
+                    @click.stop
                     @input="updateReviewDescription(order.name, item.item_code, $event.target.value)"
                   />
                   <small>Short, clear feedback helps other customers.</small>
@@ -284,21 +297,10 @@ onMounted(loadOrders)
                   class="ordered-product-review-submit"
                   type="button"
                   :disabled="getReviewStatus(order.name, item.item_code).isSubmitting"
-                  @click="submitReview(order.name, item)"
+                  @click.stop="submitReview(order.name, item)"
                 >
                   {{ getReviewStatus(order.name, item.item_code).isSubmitting ? 'Saving...' : 'Add review' }}
                 </button>
-              </div>
-
-              <div
-                v-else-if="isReviewExpanded(order.name, item) && getSubmittedReview(order.name, item)"
-                class="ordered-product-submitted-review"
-              >
-                <div class="ordered-product-submitted-review-header">
-                  <span>Submitted review</span>
-                  <strong>{{ '★'.repeat(getSubmittedReview(order.name, item).rating) }}</strong>
-                </div>
-                <p>{{ getSubmittedReview(order.name, item).description }}</p>
               </div>
 
               <p

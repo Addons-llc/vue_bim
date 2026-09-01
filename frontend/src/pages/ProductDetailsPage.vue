@@ -664,7 +664,7 @@ onUnmounted(() => {
         <div class="product-detail-rating-row">
           <span>{{ averageReviewRatingLabel }}</span>
           <span class="product-detail-stars">{{ ratingStars }}</span>
-          <a href="#product-reviews">{{ reviewCountLabel }}</a>
+          <a v-if="productReviews.length" href="#product-reviews">{{ reviewCountLabel }}</a>
         </div>
 
         <div class="product-detail-price-row">
@@ -720,6 +720,7 @@ onUnmounted(() => {
         </dl>
 
         <section
+          v-if="productReviews.length"
           id="product-reviews"
           class="product-detail-section product-reviews-section"
           aria-label="Customer reviews"
@@ -741,9 +742,6 @@ onUnmounted(() => {
               </div>
               <p>{{ review.description }}</p>
             </article>
-            <p v-if="!productReviews.length" class="product-review-empty">
-              No reviews added yet.
-            </p>
           </div>
         </section>
 
