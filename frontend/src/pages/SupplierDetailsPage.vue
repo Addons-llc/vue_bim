@@ -19,6 +19,7 @@ const supplierPortalUrl = ref('')
 const failedSupplierBannerImage = ref('')
 const isSupplierDescriptionExpanded = ref(false)
 const isSupplierReviewsExpanded = ref(false)
+const isShowingAllSupplierReviews = ref(false)
 const supplierReviews = ref([])
 const supplierDetails = computed(() => {
   const store = supplierStore.value
@@ -163,6 +164,12 @@ const supplierReviewCountLabel = computed(() => {
 
   return `${count} ${suffix}`
 })
+const visibleSupplierReviews = computed(() => (
+  isShowingAllSupplierReviews.value
+    ? supplierReviews.value
+    : supplierReviews.value.slice(0, 2)
+))
+const hasMoreSupplierReviews = computed(() => supplierReviews.value.length > 2)
 
 function openProductDetails(product) {
   saveSelectedProduct(product)
@@ -183,6 +190,14 @@ function toggleSupplierDescription() {
 
 function toggleSupplierReviews() {
   isSupplierReviewsExpanded.value = !isSupplierReviewsExpanded.value
+
+  if (!isSupplierReviewsExpanded.value) {
+    isShowingAllSupplierReviews.value = false
+  }
+}
+
+function toggleAllSupplierReviews() {
+  isShowingAllSupplierReviews.value = !isShowingAllSupplierReviews.value
 }
 
 async function loadSupplierProducts() {
@@ -234,6 +249,7 @@ async function loadSupplierProducts() {
     supplierReviews.value = []
     loadedProducts.value = []
     isSupplierReviewsExpanded.value = false
+    isShowingAllSupplierReviews.value = false
   } finally {
     isLoadingSupplierProducts.value = false
   }
@@ -250,6 +266,7 @@ watch(supplierName, () => {
   failedSupplierBannerImage.value = ''
   isSupplierDescriptionExpanded.value = false
   isSupplierReviewsExpanded.value = false
+  isShowingAllSupplierReviews.value = false
   loadSupplierProducts()
 })
 </script>
@@ -321,7 +338,7 @@ watch(supplierName, () => {
               class="supplier-profile-reviews-list"
             >
               <article
-                v-for="review in supplierReviews"
+                v-for="review in visibleSupplierReviews"
                 :key="review.id"
                 class="supplier-profile-review-card"
               >
@@ -331,6 +348,14 @@ watch(supplierName, () => {
                 </div>
                 <p>{{ review.description }}</p>
               </article>
+              <button
+                v-if="hasMoreSupplierReviews"
+                class="supplier-profile-reviews-more"
+                type="button"
+                @click="toggleAllSupplierReviews"
+              >
+                {{ isShowingAllSupplierReviews ? 'Show less' : 'Show more' }}
+              </button>
             </div>
           </div>
         </div>

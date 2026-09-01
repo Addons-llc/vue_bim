@@ -47,7 +47,16 @@ function getReviewStatus(itemCode) {
     isSubmitting: false,
     successMessage: '',
     errorMessage: '',
+    submittedReview: null,
   }
+}
+
+function getSubmittedReview(item) {
+  return (
+    getReviewStatus(item.item_code).submittedReview
+    || item.submitted_review
+    || null
+  )
 }
 
 function updateReviewRating(itemCode, rating) {
@@ -99,6 +108,10 @@ async function submitReview(item) {
       isSubmitting: false,
       successMessage: 'Review added successfully.',
       errorMessage: '',
+      submittedReview: {
+        rating: form.rating,
+        description: form.description,
+      },
     }
     reviewForms.value[itemCode] = {
       rating: form.rating,
@@ -203,7 +216,18 @@ watch(orderName, loadOrder, { immediate: true })
               <strong>{{ formatCurrency(item.amount, order.currency) }}</strong>
             </div>
 
-            <div class="ordered-product-review-form">
+            <div
+              v-if="getSubmittedReview(item)"
+              class="ordered-product-submitted-review is-inline"
+            >
+              <div class="ordered-product-submitted-review-header">
+                <span>Submitted review</span>
+                <strong>{{ '★'.repeat(getSubmittedReview(item).rating) }}</strong>
+              </div>
+              <p>{{ getSubmittedReview(item).description }}</p>
+            </div>
+
+            <div v-else class="ordered-product-review-form">
               <div class="ordered-product-review-field is-wide">
                 <span>Your rating</span>
                 <div class="ordered-product-star-picker" role="radiogroup" aria-label="Choose rating">

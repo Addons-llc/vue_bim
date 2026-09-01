@@ -1625,6 +1625,24 @@
   width: 100%;
 }
 
+.supplier-profile-reviews-more {
+  justify-self: start;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #2563eb;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.supplier-profile-reviews-more:hover,
+.supplier-profile-reviews-more:focus-visible {
+  color: #1d4ed8;
+  text-decoration: underline;
+  outline: 0;
+}
+
 .supplier-profile-review-card {
   padding: 10px 12px;
   border: 1px solid #e5e7eb;
