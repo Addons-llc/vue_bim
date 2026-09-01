@@ -4,6 +4,8 @@ import { useRoute } from 'vue-router'
 import { getSalesOrder } from '../api/orderApi'
 import { addProductReview } from '../api/reviewApi'
 
+const STAR_OPTIONS = [1, 2, 3, 4, 5]
+
 const route = useRoute()
 const order = ref(null)
 const isLoading = ref(false)
@@ -54,6 +56,26 @@ function updateReviewRating(itemCode, rating) {
 
 function updateReviewDescription(itemCode, description) {
   getReviewForm(itemCode).description = description
+}
+
+function getRatingCaption(rating) {
+  if (rating >= 5) {
+    return 'Excellent'
+  }
+
+  if (rating >= 4) {
+    return 'Very good'
+  }
+
+  if (rating >= 3) {
+    return 'Good'
+  }
+
+  if (rating >= 2) {
+    return 'Fair'
+  }
+
+  return 'Poor'
 }
 
 async function submitReview(item) {
@@ -182,28 +204,38 @@ watch(orderName, loadOrder, { immediate: true })
             </div>
 
             <div class="ordered-product-review-form">
-              <label class="ordered-product-review-field">
-                <span>Rating</span>
-                <select
-                  :value="getReviewForm(item.item_code).rating"
-                  @change="updateReviewRating(item.item_code, Number($event.target.value))"
-                >
-                  <option :value="5">5 Stars</option>
-                  <option :value="4">4 Stars</option>
-                  <option :value="3">3 Stars</option>
-                  <option :value="2">2 Stars</option>
-                  <option :value="1">1 Star</option>
-                </select>
-              </label>
+              <div class="ordered-product-review-field is-wide">
+                <span>Your rating</span>
+                <div class="ordered-product-star-picker" role="radiogroup" aria-label="Choose rating">
+                  <button
+                    v-for="ratingOption in STAR_OPTIONS"
+                    :key="`${item.item_code}-${ratingOption}`"
+                    class="ordered-product-star-button"
+                    :class="{
+                      'is-selected': getReviewForm(item.item_code).rating >= ratingOption,
+                    }"
+                    type="button"
+                    :aria-label="`${ratingOption} star${ratingOption === 1 ? '' : 's'}`"
+                    :aria-pressed="getReviewForm(item.item_code).rating === ratingOption"
+                    @click="updateReviewRating(item.item_code, ratingOption)"
+                  >
+                    ★
+                  </button>
+                  <strong class="ordered-product-star-caption">
+                    {{ getRatingCaption(getReviewForm(item.item_code).rating) }}
+                  </strong>
+                </div>
+              </div>
 
               <label class="ordered-product-review-field is-wide">
-                <span>Review description</span>
+                <span>Your review</span>
                 <textarea
                   rows="3"
-                  placeholder="Write your review"
+                  placeholder="Tell customers about product quality, freshness, packaging, or delivery."
                   :value="getReviewForm(item.item_code).description"
                   @input="updateReviewDescription(item.item_code, $event.target.value)"
                 />
+                <small>Short and specific feedback is more useful.</small>
               </label>
 
               <button

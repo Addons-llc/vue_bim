@@ -1329,14 +1329,27 @@
 }
 
 .product-detail-trust-reviews {
-  margin-top: -8px;
-  color: #6b7280;
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  margin-top: -6px;
+  padding: 10px 12px;
+  border: 1px solid #dbe3f4;
+  border-radius: 10px;
+  background: #f8fbff;
+  color: #1d4ed8;
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 800;
+  line-height: 1.4;
 }
 
 .product-detail-trust-reviews:hover {
-  color: #2563eb;
+  border-color: #93c5fd;
+  background: #eef5ff;
+  color: #1e40af;
+  transform: translateY(-1px);
 }
 
 .product-detail-total-price {
@@ -1571,6 +1584,9 @@
 }
 
 .supplier-profile-reviews-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   margin: 0;
   padding: 0;
   border: 0;
@@ -1581,6 +1597,20 @@
   line-height: 1.4;
   text-align: left;
   cursor: pointer;
+}
+
+.supplier-profile-reviews-label {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.supplier-profile-reviews-count {
+  color: #4b5563;
+}
+
+.supplier-profile-reviews-icon {
+  color: #2563eb;
+  font-size: 11px;
 }
 
 .supplier-profile-reviews-toggle:hover,

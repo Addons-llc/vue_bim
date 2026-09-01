@@ -775,12 +775,14 @@ onUnmounted(() => {
         <div class="product-detail-trust-list">
           <span>↩ Easy and hassle free returns</span>
           <span>♢ Secure payments</span>
-          <span
+          <RouterLink
             v-if="productReviews.length"
             class="product-detail-trust-reviews"
+            :to="{ name: 'supplier-details', params: { supplierName: supplierIdentifier } }"
+            @click="rememberSupplierSelection"
           >
             Customer Reviews: {{ reviewCountLabel }}
-          </span>
+          </RouterLink>
         </div>
 
         <div class="product-detail-footer">

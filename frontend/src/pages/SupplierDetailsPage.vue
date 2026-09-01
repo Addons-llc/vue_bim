@@ -307,10 +307,14 @@ watch(supplierName, () => {
             <button
               class="supplier-profile-reviews-toggle"
               type="button"
+              :aria-expanded="isSupplierReviewsExpanded"
               @click="toggleSupplierReviews"
             >
-              Customer Reviews: {{ supplierReviewCountLabel }}
-              <span aria-hidden="true">{{ isSupplierReviewsExpanded ? '▴' : '▾' }}</span>
+              <span class="supplier-profile-reviews-label">Customer Reviews</span>
+              <span class="supplier-profile-reviews-count">{{ supplierReviewCountLabel }}</span>
+              <span class="supplier-profile-reviews-icon" aria-hidden="true">
+                {{ isSupplierReviewsExpanded ? '▴' : '▾' }}
+              </span>
             </button>
             <div
               v-if="isSupplierReviewsExpanded"
