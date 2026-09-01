@@ -10,6 +10,7 @@ import { getCustomerToSupplierDistanceKm, LOCATION_UPDATED_EVENT } from '../api/
 import { getSelectedProduct, saveSelectedProduct } from '../data/productSelectionStore'
 import { saveSelectedSupplier } from '../data/supplierSelectionStore'
 import { getProductById, getProductVariants } from '../api/productApi'
+import { createRequestForQuotation } from '../api/rfqApi'
 import { getProductReviews } from '../api/reviewApi'
 import ProductCard from '../components/product/ProductCard.vue'
 
@@ -30,10 +31,14 @@ const isCheckingDeliverability = ref(false)
 const relatedProducts = ref([])
 const isLoadingRelatedProducts = ref(false)
 const productReviews = ref([])
+const isSubmittingRfq = ref(false)
+const rfqSuccessMessage = ref('')
+const rfqErrorMessage = ref('')
 
 const MAX_DELIVERABLE_DISTANCE_KM = 20
 
 const productId = computed(() => String(route.params.productId || ''))
+const isRfqOnly = computed(() => product.value?.customRfqOnly === true)
 const productQuantity = computed(() => {
   if (!product.value) {
     return 0
@@ -552,11 +557,39 @@ function rememberSupplierSelection() {
   })
 }
 
+async function requestQuotationForProduct() {
+  if (!product.value) {
+    return
+  }
+
+  isSubmittingRfq.value = true
+  rfqSuccessMessage.value = ''
+  rfqErrorMessage.value = ''
+
+  try {
+    const rfq = await createRequestForQuotation({
+      productId: product.value.itemCode || product.value.id,
+      quantity: productQuantity.value || 1,
+      selectedSize: selectedProductSizeLabel.value,
+    })
+    rfqSuccessMessage.value = rfq?.name
+      ? `Quotation request ${rfq.name} created successfully.`
+      : 'Quotation request created successfully.'
+  } catch (error) {
+    rfqErrorMessage.value = error.message || 'Unable to create quotation request.'
+  } finally {
+    isSubmittingRfq.value = false
+  }
+}
+
 watch(productId, loadProduct, { immediate: true })
 
 watch(
   () => product.value?.id || '',
   () => {
+    rfqSuccessMessage.value = ''
+    rfqErrorMessage.value = ''
+    isSubmittingRfq.value = false
     refreshSupplierDistance()
   },
   { immediate: true },
@@ -801,8 +834,29 @@ onUnmounted(() => {
             </strong>
           </div>
 
+          <button
+            v-if="isRfqOnly"
+            class="product-detail-add-button is-rfq"
+            type="button"
+            :disabled="isSubmittingRfq"
+            @click="requestQuotationForProduct"
+          >
+            <span
+              v-if="isSubmittingRfq"
+              class="product-detail-button-loader"
+              aria-hidden="true"
+            />
+            <span>Request Quotation</span>
+          </button>
+          <p v-if="rfqSuccessMessage" class="product-detail-rfq-message is-success">
+            {{ rfqSuccessMessage }}
+          </p>
+          <p v-if="rfqErrorMessage" class="product-detail-rfq-message is-error">
+            {{ rfqErrorMessage }}
+          </p>
+
           <div
-            v-if="productQuantity"
+            v-else-if="productQuantity"
             class="product-quantity-control"
             :aria-label="`${product.name} quantity`"
           >

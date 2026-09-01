@@ -1,4 +1,5 @@
 import frappe
+from frappe import _
 from frappe.utils import flt, getdate, today
 
 
@@ -131,6 +132,18 @@ def _get_selling_price_list():
 		return enabled_price_list
 
 	return SELLING_PRICE_LIST
+
+
+def _get_default_company():
+	company = frappe.defaults.get_user_default("Company") or frappe.defaults.get_global_default("company")
+	if company:
+		return company
+
+	company = frappe.db.get_value("Company", {}, "name")
+	if not company:
+		frappe.throw(_("Please configure a default Company before creating a quotation request."))
+
+	return company
 
 
 def _get_selling_prices(item_codes):
@@ -337,6 +350,17 @@ def _get_supplier_from_item_fields(item):
 			return item.get(fieldname)
 
 	return ""
+
+
+def _resolve_supplier_name(candidate_supplier):
+	candidate_supplier = str(candidate_supplier or "").strip()
+	if not candidate_supplier:
+		return ""
+
+	if frappe.db.exists("Supplier", candidate_supplier):
+		return candidate_supplier
+
+	return frappe.db.get_value("Supplier", {"supplier_name": candidate_supplier}, "name") or ""
 
 
 def _apply_supplier_details(items):
@@ -807,6 +831,81 @@ def add_product_review(order_name=None, product_id=None, rating=None, descriptio
 	profile_doc.save(ignore_permissions=True)
 
 	return _map_supplier_review_row(review_row)
+
+
+@frappe.whitelist()
+def create_request_for_quotation(product_id=None, quantity=1, selected_size=None):
+	if _is_guest_session_user():
+		frappe.throw("Please sign in to request a quotation.", frappe.AuthenticationError)
+
+	product_id = str(product_id or "").strip()
+	selected_size = str(selected_size or "").strip()
+	requested_qty = max(1, int(flt(quantity or 1)))
+
+	if not product_id:
+		frappe.throw("Product is required.")
+
+	if not frappe.db.exists("Item", product_id):
+		frappe.throw("Product was not found.")
+
+	item_doc = frappe.get_doc("Item", product_id)
+	item_group_meta = frappe.get_meta("Item Group")
+	rfq_only_enabled = (
+		item_group_meta.has_field("custom_rfq_only")
+		and _is_truthy_flag(frappe.db.get_value("Item Group", item_doc.item_group, "custom_rfq_only"))
+	)
+	if not rfq_only_enabled:
+		frappe.throw("This product is not configured for quotation requests.")
+
+	supplier = (
+		_resolve_supplier_name(_get_supplier_from_item_fields(item_doc))
+		or _resolve_supplier_name(_get_item_supplier_links([item_doc.name]).get(item_doc.name))
+	)
+	if not supplier:
+		frappe.throw("Supplier was not found for this product.")
+
+	company = _get_default_company()
+	item_description = item_doc.description or item_doc.item_name or item_doc.item_code or item_doc.name
+	if selected_size:
+		item_description = f"{item_description}\n\nSelected Size: {selected_size}"
+
+	rfq_doc = frappe.get_doc(
+		{
+			"doctype": "Request for Quotation",
+			"company": company,
+			"transaction_date": today(),
+			"message_for_supplier": _("Please share your best quotation for the requested item."),
+			"suppliers": [
+				{
+					"doctype": "Request for Quotation Supplier",
+					"supplier": supplier,
+					"send_email": 0,
+				}
+			],
+			"items": [
+				{
+					"doctype": "Request for Quotation Item",
+					"item_code": item_doc.name,
+					"item_name": item_doc.item_name or item_doc.name,
+					"description": item_description,
+					"item_group": item_doc.item_group,
+					"brand": item_doc.brand,
+					"qty": requested_qty,
+					"uom": item_doc.stock_uom,
+					"stock_uom": item_doc.stock_uom,
+					"schedule_date": today(),
+					"warehouse": item_doc.default_warehouse if item_doc.meta.has_field("default_warehouse") else None,
+				}
+			],
+		}
+	)
+	rfq_doc.insert(ignore_permissions=True)
+
+	return {
+		"name": rfq_doc.name,
+		"supplier": supplier,
+		"company": company,
+	}
 
 
 @frappe.whitelist(allow_guest=True)

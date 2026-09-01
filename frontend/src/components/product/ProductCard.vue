@@ -1,5 +1,6 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { createRequestForQuotation } from '../../api/rfqApi'
 import { LOCATION_UPDATED_EVENT, getEstimatedDeliveryTimeLabel } from '../../api/deliveryEta'
 import { customerAddresses } from '../../data/addressStore'
 import {
@@ -29,6 +30,9 @@ const cartQuantity = computed(() => cartItem.value?.quantity || 0)
 const isWishlisted = computed(() => isProductWishlisted(props.product.id))
 const productPlaceholderImage = `${import.meta.env.BASE_URL}grocery-card-image-v3.svg?v=3`
 const isRfqOnly = computed(() => props.product.customRfqOnly === true)
+const isSubmittingRfq = ref(false)
+const rfqSuccessMessage = ref('')
+const rfqErrorMessage = ref('')
 const availableQuantity = computed(() => {
   const quantity = Number(props.product.customAvailableQty ?? props.product.stockQuantity ?? 0)
 
@@ -77,8 +81,25 @@ function handleWishlistToggle() {
   toggleProductWishlist(props.product)
 }
 
-function handleRequestQuotation() {
-  selectProduct()
+async function handleRequestQuotation() {
+  isSubmittingRfq.value = true
+  rfqSuccessMessage.value = ''
+  rfqErrorMessage.value = ''
+
+  try {
+    const rfq = await createRequestForQuotation({
+      productId: props.product.itemCode || props.product.id,
+      quantity: 1,
+      selectedSize: defaultProductSize.value,
+    })
+    rfqSuccessMessage.value = rfq?.name
+      ? `RFQ ${rfq.name} created`
+      : 'Quotation request created'
+  } catch (error) {
+    rfqErrorMessage.value = error.message || 'Unable to create quotation request.'
+  } finally {
+    isSubmittingRfq.value = false
+  }
 }
 
 function selectProduct() {
@@ -122,6 +143,16 @@ watch(
     updateDeliveryTimeLabel()
   },
   { deep: true },
+)
+
+watch(
+  () => props.product.id,
+  () => {
+    isSubmittingRfq.value = false
+    rfqSuccessMessage.value = ''
+    rfqErrorMessage.value = ''
+  },
+  { immediate: true },
 )
 </script>
 
@@ -205,46 +236,61 @@ watch(
         <span class="product-price">
           AED {{ product.price }}
         </span>
-        <button
-          v-if="isRfqOnly"
-          class="add-cart-button is-rfq"
-          type="button"
-          :aria-label="`Request quotation for ${product.name}`"
-          @click.stop="handleRequestQuotation"
-        >
-          Request Quotation
-        </button>
-        <div
-          v-else-if="cartQuantity"
-          class="product-quantity-control"
-          :aria-label="`${product.name} quantity`"
-        >
+        <div v-if="isRfqOnly" class="product-rfq-actions">
           <button
+            class="add-cart-button is-rfq"
             type="button"
-            :aria-label="`Decrease ${product.name} quantity`"
-            @click.stop="decreaseCartQuantity"
+            :aria-label="`Request quotation for ${product.name}`"
+            :disabled="isSubmittingRfq"
+            @click.stop="handleRequestQuotation"
           >
-            -
+            <span
+              v-if="isSubmittingRfq"
+              class="product-card-button-loader"
+              aria-hidden="true"
+            />
+            <span>Request Quotation</span>
           </button>
-          <span>{{ cartQuantity }}</span>
+          <p v-if="rfqSuccessMessage" class="product-rfq-message is-success">
+            {{ rfqSuccessMessage }}
+          </p>
+          <p v-if="rfqErrorMessage" class="product-rfq-message is-error">
+            {{ rfqErrorMessage }}
+          </p>
+        </div>
+        <template v-else>
+          <div
+            v-if="cartQuantity"
+            class="product-quantity-control"
+            :aria-label="`${product.name} quantity`"
+          >
+            <button
+              type="button"
+              :aria-label="`Decrease ${product.name} quantity`"
+              @click.stop="decreaseCartQuantity"
+            >
+              -
+            </button>
+            <span>{{ cartQuantity }}</span>
+            <button
+              type="button"
+              :aria-label="`Increase ${product.name} quantity`"
+              @click.stop="handleAddToCart"
+            >
+              +
+            </button>
+          </div>
           <button
+            v-else
+            class="add-cart-button"
             type="button"
-            :aria-label="`Increase ${product.name} quantity`"
+            :aria-label="`Add ${product.name} to cart`"
+            :disabled="isOutOfStock"
             @click.stop="handleAddToCart"
           >
-            +
+            ADD TO CART
           </button>
-        </div>
-        <button
-          v-else-if="!isRfqOnly"
-          class="add-cart-button"
-          type="button"
-          :aria-label="`Add ${product.name} to cart`"
-          :disabled="isOutOfStock"
-          @click.stop="handleAddToCart"
-        >
-          ADD TO CART
-        </button>
+        </template>
       </div>
     </div>
   </article>
