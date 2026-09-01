@@ -10,6 +10,7 @@ import { getCustomerToSupplierDistanceKm, LOCATION_UPDATED_EVENT } from '../api/
 import { getSelectedProduct, saveSelectedProduct } from '../data/productSelectionStore'
 import { saveSelectedSupplier } from '../data/supplierSelectionStore'
 import { getProductById, getProductVariants } from '../api/productApi'
+import { getProductReviews } from '../api/reviewApi'
 import ProductCard from '../components/product/ProductCard.vue'
 
 const route = useRoute()
@@ -28,6 +29,7 @@ const supplierDistanceKm = ref(null)
 const isCheckingDeliverability = ref(false)
 const relatedProducts = ref([])
 const isLoadingRelatedProducts = ref(false)
+const productReviews = ref([])
 
 const MAX_DELIVERABLE_DISTANCE_KM = 20
 
@@ -62,10 +64,30 @@ const brandName = computed(() =>
   || (sourceListing.value?.type === 'brand' ? sourceListing.value.name : '')
   || '',
 )
+const averageReviewRating = computed(() => {
+  const ratings = productReviews.value
+    .map((review) => Number(review.rating || 0))
+    .filter((rating) => Number.isFinite(rating) && rating > 0)
+
+  if (!ratings.length) {
+    return Number(product.value?.rating || 0)
+  }
+
+  return ratings.reduce((total, rating) => total + rating, 0) / ratings.length
+})
 const ratingStars = computed(() => {
-  const rating = Math.round(Number(product.value?.rating || 0))
+  const rating = Math.round(Number(averageReviewRating.value || 0))
 
   return '★'.repeat(Math.min(rating, 5)) || '★★★★★'
+})
+const averageReviewRatingLabel = computed(() => {
+  const rating = Number(averageReviewRating.value || 0)
+
+  if (!Number.isFinite(rating) || rating <= 0) {
+    return '0.0'
+  }
+
+  return rating.toFixed(1)
 })
 const productDescription = computed(() => product.value?.description || '')
 const isProductDescriptionLong = computed(() => productDescription.value.length > 120)
@@ -249,6 +271,11 @@ const productDetails = computed(() => {
 const relatedProductSuggestions = computed(() =>
   relatedProducts.value.filter((relatedProduct) => relatedProduct.id !== product.value?.id).slice(0, 8),
 )
+const reviewCountLabel = computed(() => `${productReviews.value.length} Ratings`)
+
+async function loadProductReviews(targetProductId, targetSupplier = '') {
+  productReviews.value = await getProductReviews(targetProductId, targetSupplier)
+}
 
 function getVariantAttributeMap(variant) {
   return Object.fromEntries(
@@ -399,6 +426,10 @@ async function loadProduct() {
   const cachedProduct = getSelectedProduct(productId.value)
   product.value = cachedProduct
   productVariants.value = []
+  await loadProductReviews(
+    productId.value,
+    cachedProduct?.supplier || cachedProduct?.supplierDetails?.name || '',
+  )
   isLoading.value = !cachedProduct
   loadError.value = ''
 
@@ -411,6 +442,10 @@ async function loadProduct() {
     }
 
     product.value = mergeProductDetails(cachedProduct, loadedProduct)
+    await loadProductReviews(
+      productId.value,
+      product.value?.supplier || product.value?.supplierDetails?.name || '',
+    )
     const redirectedToVariant = await loadVariantsForProduct(product.value)
     if (redirectedToVariant) {
       return
@@ -627,9 +662,9 @@ onUnmounted(() => {
         <h2 :id="`product-detail-title-${product.id}`">{{ product.name }}</h2>
 
         <div class="product-detail-rating-row">
-          <span>{{ product.rating }}</span>
+          <span>{{ averageReviewRatingLabel }}</span>
           <span class="product-detail-stars">{{ ratingStars }}</span>
-          <a href="#product-details">3 Ratings</a>
+          <a href="#product-reviews">{{ reviewCountLabel }}</a>
         </div>
 
         <div class="product-detail-price-row">
@@ -683,6 +718,34 @@ onUnmounted(() => {
             <dd>{{ detail.value }}</dd>
           </div>
         </dl>
+
+        <section
+          id="product-reviews"
+          class="product-detail-section product-reviews-section"
+          aria-label="Customer reviews"
+        >
+          <div class="product-reviews-heading">
+            <h3>Customer Reviews</h3>
+            <span>{{ reviewCountLabel }}</span>
+          </div>
+
+          <div class="product-reviews-list">
+            <article
+              v-for="review in productReviews"
+              :key="review.id"
+              class="product-review-card"
+            >
+              <div class="product-review-header">
+                <strong>{{ review.customerName }}</strong>
+                <span class="product-review-stars">{{ '★'.repeat(review.rating) }}</span>
+              </div>
+              <p>{{ review.description }}</p>
+            </article>
+            <p v-if="!productReviews.length" class="product-review-empty">
+              No reviews added yet.
+            </p>
+          </div>
+        </section>
 
         <section
           v-if="showVariantDropdowns"

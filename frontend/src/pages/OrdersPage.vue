@@ -102,6 +102,7 @@ onMounted(loadOrders)
           <div>
             <strong>{{ order.name }}</strong>
             <span>{{ formatDate(order.transaction_date) }}</span>
+            <span v-if="order.customerName">{{ order.customerName }}</span>
           </div>
           <span class="order-status-pill">{{ order.status }}</span>
         </header>

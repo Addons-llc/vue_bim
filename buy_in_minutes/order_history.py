@@ -85,6 +85,8 @@ def _get_order_items(sales_order_names):
 	for row in rows:
 		items_by_order.setdefault(row.parent, []).append(
 			{
+				"id": row.item_code,
+				"product_id": row.item_code,
 				"item_code": row.item_code,
 				"item_name": row.item_name or row.item_code,
 				"description": row.description,
@@ -96,6 +98,25 @@ def _get_order_items(sales_order_names):
 		)
 
 	return items_by_order
+
+
+def _get_customer_names(customer_ids):
+	customer_ids = [customer_id for customer_id in customer_ids if customer_id]
+	if not customer_ids:
+		return {}
+
+	customer_rows = frappe.get_all(
+		"Customer",
+		fields=["name", "customer_name"],
+		filters={"name": ["in", customer_ids]},
+		ignore_permissions=True,
+		limit_page_length=len(customer_ids),
+	)
+
+	return {
+		customer.name: customer.customer_name or customer.name
+		for customer in customer_rows
+	}
 
 
 @frappe.whitelist()
@@ -129,6 +150,7 @@ def get_order_history(limit_page_length=20):
 		return []
 
 	items_by_order = _get_order_items([sales_order.name for sales_order in sales_orders])
+	customer_names = _get_customer_names([sales_order.customer for sales_order in sales_orders])
 	for sales_order in sales_orders:
 		if _can_view_sales_order(sales_order):
 			_ensure_purchase_orders_for_sales_order(sales_order)
@@ -140,6 +162,8 @@ def get_order_history(limit_page_length=20):
 			"transaction_date": sales_order.transaction_date,
 			"grand_total": flt(sales_order.grand_total),
 			"currency": sales_order.currency or "AED",
+			"customer": sales_order.customer or "",
+			"customer_name": customer_names.get(sales_order.customer) or sales_order.customer or "",
 			"purchase_orders": list(dict.fromkeys(_get_purchase_order_names_for_sales_order(sales_order.name))),
 			"items": items_by_order.get(sales_order.name, []),
 		}
