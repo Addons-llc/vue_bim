@@ -13,6 +13,7 @@ const ordersError = ref('')
 const ratingOptions = [5, 4, 3, 2, 1]
 const reviewForms = ref({})
 const reviewStatusByItem = ref({})
+const expandedReviewItems = ref({})
 
 const hasOrders = computed(() => orders.value.length > 0)
 
@@ -34,6 +35,15 @@ function formatCurrency(value, currency = 'AED') {
 
 function getReviewKey(orderName, itemCode) {
   return `${orderName}::${itemCode}`
+}
+
+function isReviewExpanded(orderName, itemCode) {
+  return Boolean(expandedReviewItems.value[getReviewKey(orderName, itemCode)])
+}
+
+function toggleReviewExpanded(orderName, itemCode) {
+  const reviewKey = getReviewKey(orderName, itemCode)
+  expandedReviewItems.value[reviewKey] = !expandedReviewItems.value[reviewKey]
 }
 
 function getReviewForm(orderName, itemCode) {
@@ -102,6 +112,7 @@ async function submitReview(orderName, item) {
         description: form.description,
       },
     }
+    expandedReviewItems.value[reviewKey] = true
     reviewForms.value[reviewKey] = {
       rating: form.rating,
       description: '',
@@ -223,11 +234,20 @@ onMounted(loadOrders)
                   <h3>{{ item.item_name }}</h3>
                   <p>Qty {{ item.qty }}</p>
                 </div>
-                <strong>{{ formatCurrency(item.amount, order.currency) }}</strong>
+                <div class="ordered-product-review-actions">
+                  <strong>{{ formatCurrency(item.amount, order.currency) }}</strong>
+                  <button
+                    class="ordered-product-review-toggle"
+                    type="button"
+                    @click="toggleReviewExpanded(order.name, item.item_code)"
+                  >
+                    {{ getSubmittedReview(order.name, item) ? 'View review' : 'Add review' }}
+                  </button>
+                </div>
               </div>
 
               <div
-                v-if="!getSubmittedReview(order.name, item)"
+                v-if="isReviewExpanded(order.name, item) && !getSubmittedReview(order.name, item)"
                 class="ordered-product-review-form"
               >
                 <label class="ordered-product-review-field">
@@ -271,7 +291,7 @@ onMounted(loadOrders)
               </div>
 
               <div
-                v-else
+                v-else-if="isReviewExpanded(order.name, item) && getSubmittedReview(order.name, item)"
                 class="ordered-product-submitted-review"
               >
                 <div class="ordered-product-submitted-review-header">
