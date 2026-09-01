@@ -67,6 +67,70 @@ def _get_item_images(item_codes):
 	}
 
 
+def _get_submitted_reviews_by_order_item(rows):
+	if not rows:
+		return {}
+
+	from buy_in_minutes import api as review_api
+
+	profile_doctype = review_api._find_supplier_website_profile_doctype()
+	reviewer_name = review_api._get_current_reviewer_name()
+	if not profile_doctype or not reviewer_name:
+		return {}
+
+	reviews_by_key = {}
+	supplier_profiles = {}
+	product_ids = list({row.item_code for row in rows if row.item_code})
+
+	for product_id in product_ids:
+		supplier = review_api._get_product_supplier_name(product_id)
+		if not supplier:
+			continue
+
+		profile_name = supplier_profiles.get(supplier)
+		if profile_name is None:
+			profile_name = review_api._get_matching_supplier_website_profile_name(profile_doctype, supplier)
+			supplier_profiles[supplier] = profile_name or ""
+
+		if not profile_name:
+			continue
+
+		reviews_field = review_api._get_reviews_table_field(profile_doctype)
+		if not reviews_field:
+			continue
+
+		profile_doc = frappe.get_doc(profile_doctype, profile_name)
+		for review_row in profile_doc.get(reviews_field.fieldname) or []:
+			product_code = str(
+				review_api._pick_first_value(
+					review_row,
+					("product_id", "item_code", "item", "product", "product_code"),
+					"",
+				)
+			).strip()
+			order_name = str(
+				review_api._pick_first_value(
+					review_row,
+					("sales_order", "order_name", "sales_order_name", "reference_name"),
+					"",
+				)
+			).strip()
+			row_reviewer_name = str(
+				review_api._pick_first_value(
+					review_row,
+					("customer_name", "reviewer_name", "customer", "user_name", "full_name", "review_by"),
+					"",
+				)
+			).strip()
+
+			if not product_code or not order_name or row_reviewer_name != reviewer_name:
+				continue
+
+			reviews_by_key[f"{order_name}::{product_code}"] = review_api._map_supplier_review_row(review_row)
+
+	return reviews_by_key
+
+
 def _get_order_items(sales_order_names):
 	if not sales_order_names:
 		return {}
@@ -80,9 +144,11 @@ def _get_order_items(sales_order_names):
 		limit_page_length=0,
 	)
 	item_images = _get_item_images(list({row.item_code for row in rows if row.item_code}))
+	submitted_reviews = _get_submitted_reviews_by_order_item(rows)
 	items_by_order = {}
 
 	for row in rows:
+		review_key = f"{row.parent}::{row.item_code}"
 		items_by_order.setdefault(row.parent, []).append(
 			{
 				"item_code": row.item_code,
@@ -92,6 +158,7 @@ def _get_order_items(sales_order_names):
 				"rate": flt(row.rate),
 				"amount": flt(row.amount),
 				"image": item_images.get(row.item_code),
+				"submitted_review": submitted_reviews.get(review_key),
 			}
 		)
 

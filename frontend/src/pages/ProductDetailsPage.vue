@@ -10,6 +10,7 @@ import { getCustomerToSupplierDistanceKm, LOCATION_UPDATED_EVENT } from '../api/
 import { getSelectedProduct, saveSelectedProduct } from '../data/productSelectionStore'
 import { saveSelectedSupplier } from '../data/supplierSelectionStore'
 import { getProductById, getProductVariants } from '../api/productApi'
+import { getProductReviews } from '../api/reviewApi'
 import ProductCard from '../components/product/ProductCard.vue'
 
 const route = useRoute()
@@ -28,6 +29,7 @@ const supplierDistanceKm = ref(null)
 const isCheckingDeliverability = ref(false)
 const relatedProducts = ref([])
 const isLoadingRelatedProducts = ref(false)
+const productReviews = ref([])
 
 const MAX_DELIVERABLE_DISTANCE_KM = 20
 
@@ -232,6 +234,11 @@ const productDetails = computed(() => {
 const relatedProductSuggestions = computed(() =>
   relatedProducts.value.filter((relatedProduct) => relatedProduct.id !== product.value?.id).slice(0, 8),
 )
+const reviewCountLabel = computed(() => `${productReviews.value.length} Ratings`)
+
+async function loadProductReviews(targetProductId, targetSupplier = '') {
+  productReviews.value = await getProductReviews(targetProductId, targetSupplier)
+}
 
 function getVariantAttributeMap(variant) {
   return Object.fromEntries(
@@ -382,6 +389,10 @@ async function loadProduct() {
   const cachedProduct = getSelectedProduct(productId.value)
   product.value = cachedProduct
   productVariants.value = []
+  await loadProductReviews(
+    productId.value,
+    cachedProduct?.supplier || cachedProduct?.supplierDetails?.name || '',
+  )
   isLoading.value = !cachedProduct
   loadError.value = ''
 
@@ -394,6 +405,10 @@ async function loadProduct() {
     }
 
     product.value = mergeProductDetails(cachedProduct, loadedProduct)
+    await loadProductReviews(
+      productId.value,
+      product.value?.supplier || product.value?.supplierDetails?.name || '',
+    )
     const redirectedToVariant = await loadVariantsForProduct(product.value)
     if (redirectedToVariant) {
       return
@@ -498,6 +513,18 @@ async function updateVariantSelection(attributeName, attributeValue) {
 
 function toggleProductDescription() {
   isProductDescriptionExpanded.value = !isProductDescriptionExpanded.value
+}
+
+async function openProductDetails(nextProduct) {
+  if (!nextProduct?.id || nextProduct.id === productId.value) {
+    return
+  }
+
+  saveSelectedProduct(nextProduct)
+  await router.push({
+    name: 'product-details',
+    params: { productId: nextProduct.id },
+  })
 }
 
 function rememberSupplierSelection() {
@@ -620,7 +647,7 @@ onUnmounted(() => {
         <div class="product-detail-rating-row">
           <span>{{ product.rating }}</span>
           <span class="product-detail-stars">{{ ratingStars }}</span>
-          <a href="#product-details">3 Ratings</a>
+          <a href="#product-reviews">{{ reviewCountLabel }}</a>
         </div>
 
         <div class="product-detail-price-row">
@@ -703,6 +730,34 @@ onUnmounted(() => {
             </label>
           </div>
           <p v-if="isLoadingVariants" class="product-variant-status">Loading options...</p>
+        </section>
+
+        <section
+          id="product-reviews"
+          class="product-detail-section product-reviews-section"
+          aria-label="Customer reviews"
+        >
+          <div class="product-reviews-heading">
+            <h3>Customer Reviews</h3>
+            <span>{{ reviewCountLabel }}</span>
+          </div>
+
+          <div class="product-reviews-list">
+            <article
+              v-for="review in productReviews"
+              :key="review.id"
+              class="product-review-card"
+            >
+              <div class="product-review-header">
+                <strong>{{ review.customerName }}</strong>
+                <span class="product-review-stars">{{ '★'.repeat(review.rating) }}</span>
+              </div>
+              <p>{{ review.description }}</p>
+            </article>
+            <p v-if="!productReviews.length" class="product-review-empty">
+              No reviews added yet.
+            </p>
+          </div>
         </section>
 
       </div>

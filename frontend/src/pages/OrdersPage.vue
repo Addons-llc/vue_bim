@@ -3,12 +3,16 @@ import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { getCurrentUser, hasPersistedPhoneAuthState, restoreLoginSession } from '../api/authApi'
 import { getOrderHistory } from '../api/orderHistoryApi'
+import { addProductReview } from '../api/reviewApi'
 import { clearCurrentUser, currentUser, setCurrentUser } from '../data/authStore'
 
 const router = useRouter()
 const orders = ref([])
 const isLoadingOrders = ref(false)
 const ordersError = ref('')
+const ratingOptions = [5, 4, 3, 2, 1]
+const reviewForms = ref({})
+const reviewStatusByItem = ref({})
 
 const hasOrders = computed(() => orders.value.length > 0)
 
@@ -26,6 +30,89 @@ function formatDate(value) {
 
 function formatCurrency(value, currency = 'AED') {
   return `${currency || 'AED'} ${Number(value || 0).toFixed(2)}`
+}
+
+function getReviewKey(orderName, itemCode) {
+  return `${orderName}::${itemCode}`
+}
+
+function getReviewForm(orderName, itemCode) {
+  const reviewKey = getReviewKey(orderName, itemCode)
+
+  if (!reviewForms.value[reviewKey]) {
+    reviewForms.value[reviewKey] = {
+      rating: 5,
+      description: '',
+    }
+  }
+
+  return reviewForms.value[reviewKey]
+}
+
+function getReviewStatus(orderName, itemCode) {
+  return reviewStatusByItem.value[getReviewKey(orderName, itemCode)] || {
+    isSubmitting: false,
+    successMessage: '',
+    errorMessage: '',
+    submittedReview: null,
+  }
+}
+
+function getSubmittedReview(orderName, item) {
+  return (
+    getReviewStatus(orderName, item.item_code).submittedReview
+    || item.submitted_review
+    || null
+  )
+}
+
+function updateReviewRating(orderName, itemCode, rating) {
+  getReviewForm(orderName, itemCode).rating = rating
+}
+
+function updateReviewDescription(orderName, itemCode, description) {
+  getReviewForm(orderName, itemCode).description = description
+}
+
+async function submitReview(orderName, item) {
+  const itemCode = String(item.item_code || '')
+  const reviewKey = getReviewKey(orderName, itemCode)
+  const form = getReviewForm(orderName, itemCode)
+
+  reviewStatusByItem.value[reviewKey] = {
+    isSubmitting: true,
+    successMessage: '',
+    errorMessage: '',
+  }
+
+  try {
+    await addProductReview({
+      orderName,
+      productId: itemCode,
+      rating: form.rating,
+      description: form.description,
+    })
+    reviewStatusByItem.value[reviewKey] = {
+      isSubmitting: false,
+      successMessage: 'Review added successfully.',
+      errorMessage: '',
+      submittedReview: {
+        customerName: currentUser.value?.full_name || currentUser.value?.fullName || currentUser.value?.email || 'You',
+        rating: form.rating,
+        description: form.description,
+      },
+    }
+    reviewForms.value[reviewKey] = {
+      rating: form.rating,
+      description: '',
+    }
+  } catch (error) {
+    reviewStatusByItem.value[reviewKey] = {
+      isSubmitting: false,
+      successMessage: '',
+      errorMessage: error.message || 'Unable to add review.',
+    }
+  }
 }
 
 async function loadOrders() {
@@ -115,11 +202,11 @@ onMounted(loadOrders)
           Purchase order {{ order.purchase_orders.join(', ') }}
         </p>
 
-        <div class="order-history-items">
+        <div class="order-history-items" @click.stop @keydown.stop>
           <article
             v-for="item in order.items"
             :key="`${order.name}-${item.item_code}`"
-            class="ordered-product-item"
+            class="ordered-product-item ordered-product-review-item"
           >
             <img
               v-if="item.image"
@@ -130,11 +217,83 @@ onMounted(loadOrders)
             <div v-else class="ordered-product-image ordered-product-image-fallback">
               {{ item.item_name.slice(0, 1) }}
             </div>
-            <div class="ordered-product-info">
-              <h3>{{ item.item_name }}</h3>
-              <p>Qty {{ item.qty }}</p>
+            <div class="ordered-product-review-body">
+              <div class="ordered-product-review-top">
+                <div class="ordered-product-info">
+                  <h3>{{ item.item_name }}</h3>
+                  <p>Qty {{ item.qty }}</p>
+                </div>
+                <strong>{{ formatCurrency(item.amount, order.currency) }}</strong>
+              </div>
+
+              <div
+                v-if="!getSubmittedReview(order.name, item)"
+                class="ordered-product-review-form"
+              >
+                <label class="ordered-product-review-field">
+                  <span>Rating</span>
+                  <div class="ordered-product-rating-picker" role="group" aria-label="Choose rating">
+                    <button
+                      v-for="ratingOption in ratingOptions"
+                      :key="`${order.name}-${item.item_code}-${ratingOption}`"
+                      class="ordered-product-rating-option"
+                      :class="{
+                        'is-selected': getReviewForm(order.name, item.item_code).rating === ratingOption,
+                      }"
+                      type="button"
+                      @click="updateReviewRating(order.name, item.item_code, ratingOption)"
+                    >
+                      <span class="ordered-product-rating-stars">{{ '★'.repeat(ratingOption) }}</span>
+                      <span>{{ ratingOption }}</span>
+                    </button>
+                  </div>
+                </label>
+
+                <label class="ordered-product-review-field is-wide">
+                  <span>Review description</span>
+                  <textarea
+                    rows="3"
+                    placeholder="Share what you liked, quality, delivery, or anything useful"
+                    :value="getReviewForm(order.name, item.item_code).description"
+                    @input="updateReviewDescription(order.name, item.item_code, $event.target.value)"
+                  />
+                  <small>Short, clear feedback helps other customers.</small>
+                </label>
+
+                <button
+                  class="ordered-product-review-submit"
+                  type="button"
+                  :disabled="getReviewStatus(order.name, item.item_code).isSubmitting"
+                  @click="submitReview(order.name, item)"
+                >
+                  {{ getReviewStatus(order.name, item.item_code).isSubmitting ? 'Saving...' : 'Add review' }}
+                </button>
+              </div>
+
+              <div
+                v-else
+                class="ordered-product-submitted-review"
+              >
+                <div class="ordered-product-submitted-review-header">
+                  <span>Submitted review</span>
+                  <strong>{{ '★'.repeat(getSubmittedReview(order.name, item).rating) }}</strong>
+                </div>
+                <p>{{ getSubmittedReview(order.name, item).description }}</p>
+              </div>
+
+              <p
+                v-if="getReviewStatus(order.name, item.item_code).successMessage"
+                class="ordered-product-review-message is-success"
+              >
+                {{ getReviewStatus(order.name, item.item_code).successMessage }}
+              </p>
+              <p
+                v-if="getReviewStatus(order.name, item.item_code).errorMessage"
+                class="ordered-product-review-message is-error"
+              >
+                {{ getReviewStatus(order.name, item.item_code).errorMessage }}
+              </p>
             </div>
-            <strong>{{ formatCurrency(item.amount, order.currency) }}</strong>
           </article>
         </div>
       </article>
