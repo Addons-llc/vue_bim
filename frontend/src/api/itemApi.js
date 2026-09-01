@@ -109,6 +109,10 @@ function hasCustomDeliverySlots(item) {
   )
 }
 
+function isRfqOnlyItem(item) {
+  return isTruthyFlag(item.custom_rfq_only ?? item.customRfqOnly)
+}
+
 function getCustomDeliveryFee(item) {
   return toNumber(
     item.custom_delivery_fee
@@ -326,6 +330,7 @@ async function mapItemToProduct(item) {
     category: itemGroup,
     brand: item.brand || '',
     customPopularItems: isTruthyFlag(item.custom_popular_items),
+    customRfqOnly: isRfqOnlyItem(item),
     customDeliverySlots: hasCustomDeliverySlots(item),
     customDeliveryFee: getCustomDeliveryFee(item),
     description: description || '',

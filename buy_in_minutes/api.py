@@ -184,6 +184,7 @@ def _apply_item_group_images(items):
 		return
 
 	item_group_meta = frappe.get_meta("Item Group")
+	rfq_only_field = "custom_rfq_only" if item_group_meta.has_field("custom_rfq_only") else None
 	image_field = next(
 		(
 			fieldname
@@ -200,11 +201,18 @@ def _apply_item_group_images(items):
 	)
 
 	if not image_field:
-		return
+		if not rfq_only_field:
+			return
+
+	fields = ["name"]
+	if image_field:
+		fields.append(image_field)
+	if rfq_only_field:
+		fields.append(rfq_only_field)
 
 	item_group_records = frappe.get_all(
 		"Item Group",
-		fields=["name", image_field],
+		fields=fields,
 		filters={"name": ["in", item_groups]},
 		ignore_permissions=True,
 		limit_page_length=len(item_groups),
@@ -212,10 +220,19 @@ def _apply_item_group_images(items):
 	item_group_images = {
 		record.name: record.get(image_field)
 		for record in item_group_records
+		if image_field
+	}
+	item_group_rfq_flags = {
+		record.name: record.get(rfq_only_field)
+		for record in item_group_records
+		if rfq_only_field
 	}
 
 	for item in items:
-		item.item_group_image = item_group_images.get(item.item_group)
+		if image_field:
+			item.item_group_image = item_group_images.get(item.item_group)
+		if rfq_only_field:
+			item.custom_rfq_only = item_group_rfq_flags.get(item.item_group)
 
 
 def _apply_item_attachments(items, max_attachments=2):

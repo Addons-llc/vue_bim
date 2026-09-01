@@ -581,6 +581,19 @@
   color: #ffffff;
 }
 
+.add-cart-button.is-rfq,
+.product-card.is-compact .add-cart-button.is-rfq {
+  border-color: #c084fc;
+  background: #faf5ff;
+  color: #7c3aed;
+}
+
+.add-cart-button.is-rfq:hover,
+.product-card.is-compact .add-cart-button.is-rfq:hover {
+  background: #f3e8ff;
+  color: #6d28d9;
+}
+
 .add-cart-button:hover {
   background: #1f2937;
 }

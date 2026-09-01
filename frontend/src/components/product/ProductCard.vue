@@ -28,6 +28,7 @@ const cartItem = computed(() => cartProducts.value.find((item) => item.id === pr
 const cartQuantity = computed(() => cartItem.value?.quantity || 0)
 const isWishlisted = computed(() => isProductWishlisted(props.product.id))
 const productPlaceholderImage = `${import.meta.env.BASE_URL}grocery-card-image-v3.svg?v=3`
+const isRfqOnly = computed(() => props.product.customRfqOnly === true)
 const availableQuantity = computed(() => {
   const quantity = Number(props.product.customAvailableQty ?? props.product.stockQuantity ?? 0)
 
@@ -74,6 +75,10 @@ function decreaseCartQuantity() {
 
 function handleWishlistToggle() {
   toggleProductWishlist(props.product)
+}
+
+function handleRequestQuotation() {
+  selectProduct()
 }
 
 function selectProduct() {
@@ -200,7 +205,20 @@ watch(
         <span class="product-price">
           AED {{ product.price }}
         </span>
-        <div v-if="cartQuantity" class="product-quantity-control" :aria-label="`${product.name} quantity`">
+        <button
+          v-if="isRfqOnly"
+          class="add-cart-button is-rfq"
+          type="button"
+          :aria-label="`Request quotation for ${product.name}`"
+          @click.stop="handleRequestQuotation"
+        >
+          Request Quotation
+        </button>
+        <div
+          v-else-if="cartQuantity"
+          class="product-quantity-control"
+          :aria-label="`${product.name} quantity`"
+        >
           <button
             type="button"
             :aria-label="`Decrease ${product.name} quantity`"
@@ -218,7 +236,7 @@ watch(
           </button>
         </div>
         <button
-          v-else
+          v-else-if="!isRfqOnly"
           class="add-cart-button"
           type="button"
           :aria-label="`Add ${product.name} to cart`"
