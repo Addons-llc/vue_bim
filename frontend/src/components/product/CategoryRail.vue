@@ -72,58 +72,6 @@ function getCategoryImage(category) {
   return category.image || categoryPlaceholderImage
 }
 
-function formatBrandRating(category) {
-  const rating = Number(category.rating)
-
-  if (!Number.isFinite(rating) || rating <= 0) {
-    return props.showBrandDetailFallbacks ? 'Rating' : ''
-  }
-
-  return rating.toFixed(1)
-}
-
-function formatBrandProductCount(category) {
-  const count = Number(category.productCount)
-
-  if (!Number.isFinite(count) || count < 0) {
-    return props.showBrandDetailFallbacks ? 'Products' : ''
-  }
-
-  return `${count} ${count === 1 ? 'product' : 'products'}`
-}
-
-function getBrandOfferBadge(category) {
-  return category.offerBadge || (props.showBrandDetailFallbacks ? 'Offer' : '')
-}
-
-function formatStoreStatus(category) {
-  return category.storeStatus || 'Open now'
-}
-
-function formatStoreProductCount(category) {
-  const count = Array.isArray(category.productIds)
-    ? category.productIds.length
-    : Number(category.productCount)
-
-  if (!Number.isFinite(count) || count < 0) {
-    return 'Products'
-  }
-
-  return `${count} ${count === 1 ? 'product' : 'products'}`
-}
-
-function getStoreContactLabel(category) {
-  if (category.whatsappNumber) {
-    return 'WhatsApp'
-  }
-
-  if (category.contactNumber) {
-    return 'Call'
-  }
-
-  return 'Store'
-}
-
 function selectCategory(category) {
   emit('select', category)
 }
@@ -179,22 +127,6 @@ function viewAll() {
         </span>
         <span class="category-copy">
           <span class="category-name">{{ category.name }}</span>
-          <span v-if="itemType === 'brand'" class="brand-card-details">
-            <span v-if="formatBrandRating(category)" class="brand-card-rating">
-              {{ formatBrandRating(category) }}
-            </span>
-            <span v-if="formatBrandProductCount(category)" class="brand-card-product-count">
-              {{ formatBrandProductCount(category) }}
-            </span>
-            <span v-if="getBrandOfferBadge(category)" class="brand-card-offer">
-              {{ getBrandOfferBadge(category) }}
-            </span>
-          </span>
-          <span v-else-if="itemType === 'store'" class="item-card-details store-card-details">
-            <span class="store-card-status">{{ formatStoreStatus(category) }}</span>
-            <span class="store-card-product-count">{{ formatStoreProductCount(category) }}</span>
-            <span class="store-card-contact">{{ getStoreContactLabel(category) }}</span>
-          </span>
         </span>
       </button>
     </div>

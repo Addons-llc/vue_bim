@@ -5,6 +5,7 @@ import ProductCard from '../components/product/ProductCard.vue'
 import { useProducts } from '../composables/useProducts'
 import { saveSelectedProduct } from '../data/productSelectionStore'
 import { saveSelectedSupplier } from '../data/supplierSelectionStore'
+import { getChildCategories } from '../utils/categoryNavigation'
 
 const route = useRoute()
 const router = useRouter()
@@ -51,6 +52,27 @@ const {
       ? { supplier_store: category }
       : { item_group: category },
 })
+const selectedCategoryRecord = computed(() =>
+  categories.value.find((category) =>
+    [category.id, category.name, category.itemGroup].includes(selectedCategory.value),
+  ) || null,
+)
+const parentCategoryRecord = computed(() => {
+  const parentItemGroup = String(selectedCategoryRecord.value?.parentItemGroup || '').trim()
+
+  if (!parentItemGroup || parentItemGroup === 'All Item Groups') {
+    return selectedCategoryRecord.value
+  }
+
+  return categories.value.find((category) =>
+    [category.id, category.name, category.itemGroup].includes(parentItemGroup),
+  ) || selectedCategoryRecord.value
+})
+const sidebarCategoryItems = computed(() =>
+  parentCategoryRecord.value
+    ? getChildCategories(parentCategoryRecord.value, categories.value)
+    : [],
+)
 
 const categoryPlaceholderImage = `${import.meta.env.BASE_URL}grocery-card-image-v3.svg?v=3`
 
@@ -131,29 +153,20 @@ function openProductDetails(product) {
       </div>
     </header>
 
-    <div class="category-detail-layout">
+    <div
+      class="category-detail-layout"
+      :class="{ 'has-no-sidebar': !isStoreDetailsPage && !sidebarCategoryItems.length }"
+    >
       <aside
-        v-if="!isStoreDetailsPage"
+        v-if="!isStoreDetailsPage && sidebarCategoryItems.length"
         class="category-detail-sidebar"
-        aria-label="Categories"
+        aria-label="Available item groups"
       >
         <button
-          class="category-side-item"
-          :class="{ 'is-active': !activeCategory }"
-          type="button"
-          @click="router.push(backRoute)"
-        >
-          <span class="category-side-image">
-            <img :src="categoryPlaceholderImage" alt="" />
-          </span>
-          <span>All</span>
-        </button>
-
-        <button
-          v-for="category in categories"
+          v-for="category in sidebarCategoryItems"
           :key="category.id"
           class="category-side-item"
-          :class="{ 'is-active': activeCategory === category.name }"
+          :class="{ 'is-active': [category.id, category.name, category.itemGroup].includes(selectedCategory) }"
           type="button"
           @click="selectCategory(category)"
         >

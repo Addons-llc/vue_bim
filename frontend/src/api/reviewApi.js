@@ -31,7 +31,7 @@ export async function getProductReviews(productId, supplier = '') {
     `/method/buy_in_minutes.api.get_product_reviews?${query.toString()}`,
   )
 
-  return Array.isArray(response?.message)
+  return Array.isArray(response.message)
     ? response.message.map(normalizeReview)
     : []
 }

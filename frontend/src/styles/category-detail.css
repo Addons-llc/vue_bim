@@ -79,6 +79,10 @@
   grid-template-columns: minmax(0, 1fr);
 }
 
+.category-detail-layout.has-no-sidebar {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .category-detail-sidebar {
   position: sticky;
   top: 84px;

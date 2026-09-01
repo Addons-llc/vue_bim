@@ -44,6 +44,9 @@ const productQuantity = computed(() => {
 const supplierName = computed(() =>
   product.value?.supplierName || product.value?.supplier || 'Supplier not set',
 )
+const supplierIdentifier = computed(() =>
+  product.value?.supplier || product.value?.supplierDetails?.name || supplierName.value,
+)
 const supplierImage = computed(() =>
   product.value?.supplierDetails?.image || '',
 )
@@ -61,17 +64,33 @@ const brandName = computed(() =>
   || (sourceListing.value?.type === 'brand' ? sourceListing.value.name : '')
   || '',
 )
+const averageReviewRating = computed(() => {
+  const ratings = productReviews.value
+    .map((review) => Number(review.rating || 0))
+    .filter((rating) => Number.isFinite(rating) && rating > 0)
+
+  if (!ratings.length) {
+    return Number(product.value?.rating || 0)
+  }
+
+  return ratings.reduce((total, rating) => total + rating, 0) / ratings.length
+})
 const ratingStars = computed(() => {
-  const rating = Math.round(Number(product.value?.rating || 0))
+  const rating = Math.round(Number(averageReviewRating.value || 0))
 
   return '★'.repeat(Math.min(rating, 5)) || '★★★★★'
 })
+const averageReviewRatingLabel = computed(() => {
+  const rating = Number(averageReviewRating.value || 0)
+
+  if (!Number.isFinite(rating) || rating <= 0) {
+    return '0.0'
+  }
+
+  return rating.toFixed(1)
+})
 const productDescription = computed(() => product.value?.description || '')
 const isProductDescriptionLong = computed(() => productDescription.value.length > 120)
-const variantTemplateId = computed(() =>
-  product.value?.variantOf || (product.value?.hasVariants ? product.value.id : ''),
-)
-const selectedVariantId = computed(() => product.value?.id || '')
 const hasProductVariants = computed(() => productVariants.value.length > 0)
 const showVariantDropdowns = computed(() =>
   hasProductVariants.value && product.value?.variantBasedOn === 'Item Attribute',
@@ -93,6 +112,14 @@ const deliveryStatusMessage = computed(() => {
   }
 
   return ''
+})
+const productSupplierWebsite = computed(() =>
+  String(product.value?.supplierDetails?.website || '').trim(),
+)
+const productDeliveryTimeLabel = computed(() => {
+  const deliveryTime = String(product.value?.deliveryTime || '').trim()
+
+  return deliveryTime || 'Set delivery location to view'
 })
 const productSizeOptions = computed(() => {
   const rawSize = product.value?.customSize || product.value?.custom_size || ''
@@ -214,6 +241,14 @@ const productDetails = computed(() => {
       details.push({ label: 'Size', value: selectedProductSizeLabel.value })
     }
 
+    if (productSupplierWebsite.value && !details.some((detail) => detail.label === 'Supplier website')) {
+      details.push({ label: 'Supplier website', value: productSupplierWebsite.value })
+    }
+
+    if (!details.some((detail) => detail.label === 'Delivery time')) {
+      details.push({ label: 'Delivery time', value: productDeliveryTimeLabel.value })
+    }
+
     return details
   }
 
@@ -222,12 +257,14 @@ const productDetails = computed(() => {
       ? { label: sourceListing.value.label || 'Selected from', value: sourceListing.value.name }
       : null,
     { label: 'Supplier', value: supplierName.value },
+    { label: 'Supplier website', value: productSupplierWebsite.value },
     sourceListing.value?.storeCode
       ? { label: 'Store code', value: sourceListing.value.storeCode }
       : null,
     selectedProductSizeLabel.value
       ? { label: 'Size', value: selectedProductSizeLabel.value }
       : null,
+    { label: 'Delivery time', value: productDeliveryTimeLabel.value },
     { label: 'Category', value: product.value.category },
   ].filter((detail) => detail?.value)
 })
@@ -483,19 +520,6 @@ function selectProductSize(size) {
   selectedProductSize.value = size
 }
 
-async function selectProductVariant(variant) {
-  if (!variant?.id || variant.id === productId.value) {
-    return
-  }
-
-  syncSelectedVariantAttributes(variant)
-  saveSelectedProduct(variant)
-  await router.push({
-    name: 'product-details',
-    params: { productId: variant.id },
-  })
-}
-
 async function updateVariantSelection(attributeName, attributeValue) {
   const nextSelections = {
     ...selectedVariantAttributes.value,
@@ -508,28 +532,21 @@ async function updateVariantSelection(attributeName, attributeValue) {
     return
   }
 
-  await selectProductVariant(matchedVariant)
+  syncSelectedVariantAttributes(matchedVariant)
+  saveSelectedProduct(matchedVariant)
+  await router.push({
+    name: 'product-details',
+    params: { productId: matchedVariant.id },
+  })
 }
 
 function toggleProductDescription() {
   isProductDescriptionExpanded.value = !isProductDescriptionExpanded.value
 }
 
-async function openProductDetails(nextProduct) {
-  if (!nextProduct?.id || nextProduct.id === productId.value) {
-    return
-  }
-
-  saveSelectedProduct(nextProduct)
-  await router.push({
-    name: 'product-details',
-    params: { productId: nextProduct.id },
-  })
-}
-
 function rememberSupplierSelection() {
   saveSelectedSupplier({
-    name: supplierName.value,
+    name: supplierIdentifier.value,
     details: product.value?.supplierDetails,
     product: product.value,
   })
@@ -645,9 +662,9 @@ onUnmounted(() => {
         <h2 :id="`product-detail-title-${product.id}`">{{ product.name }}</h2>
 
         <div class="product-detail-rating-row">
-          <span>{{ product.rating }}</span>
+          <span>{{ averageReviewRatingLabel }}</span>
           <span class="product-detail-stars">{{ ratingStars }}</span>
-          <a href="#product-reviews">{{ reviewCountLabel }}</a>
+          <a v-if="productReviews.length" href="#product-reviews">{{ reviewCountLabel }}</a>
         </div>
 
         <div class="product-detail-price-row">
@@ -703,6 +720,32 @@ onUnmounted(() => {
         </dl>
 
         <section
+          v-if="productReviews.length"
+          id="product-reviews"
+          class="product-detail-section product-reviews-section"
+          aria-label="Customer reviews"
+        >
+          <div class="product-reviews-heading">
+            <h3>Customer Reviews</h3>
+            <span>{{ reviewCountLabel }}</span>
+          </div>
+
+          <div class="product-reviews-list">
+            <article
+              v-for="review in productReviews"
+              :key="review.id"
+              class="product-review-card"
+            >
+              <div class="product-review-header">
+                <strong>{{ review.customerName }}</strong>
+                <span class="product-review-stars">{{ '★'.repeat(review.rating) }}</span>
+              </div>
+              <p>{{ review.description }}</p>
+            </article>
+          </div>
+        </section>
+
+        <section
           v-if="showVariantDropdowns"
           class="product-detail-section product-variant-dropdown-section"
         >
@@ -732,40 +775,12 @@ onUnmounted(() => {
           <p v-if="isLoadingVariants" class="product-variant-status">Loading options...</p>
         </section>
 
-        <section
-          id="product-reviews"
-          class="product-detail-section product-reviews-section"
-          aria-label="Customer reviews"
-        >
-          <div class="product-reviews-heading">
-            <h3>Customer Reviews</h3>
-            <span>{{ reviewCountLabel }}</span>
-          </div>
-
-          <div class="product-reviews-list">
-            <article
-              v-for="review in productReviews"
-              :key="review.id"
-              class="product-review-card"
-            >
-              <div class="product-review-header">
-                <strong>{{ review.customerName }}</strong>
-                <span class="product-review-stars">{{ '★'.repeat(review.rating) }}</span>
-              </div>
-              <p>{{ review.description }}</p>
-            </article>
-            <p v-if="!productReviews.length" class="product-review-empty">
-              No reviews added yet.
-            </p>
-          </div>
-        </section>
-
       </div>
 
       <aside class="product-detail-purchase" aria-label="Purchase options">
         <RouterLink
           class="product-detail-seller-card"
-          :to="{ name: 'supplier-details', params: { supplierName } }"
+          :to="{ name: 'supplier-details', params: { supplierName: supplierIdentifier } }"
           @click="rememberSupplierSelection"
         >
           <span class="product-detail-seller-mark">

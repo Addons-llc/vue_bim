@@ -10,6 +10,7 @@ import { getBrands } from '../api/brandApi'
 import { getSupplierStores } from '../api/supplierStoreApi'
 import {
   getChildCategories,
+  hasChildCategories,
   openCategoryOrProduct,
 } from '../utils/categoryNavigation'
 
@@ -88,6 +89,19 @@ async function openSelectedItem(category) {
     const isTopLevelCategory = topLevelCategories.value.some((candidate) => candidate.id === category.id)
 
     if (isTopLevelCategory) {
+      if (!hasChildCategories(category, categories.value)) {
+        await openCategoryOrProduct({
+          categories: categories.value,
+          item: category,
+          router,
+          sourceType: activeSourceType.value,
+          onError: (message) => {
+            categoryError.value = message
+          },
+        })
+        return
+      }
+
       await router.push({
         name: 'categories',
         query: {

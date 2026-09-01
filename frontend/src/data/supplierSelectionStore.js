@@ -39,8 +39,19 @@ export function saveSelectedSupplier(supplier) {
 export function getSelectedSupplier(supplierName) {
   try {
     const supplier = JSON.parse(sessionStorage.getItem(SELECTED_SUPPLIER_STORAGE_KEY))
+    const requestedName = String(supplierName || '').trim()
+    const candidateNames = [
+      supplier?.name,
+      supplier?.details?.name,
+      supplier?.details?.displayName,
+      supplier?.details?.supplier,
+      supplier?.product?.supplier,
+      supplier?.product?.supplierName,
+    ]
+      .map((value) => String(value || '').trim())
+      .filter(Boolean)
 
-    return supplier?.name === supplierName ? supplier : null
+    return candidateNames.includes(requestedName) ? supplier : null
   } catch {
     return null
   }

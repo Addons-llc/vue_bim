@@ -5,6 +5,7 @@ import {
 import { apiRequest } from './http'
 
 const supplierStorePlaceholderImage = `${import.meta.env.BASE_URL}fresh-market-placeholder.svg?v=1`
+const SUPPLIER_WEBSITE_BASE_URL = 'https://buyinminutes.u.frappe.cloud/supplier-website'
 
 function getImageUrl(imagePath) {
   if (!imagePath) {
@@ -22,6 +23,24 @@ function getImageUrl(imagePath) {
   return imagePath.startsWith('/')
     ? `${SITE_BASE_URL}${imagePath}`
     : `${SITE_BASE_URL}/${imagePath}`
+}
+
+function normalizeWebsiteUrl(url) {
+  const value = String(url || '').trim()
+
+  if (!value) {
+    return ''
+  }
+
+  if (/^(https?:|data:|blob:)/i.test(value)) {
+    return value
+  }
+
+  if (value.startsWith('/')) {
+    return `${SITE_BASE_URL}${value}`
+  }
+
+  return `https://${value}`
 }
 
 function getStoreProductIds(store = {}) {
@@ -143,4 +162,73 @@ export async function getSupplierStore(identifier) {
       store.storeCode,
     ].some((value) => String(value || '').toLowerCase() === normalizedIdentifier),
   ) || null
+}
+
+async function getSupplierWebsiteProfileUrlByStoreValue(supplierStore) {
+  const filters = encodeURIComponent(JSON.stringify([
+    ['supplier_store', '=', supplierStore],
+  ]))
+  const fields = encodeURIComponent(JSON.stringify(['name', 'supplier', 'supplier_name', 'supplier_store', 'slug']))
+  const response = await apiRequest(
+    `/resource/Supplier Website Profile?fields=${fields}&filters=${filters}&limit_page_length=1`,
+  )
+  const profile = response.data?.[0]
+
+  return buildSupplierPortalUrlFromSlug(profile?.slug)
+}
+
+async function getSupplierWebsiteProfileBySupplier(supplier) {
+  const filters = encodeURIComponent(JSON.stringify([
+    ['supplier', '=', supplier],
+  ]))
+  const fields = encodeURIComponent(JSON.stringify(['name', 'supplier', 'supplier_name', 'supplier_store', 'slug']))
+  const response = await apiRequest(
+    `/resource/Supplier Website Profile?fields=${fields}&filters=${filters}&limit_page_length=1`,
+  )
+
+  return response.data?.[0] || null
+}
+
+function buildSupplierPortalUrlFromSlug(slug) {
+  const normalizedSlug = String(slug || '').trim().replace(/^\/+|\/+$/g, '')
+
+  if (!normalizedSlug) {
+    return ''
+  }
+
+  return `${SUPPLIER_WEBSITE_BASE_URL}/${normalizedSlug}`
+}
+
+export async function getSupplierStorePortalUrl(storeIdentifier, supplierName = '') {
+  const normalizedSupplierName = String(supplierName || '').trim()
+  const profile = normalizedSupplierName
+    ? await getSupplierWebsiteProfileBySupplier(normalizedSupplierName).catch(() => null)
+    : null
+
+  if (profile) {
+    return buildSupplierPortalUrlFromSlug(profile.slug)
+  }
+
+  if (!storeIdentifier) {
+    return ''
+  }
+
+  const store = await getSupplierStore(storeIdentifier).catch(() => null)
+  const candidateStoreValues = [
+    store?.storeCode,
+    store?.id,
+    store?.name,
+    store?.supplier,
+    storeIdentifier,
+  ].filter(Boolean)
+
+  for (const supplierStore of [...new Set(candidateStoreValues)]) {
+    const portalUrl = await getSupplierWebsiteProfileUrlByStoreValue(supplierStore).catch(() => '')
+
+    if (portalUrl) {
+      return portalUrl
+    }
+  }
+
+  return ''
 }

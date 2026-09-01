@@ -110,10 +110,35 @@ def _get_item_group_publish_fields():
 	return _get_existing_fields("Item Group", ITEM_GROUP_PUBLISH_FIELDS)
 
 
+def _get_selling_price_list():
+	configured_price_list = (
+		frappe.defaults.get_user_default("selling_price_list")
+		or frappe.defaults.get_global_default("selling_price_list")
+	)
+	if configured_price_list and frappe.db.get_value(
+		"Price List",
+		{"name": configured_price_list, "enabled": 1, "selling": 1},
+		"name",
+	):
+		return configured_price_list
+
+	enabled_price_list = frappe.db.get_value(
+		"Price List",
+		{"enabled": 1, "selling": 1},
+		"name",
+	)
+	if enabled_price_list:
+		return enabled_price_list
+
+	return SELLING_PRICE_LIST
+
+
 def _get_selling_prices(item_codes):
 	item_codes = [item_code for item_code in item_codes if item_code]
 	if not item_codes:
 		return {}
+
+	selling_price_list = _get_selling_price_list()
 
 	price_records = frappe.get_all(
 		"Item Price",
@@ -129,7 +154,7 @@ def _get_selling_prices(item_codes):
 	for price_record in price_records:
 		item_code = price_record.item_code
 		current_price_record = prices.get(item_code)
-		if not current_price_record or price_record.price_list == SELLING_PRICE_LIST:
+		if not current_price_record or price_record.price_list == selling_price_list:
 			prices[item_code] = price_record
 
 	return prices
@@ -476,7 +501,12 @@ def _get_supplier_detail_record(supplier):
 
 
 def _find_supplier_website_profile_doctype():
-	for doctype_name in ("Supplier Website Profile", "Website Supplier Profile"):
+	candidate_doctypes = (
+		"Supplier Website Profile",
+		"Website Supplier Profile",
+	)
+
+	for doctype_name in candidate_doctypes:
 		if frappe.db.exists("DocType", doctype_name):
 			return doctype_name
 
@@ -485,7 +515,7 @@ def _find_supplier_website_profile_doctype():
 
 def _get_product_supplier_name(product_id):
 	product_id = (product_id or "").strip()
-	if not product_id or not frappe.db.exists("Item", product_id):
+	if not product_id or not frappe.db.exists("DocType", "Item") or not frappe.db.exists("Item", product_id):
 		return ""
 
 	item_meta = frappe.get_meta("Item")
@@ -518,7 +548,10 @@ def _get_matching_supplier_website_profile_name(profile_doctype, supplier):
 		return supplier
 
 	supplier_record = _get_supplier_detail_record(supplier) or {}
-	supplier_display_name = supplier_record.get("supplier_name") or supplier
+	supplier_display_name = (
+		supplier_record.get("supplier_name")
+		or supplier
+	)
 	profile_filters = []
 
 	for fieldname, fieldvalue in (
@@ -606,7 +639,10 @@ def _review_row_matches_product(review_row, product_id):
 		)
 	).strip()
 
-	return not review_product_value or review_product_value == product_id
+	if not review_product_value:
+		return True
+
+	return review_product_value == product_id
 
 
 def _set_first_existing_value(target_doc, candidate_fields, value):
@@ -614,7 +650,7 @@ def _set_first_existing_value(target_doc, candidate_fields, value):
 		return False
 
 	for fieldname in candidate_fields:
-		if target_doc.meta.has_field(fieldname):
+		if hasattr(target_doc, "meta") and target_doc.meta.has_field(fieldname):
 			target_doc.set(fieldname, value)
 			return True
 
@@ -626,7 +662,11 @@ def _get_current_reviewer_name():
 	if not user_name or user_name.lower() == "guest":
 		return ""
 
-	return frappe.db.get_value("User", user_name, "full_name") or user_name
+	full_name = frappe.db.get_value("User", user_name, "full_name")
+	if full_name:
+		return full_name
+
+	return user_name
 
 
 def _find_existing_review_row(review_rows, order_name, product_id, reviewer_name):
@@ -657,7 +697,7 @@ def get_product_reviews(product_id=None, supplier=None):
 	if not profile_doctype:
 		return []
 
-	supplier = (supplier or "").strip() or _get_product_supplier_name(product_id)
+	supplier = (supplier or "").strip() or _get_product_supplier_name((product_id or "").strip())
 	if not supplier:
 		return []
 
@@ -665,11 +705,11 @@ def get_product_reviews(product_id=None, supplier=None):
 	if not profile_name:
 		return []
 
+	profile_doc = frappe.get_doc(profile_doctype, profile_name)
 	reviews_field = _get_reviews_table_field(profile_doctype)
 	if not reviews_field:
 		return []
 
-	profile_doc = frappe.get_doc(profile_doctype, profile_name)
 	review_rows = [
 		review_row
 		for review_row in (profile_doc.get(reviews_field.fieldname) or [])
@@ -685,8 +725,7 @@ def get_product_reviews(product_id=None, supplier=None):
 
 @frappe.whitelist()
 def add_product_review(order_name=None, product_id=None, rating=None, description=None):
-	user_name = str(getattr(frappe.session, "user", "") or "").strip()
-	if not user_name or user_name.lower() == "guest":
+	if _is_guest_session_user():
 		frappe.throw("Please sign in to add a review.", frappe.AuthenticationError)
 
 	order_name = (order_name or "").strip()
@@ -704,7 +743,7 @@ def add_product_review(order_name=None, product_id=None, rating=None, descriptio
 		frappe.throw("Order was not found.")
 
 	sales_order = frappe.get_doc("Sales Order", order_name)
-	if sales_order.owner != frappe.session.user and frappe.session.user != "Administrator":
+	if not _can_view_sales_order(sales_order):
 		frappe.throw("You are not allowed to review this order.")
 
 	if not any((row.item_code or "").strip() == product_id for row in sales_order.items):
@@ -727,6 +766,7 @@ def add_product_review(order_name=None, product_id=None, rating=None, descriptio
 		frappe.throw("Reviews section was not found in Supplier Website Profile.")
 
 	profile_doc = frappe.get_doc(profile_doctype, profile_name)
+	review_child_doctype = reviews_field.options
 	reviewer_name = _get_current_reviewer_name() or sales_order.customer_name or sales_order.customer or frappe.session.user
 	existing_review_row = _find_existing_review_row(
 		profile_doc.get(reviews_field.fieldname) or [],
@@ -734,10 +774,11 @@ def add_product_review(order_name=None, product_id=None, rating=None, descriptio
 		product_id,
 		reviewer_name,
 	)
-	if existing_review_row:
-		frappe.throw("You have already submitted a review for this product in this order.")
 
-	review_row = profile_doc.append(reviews_field.fieldname, {})
+	review_row = existing_review_row or profile_doc.append(reviews_field.fieldname, {})
+	if review_child_doctype and getattr(review_row, "doctype", "") != review_child_doctype:
+		review_row.doctype = review_child_doctype
+
 	_set_first_existing_value(review_row, ("customer_name", "reviewer_name", "customer", "full_name", "review_by"), reviewer_name)
 	_set_first_existing_value(review_row, ("rating", "star_rating", "stars", "score", "value"), rating)
 	_set_first_existing_value(review_row, ("description", "review", "comment", "message", "feedback", "remarks"), description)
