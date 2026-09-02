@@ -344,7 +344,22 @@ def _get_item_supplier_links(item_names):
 	return item_suppliers
 
 
-def _get_item_supplier_warehouse(item_name, supplier=None):
+def _get_item_supplier_warehouse(item_doc, supplier=None):
+	if not item_doc:
+		return ""
+
+	supplier_rows = item_doc.get("supplier_items") or []
+	for row in supplier_rows:
+		if supplier and row.get("supplier") != supplier:
+			continue
+		if row.get("custom_supplier_warehouse"):
+			return row.get("custom_supplier_warehouse")
+
+	for row in supplier_rows:
+		if row.get("custom_supplier_warehouse"):
+			return row.get("custom_supplier_warehouse")
+
+	item_name = item_doc.name
 	if not item_name or not frappe.db.exists("DocType", "Item Supplier"):
 		return ""
 
@@ -907,7 +922,7 @@ def create_request_for_quotation(product_id=None, quantity=1, selected_size=None
 		frappe.throw("Supplier was not found for this product.")
 
 	company = _get_default_company()
-	supplier_warehouse = _get_item_supplier_warehouse(item_doc.name, supplier)
+	supplier_warehouse = _get_item_supplier_warehouse(item_doc, supplier)
 	item_description = item_doc.description or item_doc.item_name or item_doc.item_code or item_doc.name
 	if selected_size:
 		item_description = f"{item_description}\n\nSelected Size: {selected_size}"
