@@ -344,20 +344,83 @@ def _get_item_supplier_links(item_names):
 	return item_suppliers
 
 
+def _row_matches_supplier(row, supplier=None):
+	supplier = str(supplier or "").strip()
+	if not supplier:
+		return True
+
+	row_supplier_candidates = [
+		row.get("supplier"),
+		row.get("supplier_name"),
+		row.get("default_supplier"),
+		row.get("custom_supplier"),
+		row.get("custom_supplier_name"),
+	]
+	row_supplier_candidates = {str(value).strip() for value in row_supplier_candidates if value}
+	if supplier in row_supplier_candidates:
+		return True
+
+	resolved_candidates = {
+		_resolve_supplier_name(value)
+		for value in row_supplier_candidates
+		if value
+	}
+	return supplier in resolved_candidates
+
+
+def _get_warehouse_from_row(row):
+	for fieldname in (
+		"custom_supplier_warehouse",
+		"supplier_warehouse",
+		"default_warehouse",
+		"warehouse",
+	):
+		if row.get(fieldname):
+			return row.get(fieldname)
+
+	return ""
+
+
+def _get_supplier_warehouse_from_rows(rows, supplier=None):
+	for row in rows or []:
+		if not _row_matches_supplier(row, supplier):
+			continue
+		warehouse = _get_warehouse_from_row(row)
+		if warehouse:
+			return warehouse
+
+	for row in rows or []:
+		warehouse = _get_warehouse_from_row(row)
+		if warehouse:
+			return warehouse
+
+	return ""
+
+
 def _get_item_supplier_warehouse(item_doc, supplier=None):
 	if not item_doc:
 		return ""
 
-	supplier_rows = item_doc.get("supplier_items") or []
-	for row in supplier_rows:
-		if supplier and row.get("supplier") != supplier:
-			continue
-		if row.get("custom_supplier_warehouse"):
-			return row.get("custom_supplier_warehouse")
+	item_meta = item_doc.meta
+	table_fieldnames = [
+		df.fieldname
+		for df in item_meta.fields
+		if df.fieldtype == "Table" and df.fieldname
+	]
 
-	for row in supplier_rows:
-		if row.get("custom_supplier_warehouse"):
-			return row.get("custom_supplier_warehouse")
+	# Prefer a custom Supplier List child table when present on the site.
+	for fieldname in table_fieldnames:
+		df = item_meta.get_field(fieldname)
+		if not df:
+			continue
+		if fieldname == "supplier_list" or df.options == "Supplier List" or df.label == "Supplier List":
+			warehouse = _get_supplier_warehouse_from_rows(item_doc.get(fieldname), supplier)
+			if warehouse:
+				return warehouse
+
+	warehouse = _get_supplier_warehouse_from_rows(item_doc.get("supplier_items"), supplier)
+	if warehouse:
+		return warehouse
 
 	item_name = item_doc.name
 	if not item_name or not frappe.db.exists("DocType", "Item Supplier"):
@@ -380,10 +443,9 @@ def _get_item_supplier_warehouse(item_doc, supplier=None):
 		limit_page_length=5,
 	)
 
-	if item_supplier_rows:
-		for row in item_supplier_rows:
-			if row.get("custom_supplier_warehouse"):
-				return row.get("custom_supplier_warehouse")
+	warehouse = _get_supplier_warehouse_from_rows(item_supplier_rows, supplier)
+	if warehouse:
+		return warehouse
 
 	if supplier and item_supplier_meta.has_field("supplier"):
 		item_supplier_rows = frappe.get_all(
@@ -394,9 +456,9 @@ def _get_item_supplier_warehouse(item_doc, supplier=None):
 			ignore_permissions=True,
 			limit_page_length=5,
 		)
-		for row in item_supplier_rows:
-			if row.get("custom_supplier_warehouse"):
-				return row.get("custom_supplier_warehouse")
+		warehouse = _get_supplier_warehouse_from_rows(item_supplier_rows)
+		if warehouse:
+			return warehouse
 
 	return ""
 
