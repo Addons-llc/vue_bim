@@ -376,7 +376,11 @@ def _get_item_supplier_warehouse(item_doc, supplier=None):
 	for df in item_meta.fields:
 		if df.fieldtype != "Table" or not df.fieldname:
 			continue
-		if df.fieldname != "supplier_list" and df.options != "Supplier List" and df.label != "Supplier List":
+		if (
+			df.fieldname not in ("supplier_list", "supplier_items")
+			and df.options not in ("Supplier List", "Item Supplier")
+			and df.label not in ("Supplier List", "Supplier Items")
+		):
 			continue
 
 		for row in item_doc.get(df.fieldname) or []:
