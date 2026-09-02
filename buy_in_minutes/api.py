@@ -909,7 +909,13 @@ def create_request_for_quotation(product_id=None, quantity=1, selected_size=None
 		frappe.throw("Supplier was not found for this product.")
 
 	company = _get_default_company()
-	supplier_warehouse = _get_item_supplier_warehouse(item_doc, supplier)
+	request_warehouse = _get_item_supplier_warehouse(item_doc, supplier)
+	if item_doc.is_stock_item and not request_warehouse:
+		frappe.throw(
+			_(
+				"Please configure Custom Supplier Warehouse in the Supplier List for stock item {0} before creating a quotation request."
+			).format(frappe.bold(item_doc.name))
+		)
 	item_description = item_doc.description or item_doc.item_name or item_doc.item_code or item_doc.name
 	if selected_size:
 		item_description = f"{item_description}\n\nSelected Size: {selected_size}"
@@ -939,7 +945,7 @@ def create_request_for_quotation(product_id=None, quantity=1, selected_size=None
 					"uom": item_doc.stock_uom,
 					"stock_uom": item_doc.stock_uom,
 					"schedule_date": today(),
-					"warehouse": supplier_warehouse or None,
+					"warehouse": request_warehouse or None,
 				}
 			],
 		}
