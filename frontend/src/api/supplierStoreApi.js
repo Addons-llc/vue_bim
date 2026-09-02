@@ -68,7 +68,11 @@ function getStoreProductIds(store = {}) {
 function mapSupplierStoreToBrand(store) {
   const storeName = store.store_name || store.name
   const storeLogo = store.store_logo
+    || store.store_image
     || store.logo
+    || store.image
+    || store.website_image
+    || store.supplier_image
     || store.supplier_logo
     || store.custom_store_logo
     || store.custom_supplier_logo
