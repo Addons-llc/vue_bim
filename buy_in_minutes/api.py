@@ -344,6 +344,48 @@ def _get_item_supplier_links(item_names):
 	return item_suppliers
 
 
+def _get_item_supplier_warehouse(item_name, supplier=None):
+	if not item_name or not frappe.db.exists("DocType", "Item Supplier"):
+		return ""
+
+	item_supplier_meta = frappe.get_meta("Item Supplier")
+	if not item_supplier_meta.has_field("custom_supplier_warehouse"):
+		return ""
+
+	filters = {"parent": item_name}
+	if supplier and item_supplier_meta.has_field("supplier"):
+		filters["supplier"] = supplier
+
+	item_supplier_rows = frappe.get_all(
+		"Item Supplier",
+		fields=["custom_supplier_warehouse"] + (["supplier"] if item_supplier_meta.has_field("supplier") else []),
+		filters=filters,
+		order_by="idx asc",
+		ignore_permissions=True,
+		limit_page_length=5,
+	)
+
+	if item_supplier_rows:
+		for row in item_supplier_rows:
+			if row.get("custom_supplier_warehouse"):
+				return row.get("custom_supplier_warehouse")
+
+	if supplier and item_supplier_meta.has_field("supplier"):
+		item_supplier_rows = frappe.get_all(
+			"Item Supplier",
+			fields=["custom_supplier_warehouse"],
+			filters={"parent": item_name},
+			order_by="idx asc",
+			ignore_permissions=True,
+			limit_page_length=5,
+		)
+		for row in item_supplier_rows:
+			if row.get("custom_supplier_warehouse"):
+				return row.get("custom_supplier_warehouse")
+
+	return ""
+
+
 def _get_supplier_from_item_fields(item):
 	for fieldname in ITEM_SUPPLIER_FIELDS:
 		if item.get(fieldname):
@@ -865,6 +907,7 @@ def create_request_for_quotation(product_id=None, quantity=1, selected_size=None
 		frappe.throw("Supplier was not found for this product.")
 
 	company = _get_default_company()
+	supplier_warehouse = _get_item_supplier_warehouse(item_doc.name, supplier)
 	item_description = item_doc.description or item_doc.item_name or item_doc.item_code or item_doc.name
 	if selected_size:
 		item_description = f"{item_description}\n\nSelected Size: {selected_size}"
@@ -894,6 +937,7 @@ def create_request_for_quotation(product_id=None, quantity=1, selected_size=None
 					"uom": item_doc.stock_uom,
 					"stock_uom": item_doc.stock_uom,
 					"schedule_date": today(),
+					"warehouse": supplier_warehouse or None,
 				}
 			],
 		}
