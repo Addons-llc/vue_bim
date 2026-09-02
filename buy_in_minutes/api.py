@@ -948,6 +948,7 @@ def create_request_for_quotation(product_id=None, quantity=1, selected_size=None
 					"qty": requested_qty,
 					"uom": item_doc.stock_uom,
 					"stock_uom": item_doc.stock_uom,
+					"conversion_factor": 1,
 					"schedule_date": today(),
 					"warehouse": request_warehouse or None,
 				}
