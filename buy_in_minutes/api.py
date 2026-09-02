@@ -146,6 +146,23 @@ def _get_default_company():
 	return company
 
 
+def _get_item_default_warehouse(item_doc, company=None):
+	if not item_doc or not item_doc.meta.has_field("item_defaults"):
+		return None
+
+	item_defaults = item_doc.get("item_defaults") or []
+	if company:
+		for row in item_defaults:
+			if row.company == company and row.default_warehouse:
+				return row.default_warehouse
+
+	for row in item_defaults:
+		if row.default_warehouse:
+			return row.default_warehouse
+
+	return None
+
+
 def _get_selling_prices(item_codes):
 	item_codes = [item_code for item_code in item_codes if item_code]
 	if not item_codes:
@@ -865,6 +882,7 @@ def create_request_for_quotation(product_id=None, quantity=1, selected_size=None
 		frappe.throw("Supplier was not found for this product.")
 
 	company = _get_default_company()
+	default_warehouse = _get_item_default_warehouse(item_doc, company)
 	item_description = item_doc.description or item_doc.item_name or item_doc.item_code or item_doc.name
 	if selected_size:
 		item_description = f"{item_description}\n\nSelected Size: {selected_size}"
@@ -894,7 +912,7 @@ def create_request_for_quotation(product_id=None, quantity=1, selected_size=None
 					"uom": item_doc.stock_uom,
 					"stock_uom": item_doc.stock_uom,
 					"schedule_date": today(),
-					"warehouse": item_doc.default_warehouse if item_doc.meta.has_field("default_warehouse") else None,
+					"warehouse": default_warehouse,
 				}
 			],
 		}
