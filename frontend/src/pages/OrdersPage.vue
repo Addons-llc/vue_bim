@@ -10,7 +10,7 @@ const router = useRouter()
 const orders = ref([])
 const isLoadingOrders = ref(false)
 const ordersError = ref('')
-const ratingOptions = [5, 4, 3, 2, 1]
+const STAR_OPTIONS = [1, 2, 3, 4, 5]
 const reviewForms = ref({})
 const reviewStatusByItem = ref({})
 const expandedReviewItems = ref({})
@@ -82,6 +82,26 @@ function updateReviewRating(orderName, itemCode, rating) {
 
 function updateReviewDescription(orderName, itemCode, description) {
   getReviewForm(orderName, itemCode).description = description
+}
+
+function getRatingCaption(rating) {
+  if (rating >= 5) {
+    return 'Excellent'
+  }
+
+  if (rating >= 4) {
+    return 'Very good'
+  }
+
+  if (rating >= 3) {
+    return 'Good'
+  }
+
+  if (rating >= 2) {
+    return 'Fair'
+  }
+
+  return 'Poor'
 }
 
 async function submitReview(orderName, item) {
@@ -262,30 +282,34 @@ onMounted(loadOrders)
                 v-if="isReviewExpanded(order.name, item) && !getSubmittedReview(order.name, item)"
                 class="ordered-product-review-form"
               >
-                <label class="ordered-product-review-field">
-                  <span>Rating</span>
-                  <div class="ordered-product-rating-picker" role="group" aria-label="Choose rating">
+                <div class="ordered-product-review-field is-wide">
+                  <span>Your rating</span>
+                  <div class="ordered-product-star-picker" role="radiogroup" aria-label="Choose rating">
                     <button
-                      v-for="ratingOption in ratingOptions"
+                      v-for="ratingOption in STAR_OPTIONS"
                       :key="`${order.name}-${item.item_code}-${ratingOption}`"
-                      class="ordered-product-rating-option"
+                      class="ordered-product-star-button"
                       :class="{
-                        'is-selected': getReviewForm(order.name, item.item_code).rating === ratingOption,
+                        'is-selected': getReviewForm(order.name, item.item_code).rating >= ratingOption,
                       }"
                       type="button"
+                      :aria-label="`${ratingOption} star${ratingOption === 1 ? '' : 's'}`"
+                      :aria-pressed="getReviewForm(order.name, item.item_code).rating === ratingOption"
                       @click.stop="updateReviewRating(order.name, item.item_code, ratingOption)"
                     >
-                      <span class="ordered-product-rating-stars">{{ '★'.repeat(ratingOption) }}</span>
-                      <span>{{ ratingOption }}</span>
+                      ★
                     </button>
+                    <strong class="ordered-product-star-caption">
+                      {{ getRatingCaption(getReviewForm(order.name, item.item_code).rating) }}
+                    </strong>
                   </div>
-                </label>
+                </div>
 
                 <label class="ordered-product-review-field is-wide">
-                  <span>Review description</span>
+                  <span>Your review</span>
                   <textarea
                     rows="3"
-                    placeholder="Share what you liked, quality, delivery, or anything useful"
+                    placeholder="Tell customers about product quality, freshness, packaging, or delivery."
                     :value="getReviewForm(order.name, item.item_code).description"
                     @click.stop
                     @input="updateReviewDescription(order.name, item.item_code, $event.target.value)"

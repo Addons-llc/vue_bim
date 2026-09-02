@@ -2,6 +2,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { getProductById, getProducts } from '../api/productApi'
+import { getProductReviews } from '../api/reviewApi'
 import { getSupplierDetails } from '../api/supplierApi'
 import { getSupplierStore, getSupplierStorePortalUrl } from '../api/supplierStoreApi'
 import ProductCard from '../components/product/ProductCard.vue'
@@ -17,6 +18,9 @@ const supplierStore = ref(null)
 const supplierPortalUrl = ref('')
 const failedSupplierBannerImage = ref('')
 const isSupplierDescriptionExpanded = ref(false)
+const isSupplierReviewsExpanded = ref(false)
+const isShowingAllSupplierReviews = ref(false)
+const supplierReviews = ref([])
 const supplierDetails = computed(() => {
   const store = supplierStore.value
   const supplier = supplierRecord.value || {}
@@ -128,10 +132,44 @@ const hasSupplierContact = computed(() =>
   Boolean(supplierPhone.value || supplierEmail.value),
 )
 const hasSupplierWebsiteLink = computed(() => Boolean(normalizedSupplierWebsite.value))
-const dummySupplierRating = {
-  score: '4.7',
-  reviewCount: 128,
-}
+const supplierReviewCount = computed(() => supplierReviews.value.length)
+const supplierAverageRating = computed(() => {
+  const ratings = supplierReviews.value
+    .map((review) => Number(review.rating || 0))
+    .filter((rating) => Number.isFinite(rating) && rating > 0)
+
+  if (!ratings.length) {
+    return 0
+  }
+
+  return ratings.reduce((total, rating) => total + rating, 0) / ratings.length
+})
+const supplierAverageRatingLabel = computed(() => {
+  const rating = Number(supplierAverageRating.value || 0)
+
+  if (!Number.isFinite(rating) || rating <= 0) {
+    return '0.0'
+  }
+
+  return rating.toFixed(1)
+})
+const supplierRatingStars = computed(() => {
+  const rating = Math.round(Number(supplierAverageRating.value || 0))
+
+  return '★'.repeat(Math.min(rating, 5)) || '★★★★★'
+})
+const supplierReviewCountLabel = computed(() => {
+  const count = supplierReviewCount.value
+  const suffix = count === 1 ? 'review' : 'reviews'
+
+  return `${count} ${suffix}`
+})
+const visibleSupplierReviews = computed(() => (
+  isShowingAllSupplierReviews.value
+    ? supplierReviews.value
+    : supplierReviews.value.slice(0, 2)
+))
+const hasMoreSupplierReviews = computed(() => supplierReviews.value.length > 2)
 
 function openProductDetails(product) {
   saveSelectedProduct(product)
@@ -148,6 +186,18 @@ function hideBrokenSupplierBanner() {
 
 function toggleSupplierDescription() {
   isSupplierDescriptionExpanded.value = !isSupplierDescriptionExpanded.value
+}
+
+function toggleSupplierReviews() {
+  isSupplierReviewsExpanded.value = !isSupplierReviewsExpanded.value
+
+  if (!isSupplierReviewsExpanded.value) {
+    isShowingAllSupplierReviews.value = false
+  }
+}
+
+function toggleAllSupplierReviews() {
+  isShowingAllSupplierReviews.value = !isShowingAllSupplierReviews.value
 }
 
 async function loadSupplierProducts() {
@@ -168,6 +218,7 @@ async function loadSupplierProducts() {
 
     const store = supplierStore.value
     const supplierFilter = supplierRecord.value?.supplier || store?.supplier || supplierName.value
+    supplierReviews.value = await getProductReviews('', supplierFilter).catch(() => [])
     const products = await getProducts({
       limit_page_length: 5000,
       supplier: supplierFilter,
@@ -195,7 +246,10 @@ async function loadSupplierProducts() {
   } catch {
     supplierRecord.value = null
     supplierPortalUrl.value = ''
+    supplierReviews.value = []
     loadedProducts.value = []
+    isSupplierReviewsExpanded.value = false
+    isShowingAllSupplierReviews.value = false
   } finally {
     isLoadingSupplierProducts.value = false
   }
@@ -207,9 +261,12 @@ watch(supplierName, () => {
   supplierRecord.value = null
   supplierStore.value = null
   supplierPortalUrl.value = ''
+  supplierReviews.value = []
   loadedProducts.value = []
   failedSupplierBannerImage.value = ''
   isSupplierDescriptionExpanded.value = false
+  isSupplierReviewsExpanded.value = false
+  isShowingAllSupplierReviews.value = false
   loadSupplierProducts()
 })
 </script>
@@ -263,6 +320,44 @@ watch(supplierName, () => {
           >
             -
           </button>
+          <div v-if="supplierReviewCount" class="supplier-profile-reviews-wrap">
+            <button
+              class="supplier-profile-reviews-toggle"
+              type="button"
+              :aria-expanded="isSupplierReviewsExpanded"
+              @click="toggleSupplierReviews"
+            >
+              <span class="supplier-profile-reviews-label">Customer Reviews</span>
+              <span class="supplier-profile-reviews-count">{{ supplierReviewCountLabel }}</span>
+              <span class="supplier-profile-reviews-icon" aria-hidden="true">
+                {{ isSupplierReviewsExpanded ? '▴' : '▾' }}
+              </span>
+            </button>
+            <div
+              v-if="isSupplierReviewsExpanded"
+              class="supplier-profile-reviews-list"
+            >
+              <article
+                v-for="review in visibleSupplierReviews"
+                :key="review.id"
+                class="supplier-profile-review-card"
+              >
+                <div class="supplier-profile-review-header">
+                  <strong>{{ review.customerName }}</strong>
+                  <span>{{ '★'.repeat(review.rating) || 'No rating' }}</span>
+                </div>
+                <p>{{ review.description }}</p>
+              </article>
+              <button
+                v-if="hasMoreSupplierReviews"
+                class="supplier-profile-reviews-more"
+                type="button"
+                @click="toggleAllSupplierReviews"
+              >
+                {{ isShowingAllSupplierReviews ? 'Show less' : 'Show more' }}
+              </button>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -316,9 +411,9 @@ watch(supplierName, () => {
         <div class="supplier-ratings-panel" aria-label="Supplier ratings">
           <div class="supplier-ratings-header">
             <div class="supplier-rating-score">
-              <strong>{{ dummySupplierRating.score }}</strong>
-              <span>★★★★★</span>
-              <small>{{ dummySupplierRating.reviewCount }} reviews</small>
+              <strong>{{ supplierAverageRatingLabel }}</strong>
+              <span>{{ supplierRatingStars }}</span>
+              <small>{{ supplierReviewCountLabel }}</small>
             </div>
           </div>
         </div>
