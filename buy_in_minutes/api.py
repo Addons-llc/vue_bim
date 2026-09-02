@@ -368,97 +368,22 @@ def _row_matches_supplier(row, supplier=None):
 	return supplier in resolved_candidates
 
 
-def _get_warehouse_from_row(row):
-	for fieldname in (
-		"custom_supplier_warehouse",
-		"supplier_warehouse",
-		"default_warehouse",
-		"warehouse",
-	):
-		if row.get(fieldname):
-			return row.get(fieldname)
-
-	return ""
-
-
-def _get_supplier_warehouse_from_rows(rows, supplier=None):
-	for row in rows or []:
-		if not _row_matches_supplier(row, supplier):
-			continue
-		warehouse = _get_warehouse_from_row(row)
-		if warehouse:
-			return warehouse
-
-	for row in rows or []:
-		warehouse = _get_warehouse_from_row(row)
-		if warehouse:
-			return warehouse
-
-	return ""
-
-
 def _get_item_supplier_warehouse(item_doc, supplier=None):
 	if not item_doc:
 		return ""
 
 	item_meta = item_doc.meta
-	table_fieldnames = [
-		df.fieldname
-		for df in item_meta.fields
-		if df.fieldtype == "Table" and df.fieldname
-	]
-
-	# Prefer a custom Supplier List child table when present on the site.
-	for fieldname in table_fieldnames:
-		df = item_meta.get_field(fieldname)
-		if not df:
+	for df in item_meta.fields:
+		if df.fieldtype != "Table" or not df.fieldname:
 			continue
-		if fieldname == "supplier_list" or df.options == "Supplier List" or df.label == "Supplier List":
-			warehouse = _get_supplier_warehouse_from_rows(item_doc.get(fieldname), supplier)
-			if warehouse:
-				return warehouse
+		if df.fieldname != "supplier_list" and df.options != "Supplier List" and df.label != "Supplier List":
+			continue
 
-	warehouse = _get_supplier_warehouse_from_rows(item_doc.get("supplier_items"), supplier)
-	if warehouse:
-		return warehouse
-
-	item_name = item_doc.name
-	if not item_name or not frappe.db.exists("DocType", "Item Supplier"):
-		return ""
-
-	item_supplier_meta = frappe.get_meta("Item Supplier")
-	if not item_supplier_meta.has_field("custom_supplier_warehouse"):
-		return ""
-
-	filters = {"parent": item_name}
-	if supplier and item_supplier_meta.has_field("supplier"):
-		filters["supplier"] = supplier
-
-	item_supplier_rows = frappe.get_all(
-		"Item Supplier",
-		fields=["custom_supplier_warehouse"] + (["supplier"] if item_supplier_meta.has_field("supplier") else []),
-		filters=filters,
-		order_by="idx asc",
-		ignore_permissions=True,
-		limit_page_length=5,
-	)
-
-	warehouse = _get_supplier_warehouse_from_rows(item_supplier_rows, supplier)
-	if warehouse:
-		return warehouse
-
-	if supplier and item_supplier_meta.has_field("supplier"):
-		item_supplier_rows = frappe.get_all(
-			"Item Supplier",
-			fields=["custom_supplier_warehouse"],
-			filters={"parent": item_name},
-			order_by="idx asc",
-			ignore_permissions=True,
-			limit_page_length=5,
-		)
-		warehouse = _get_supplier_warehouse_from_rows(item_supplier_rows)
-		if warehouse:
-			return warehouse
+		for row in item_doc.get(df.fieldname) or []:
+			if not _row_matches_supplier(row, supplier):
+				continue
+			if row.get("custom_supplier_warehouse"):
+				return row.get("custom_supplier_warehouse")
 
 	return ""
 
