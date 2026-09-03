@@ -798,12 +798,6 @@ async function submitCartRequestForQuotation() {
     return
   }
 
-  if (!selectedDeliveryAddress.value) {
-    rfqErrorMessage.value = 'Please add a delivery address before requesting a quotation.'
-    isAddressRequired.value = true
-    return
-  }
-
   if (!selectedRfqRequiredDate.value) {
     rfqErrorMessage.value = 'Please choose a required date before requesting a quotation.'
     return
@@ -819,7 +813,7 @@ async function submitCartRequestForQuotation() {
   try {
     const quotationRequest = await createRequestForQuotationFromCart(
       cartProducts.value,
-      selectedDeliveryAddress.value,
+      null,
       selectedRfqRequiredDate.value,
       rfqEmail.value,
     )
@@ -1348,16 +1342,6 @@ watch(
           </section>
 
           <section v-if="isRfqCart" class="cart-delivery-options" aria-label="Quotation schedule">
-            <label class="field-label" for="cart-rfq-email">Email</label>
-            <input
-              id="cart-rfq-email"
-              v-model="rfqEmail"
-              class="form-input"
-              type="email"
-              autocomplete="email"
-              placeholder="name@example.com"
-              required
-            />
             <div class="cart-date-picker">
               <label class="cart-date-label" for="cart-rfq-required-date">Required Date</label>
               <div class="cart-date-input-shell" @click="openRfqRequiredDatePicker">
@@ -1411,6 +1395,16 @@ watch(
             {{ rfqErrorMessage }}
           </p>
           <div v-if="isRfqCart" class="cart-payment-actions is-rfq-cart">
+            <label class="field-label" for="cart-rfq-email">Email</label>
+            <input
+              id="cart-rfq-email"
+              v-model="rfqEmail"
+              class="form-input"
+              type="email"
+              autocomplete="email"
+              placeholder="name@example.com"
+              required
+            />
             <button
               class="cart-login-button"
               type="button"
