@@ -58,6 +58,7 @@ function createAddressForm(overrides = {}) {
     label: 'Home',
     contactName: '',
     phone: '',
+    email: '',
     area: '',
     apartmentOfficeName: '',
     apartmentOfficeNo: '',
@@ -78,6 +79,7 @@ function resetAddressForm() {
   addressForm.value = createAddressForm({
     contactName: profileName.value === 'Customer' ? '' : profileName.value,
     phone: profilePhone.value,
+    email: profileEmail.value,
     isDefault: !customerAddresses.value.length,
   })
   editingAddressId.value = ''
@@ -161,6 +163,7 @@ function editAddress(address) {
     label: address.label,
     contactName: address.contactName,
     phone: address.phone,
+    email: address.email || '',
     area: address.area,
     apartmentOfficeName: address.apartmentOfficeName || '',
     apartmentOfficeNo: address.apartmentOfficeNo || '',

@@ -38,6 +38,7 @@ function serializeDeliveryAddress(deliveryAddress) {
     label: normalizeAddressValue(deliveryAddress.label),
     contactName: normalizeAddressValue(deliveryAddress.contactName),
     phone: normalizeAddressValue(deliveryAddress.phone),
+    email: normalizeAddressValue(deliveryAddress.email),
     area: normalizeAddressValue(deliveryAddress.area),
     apartmentOfficeName: normalizeAddressValue(deliveryAddress.apartmentOfficeName),
     apartmentOfficeNo: normalizeAddressValue(deliveryAddress.apartmentOfficeNo),
@@ -69,6 +70,7 @@ function formatSavedAddress(deliveryAddress) {
   const parts = [
     address.label,
     [address.contactName, address.phone].filter(Boolean).join(' - '),
+    address.email,
     address.area,
     address.apartmentOfficeName ? `${apartmentLabel} name: ${address.apartmentOfficeName}` : '',
     address.apartmentOfficeNo ? `${apartmentLabel} no: ${address.apartmentOfficeNo}` : '',

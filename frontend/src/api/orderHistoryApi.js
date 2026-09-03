@@ -18,12 +18,18 @@ function normalizeOrderHistoryOrder(order = {}) {
   const items = Array.isArray(order.items)
     ? order.items.map(normalizeOrderHistoryItem)
     : []
+  const historyType = String(order.history_type || 'sales_order')
 
   return {
     name: String(order.name || ''),
+    title: String(order.title || order.name || ''),
+    historyType,
+    history_type: historyType,
     status: String(order.status || ''),
     transactionDate: order.transaction_date || '',
     transaction_date: order.transaction_date || '',
+    requiredDate: order.required_date || '',
+    required_date: order.required_date || '',
     grandTotal: Number(order.grand_total || 0),
     grand_total: Number(order.grand_total || 0),
     currency: String(order.currency || 'AED'),
@@ -32,6 +38,17 @@ function normalizeOrderHistoryOrder(order = {}) {
     customer_name: String(order.customer_name || order.customer || ''),
     purchaseOrders: Array.isArray(order.purchase_orders) ? order.purchase_orders : [],
     purchase_orders: Array.isArray(order.purchase_orders) ? order.purchase_orders : [],
+    company: String(order.company || ''),
+    billingAddress: String(order.billing_address || ''),
+    billing_address: String(order.billing_address || ''),
+    billingAddressDisplay: String(order.billing_address_display || ''),
+    billing_address_display: String(order.billing_address_display || ''),
+    contactDisplay: String(order.contact_display || ''),
+    contact_display: String(order.contact_display || ''),
+    contactMobile: String(order.contact_mobile || ''),
+    contact_mobile: String(order.contact_mobile || ''),
+    contactEmail: String(order.contact_email || ''),
+    contact_email: String(order.contact_email || ''),
     items,
   }
 }

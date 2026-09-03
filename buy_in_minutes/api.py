@@ -7,6 +7,7 @@ from buy_in_minutes.payment import (
 	_get_or_create_customer_address,
 	_get_or_create_customer_contact,
 	_get_or_create_customer_for_user,
+	_normalize_cart_items,
 	_set_doc_value_if_field_exists,
 )
 
@@ -1022,6 +1023,166 @@ def create_request_for_quotation(
 		"status": rfq_doc.status,
 		"billing_address": customer_address or "",
 		"billing_address_display": address_display,
+	}
+
+
+def _get_rfq_contact_context(delivery_address=None):
+	user_name = frappe.session.user
+	customer = _get_or_create_customer_for_user(user_name) if delivery_address else None
+	customer_address = _get_or_create_customer_address(customer, delivery_address) if customer else None
+	customer_contact = _get_or_create_customer_contact(customer, delivery_address) if customer else None
+	address_display = _build_delivery_address_display(delivery_address) if delivery_address else ""
+	contact_display = ""
+	contact_mobile = ""
+	contact_email = ""
+
+	if customer_contact:
+		contact_doc = frappe.get_doc("Contact", customer_contact)
+		contact_display = contact_doc.get("full_name") or contact_doc.get("first_name") or ""
+		contact_mobile = contact_doc.get("mobile_no") or contact_doc.get("phone") or ""
+		if not contact_mobile:
+			contact_mobile = frappe.db.get_value(
+				"Contact Phone",
+				{"parent": customer_contact, "is_primary_mobile_no": 1},
+				"phone",
+			) or frappe.db.get_value(
+				"Contact Phone",
+				{"parent": customer_contact, "is_primary_phone": 1},
+				"phone",
+			) or ""
+		contact_email = contact_doc.get("email_id") or frappe.db.get_value(
+			"Contact Email",
+			{"parent": customer_contact, "is_primary": 1},
+			"email_id",
+		) or ""
+
+	return {
+		"customer": customer,
+		"customer_address": customer_address,
+		"customer_contact": customer_contact,
+		"address_display": address_display,
+		"contact_display": contact_display,
+		"contact_mobile": contact_mobile,
+		"contact_email": contact_email,
+	}
+
+
+@frappe.whitelist()
+def create_request_for_quotation_from_cart(
+	cart_items=None,
+	delivery_address=None,
+	required_date=None,
+	submit_request=1,
+):
+	if _is_guest_session_user():
+		frappe.throw("Please sign in to request a quotation.", frappe.AuthenticationError)
+
+	required_date = str(required_date or "").strip()
+	if not required_date:
+		frappe.throw("Required date is mandatory.")
+
+	normalized_items = _normalize_cart_items(cart_items)
+	if not normalized_items:
+		frappe.throw("No quotation items found in the cart.")
+
+	schedule_date = getdate(required_date)
+	company = _get_default_company()
+	rfq_items = []
+	supplier_names = []
+
+	for cart_item in normalized_items:
+		product_id = str(cart_item.get("item_code") or "").strip()
+		selected_size = str(cart_item.get("size") or "").strip()
+		requested_qty = max(1, int(flt(cart_item.get("quantity") or 1)))
+
+		if not frappe.db.exists("Item", product_id):
+			frappe.throw(f"Product {product_id} was not found.")
+
+		item_doc = frappe.get_doc("Item", product_id)
+		item_group_meta = frappe.get_meta("Item Group")
+		rfq_only_enabled = (
+			item_group_meta.has_field("custom_rfq_only")
+			and _is_truthy_flag(frappe.db.get_value("Item Group", item_doc.item_group, "custom_rfq_only"))
+		)
+		if not rfq_only_enabled:
+			frappe.throw(f"Product {product_id} is not configured for quotation requests.")
+
+		supplier = (
+			_resolve_supplier_name(cart_item.get("supplier"))
+			or _resolve_supplier_name(_get_supplier_from_item_fields(item_doc))
+			or _resolve_supplier_name(_get_item_supplier_links([item_doc.name]).get(item_doc.name))
+		)
+		if not supplier:
+			frappe.throw(f"Supplier was not found for product {product_id}.")
+
+		request_warehouse = _get_item_supplier_warehouse(item_doc, supplier)
+		if item_doc.is_stock_item and not request_warehouse:
+			frappe.throw(
+				_(
+					"Please configure Custom Supplier Warehouse in the Supplier List for stock item {0} before creating a quotation request."
+				).format(frappe.bold(item_doc.name))
+			)
+
+		item_description = item_doc.description or item_doc.item_name or item_doc.item_code or item_doc.name
+		if selected_size:
+			item_description = f"{item_description}\n\nSelected Size: {selected_size}"
+
+		rfq_items.append(
+			{
+				"doctype": "Request for Quotation Item",
+				"item_code": item_doc.name,
+				"item_name": item_doc.item_name or item_doc.name,
+				"description": item_description,
+				"item_group": item_doc.item_group,
+				"brand": item_doc.brand,
+				"qty": requested_qty,
+				"uom": item_doc.stock_uom,
+				"stock_uom": item_doc.stock_uom,
+				"conversion_factor": 1,
+				"schedule_date": schedule_date,
+				"warehouse": request_warehouse or None,
+			}
+		)
+		supplier_names.append(supplier)
+
+	contact_context = _get_rfq_contact_context(delivery_address)
+	rfq_doc = frappe.get_doc(
+		{
+			"doctype": "Request for Quotation",
+			"company": company,
+			"transaction_date": today(),
+			"schedule_date": schedule_date,
+			"message_for_supplier": _("Please share your best quotation for the requested items."),
+			"suppliers": [
+				{
+					"doctype": "Request for Quotation Supplier",
+					"supplier": supplier,
+					"send_email": 0,
+				}
+				for supplier in sorted(set(supplier_names))
+			],
+			"items": rfq_items,
+		}
+	)
+	_set_doc_value_if_field_exists(rfq_doc, "billing_address", contact_context["customer_address"])
+	_set_doc_value_if_field_exists(rfq_doc, "billing_address_display", contact_context["address_display"])
+	_set_doc_value_if_field_exists(rfq_doc, "contact_person", contact_context["customer_contact"])
+	_set_doc_value_if_field_exists(rfq_doc, "contact_display", contact_context["contact_display"])
+	_set_doc_value_if_field_exists(rfq_doc, "contact_mobile", contact_context["contact_mobile"])
+	_set_doc_value_if_field_exists(rfq_doc, "contact_email", contact_context["contact_email"])
+	rfq_doc.flags.ignore_permissions = True
+	rfq_doc.insert(ignore_permissions=True)
+	if submit_request:
+		rfq_doc.submit()
+
+	return {
+		"name": rfq_doc.name,
+		"suppliers": sorted(set(supplier_names)),
+		"company": company,
+		"status": rfq_doc.status,
+		"billing_address": contact_context["customer_address"] or "",
+		"billing_address_display": contact_context["address_display"],
+		"item_count": len(rfq_items),
 	}
 
 

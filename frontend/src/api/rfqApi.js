@@ -14,6 +14,7 @@ function serializeDeliveryAddress(deliveryAddress) {
     label: normalizeAddressValue(deliveryAddress.label),
     contactName: normalizeAddressValue(deliveryAddress.contactName),
     phone: normalizeAddressValue(deliveryAddress.phone),
+    email: normalizeAddressValue(deliveryAddress.email),
     area: normalizeAddressValue(deliveryAddress.area),
     apartmentOfficeName: normalizeAddressValue(deliveryAddress.apartmentOfficeName),
     apartmentOfficeNo: normalizeAddressValue(deliveryAddress.apartmentOfficeNo),
@@ -58,22 +59,22 @@ export async function createRequestForQuotation({
 }
 
 export async function createRequestForQuotationFromCart(cartItems = [], deliveryAddress = null, requiredDate = '') {
-  const quotationRequests = []
+  const response = await apiRequest('/method/buy_in_minutes.api.create_request_for_quotation_from_cart', {
+    method: 'POST',
+    body: JSON.stringify({
+      cart_items: cartItems.map((item) => ({
+        id: item.id,
+        item_code: item.itemCode || item.id,
+        quantity: Number(item.quantity || 1),
+        supplier: item.supplier || '',
+        supplier_name: item.supplierName || '',
+        size: item.size || item.selectedSize || '',
+      })),
+      delivery_address: serializeDeliveryAddress(deliveryAddress),
+      required_date: String(requiredDate || '').trim(),
+      submit_request: true,
+    }),
+  })
 
-  for (const item of cartItems) {
-    const rfq = await createRequestForQuotation({
-      productId: item.itemCode || item.id,
-      quantity: Number(item.quantity || 1),
-      selectedSize: item.size || item.selectedSize || '',
-      deliveryAddress,
-      requiredDate,
-      submitRequest: true,
-    })
-
-    if (rfq) {
-      quotationRequests.push(rfq)
-    }
-  }
-
-  return quotationRequests
+  return response?.message || null
 }

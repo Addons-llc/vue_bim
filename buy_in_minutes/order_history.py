@@ -6,6 +6,13 @@ def _can_view_sales_order(sales_order):
 	return frappe.session.user == "Administrator" or sales_order.owner == frappe.session.user
 
 
+def _can_view_request_for_quotation(request_for_quotation):
+	return (
+		frappe.session.user == "Administrator"
+		or request_for_quotation.owner == frappe.session.user
+	)
+
+
 def _is_guest_session_user():
 	user_name = str(getattr(frappe.session, "user", "") or "").strip()
 	return not user_name or user_name.lower() in {"guest", "none", "null"}
@@ -100,6 +107,39 @@ def _get_order_items(sales_order_names):
 	return items_by_order
 
 
+def _get_request_for_quotation_items(request_names):
+	if not request_names:
+		return {}
+
+	rows = frappe.get_all(
+		"Request for Quotation Item",
+		fields=["parent", "item_code", "item_name", "description", "qty"],
+		filters={"parent": ["in", request_names]},
+		order_by="idx asc",
+		ignore_permissions=True,
+		limit_page_length=0,
+	)
+	item_images = _get_item_images(list({row.item_code for row in rows if row.item_code}))
+	items_by_request = {}
+
+	for row in rows:
+		items_by_request.setdefault(row.parent, []).append(
+			{
+				"id": row.item_code,
+				"product_id": row.item_code,
+				"item_code": row.item_code,
+				"item_name": row.item_name or row.item_code,
+				"description": row.description,
+				"qty": flt(row.qty),
+				"rate": 0,
+				"amount": 0,
+				"image": item_images.get(row.item_code),
+			}
+		)
+
+	return items_by_request
+
+
 def _get_customer_names(customer_ids):
 	customer_ids = [customer_id for customer_id in customer_ids if customer_id]
 	if not customer_ids:
@@ -146,18 +186,44 @@ def get_order_history(limit_page_length=20):
 		ignore_permissions=True,
 		limit_page_length=limit_page_length,
 	)
-	if not sales_orders:
+	request_for_quotations = frappe.get_all(
+		"Request for Quotation",
+		fields=[
+			"name",
+			"status",
+			"transaction_date",
+			"schedule_date",
+			"company",
+			"owner",
+			"billing_address",
+			"billing_address_display",
+			"contact_display",
+			"contact_mobile",
+			"contact_email",
+		],
+		filters={"docstatus": 1, "owner": frappe.session.user},
+		order_by="transaction_date desc, creation desc",
+		ignore_permissions=True,
+		limit_page_length=limit_page_length,
+	)
+
+	if not sales_orders and not request_for_quotations:
 		return []
 
 	items_by_order = _get_order_items([sales_order.name for sales_order in sales_orders])
+	items_by_request = _get_request_for_quotation_items(
+		[request_for_quotation.name for request_for_quotation in request_for_quotations]
+	)
 	customer_names = _get_customer_names([sales_order.customer for sales_order in sales_orders])
 	for sales_order in sales_orders:
 		if _can_view_sales_order(sales_order):
 			_ensure_purchase_orders_for_sales_order(sales_order)
 
-	return [
+	history_entries = [
 		{
 			"name": sales_order.name,
+			"history_type": "sales_order",
+			"title": sales_order.name,
 			"status": sales_order.status,
 			"transaction_date": sales_order.transaction_date,
 			"grand_total": flt(sales_order.grand_total),
@@ -170,3 +236,39 @@ def get_order_history(limit_page_length=20):
 		for sales_order in sales_orders
 		if _can_view_sales_order(sales_order)
 	]
+
+	history_entries.extend(
+		[
+			{
+				"name": request_for_quotation.name,
+				"history_type": "request_for_quotation",
+				"title": request_for_quotation.name,
+				"status": request_for_quotation.status,
+				"transaction_date": request_for_quotation.transaction_date,
+				"required_date": request_for_quotation.schedule_date,
+				"grand_total": 0,
+				"currency": "AED",
+				"customer": "",
+				"customer_name": "",
+				"purchase_orders": [],
+				"items": items_by_request.get(request_for_quotation.name, []),
+				"company": request_for_quotation.company or "",
+				"billing_address": request_for_quotation.billing_address or "",
+				"billing_address_display": request_for_quotation.billing_address_display or "",
+				"contact_display": request_for_quotation.contact_display or "",
+				"contact_mobile": request_for_quotation.contact_mobile or "",
+				"contact_email": request_for_quotation.contact_email or "",
+			}
+			for request_for_quotation in request_for_quotations
+			if _can_view_request_for_quotation(request_for_quotation)
+		]
+	)
+
+	return sorted(
+		history_entries,
+		key=lambda entry: (
+			str(entry.get("transaction_date") or ""),
+			str(entry.get("name") or ""),
+		),
+		reverse=True,
+	)[:limit_page_length]

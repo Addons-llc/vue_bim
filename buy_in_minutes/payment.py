@@ -549,6 +549,7 @@ def _normalize_delivery_address(delivery_address):
 		"label": _clean_text(delivery_address.get("label") or "Home") or "Home",
 		"contact_name": _clean_text(delivery_address.get("contactName") or delivery_address.get("contact_name")),
 		"phone": _clean_text(delivery_address.get("phone")),
+		"email": _clean_text(delivery_address.get("email") or delivery_address.get("contact_email")),
 		"area": _clean_text(delivery_address.get("area")),
 		"apartment_office_name": _clean_text(
 			delivery_address.get("apartmentOfficeName")
@@ -579,6 +580,9 @@ def _build_delivery_address_display(delivery_address):
 	contact_line = ", ".join(filter(None, [address.get("contact_name"), address.get("phone")]))
 	if contact_line:
 		lines.append(contact_line)
+
+	if address.get("email"):
+		lines.append(address["email"])
 
 	apartment_line = ", ".join(
 		filter(
@@ -718,7 +722,8 @@ def _get_or_create_customer_contact(customer, delivery_address):
 
 	contact_name = address.get("contact_name")
 	phone = address.get("phone")
-	if not contact_name and not phone:
+	email = address.get("email")
+	if not contact_name and not phone and not email:
 		return None
 
 	linked_contacts = frappe.get_all(
@@ -738,6 +743,18 @@ def _get_or_create_customer_contact(customer, delivery_address):
 			{
 				"parent": ["in", linked_contacts],
 				"phone": phone,
+			},
+			"parent",
+		)
+		if existing_contact:
+			return existing_contact
+
+	if linked_contacts and email:
+		existing_contact = frappe.db.get_value(
+			"Contact Email",
+			{
+				"parent": ["in", linked_contacts],
+				"email_id": email,
 			},
 			"parent",
 		)
@@ -765,6 +782,14 @@ def _get_or_create_customer_contact(customer, delivery_address):
 				"phone": phone,
 				"is_primary_phone": 1,
 				"is_primary_mobile_no": 1,
+			},
+		)
+	if email:
+		contact_doc.append(
+			"email_ids",
+			{
+				"email_id": email,
+				"is_primary": 1,
 			},
 		)
 	contact_doc.insert(ignore_permissions=True)

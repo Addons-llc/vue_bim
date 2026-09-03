@@ -16,6 +16,7 @@ const reviewStatusByItem = ref({})
 const expandedReviewItems = ref({})
 
 const hasOrders = computed(() => orders.value.length > 0)
+const RFQ_HISTORY_TYPE = 'request_for_quotation'
 
 function formatDate(value) {
   if (!value) {
@@ -31,6 +32,18 @@ function formatDate(value) {
 
 function formatCurrency(value, currency = 'AED') {
   return `${currency || 'AED'} ${Number(value || 0).toFixed(2)}`
+}
+
+function isQuotationRequest(order) {
+  return String(order?.historyType || order?.history_type || '') === RFQ_HISTORY_TYPE
+}
+
+function openOrder(order) {
+  if (isQuotationRequest(order)) {
+    return
+  }
+
+  router.push({ name: 'order-details', params: { orderName: order.name } })
 }
 
 function getReviewKey(orderName, itemCode) {
@@ -210,15 +223,16 @@ onMounted(loadOrders)
       <article
         v-for="order in orders"
         :key="order.name"
-        class="order-history-card is-clickable"
-        role="button"
-        tabindex="0"
-        @click="router.push({ name: 'order-details', params: { orderName: order.name } })"
-        @keydown.enter="router.push({ name: 'order-details', params: { orderName: order.name } })"
+        class="order-history-card"
+        :class="{ 'is-clickable': !isQuotationRequest(order) }"
+        :role="isQuotationRequest(order) ? undefined : 'button'"
+        :tabindex="isQuotationRequest(order) ? undefined : 0"
+        @click="openOrder(order)"
+        @keydown.enter="openOrder(order)"
       >
         <header class="order-history-header">
           <div>
-            <strong>{{ order.name }}</strong>
+            <strong>{{ order.title || order.name }}</strong>
             <span>{{ formatDate(order.transaction_date) }}</span>
           </div>
           <span class="order-status-pill">{{ order.status }}</span>
@@ -226,11 +240,33 @@ onMounted(loadOrders)
 
         <div class="order-history-meta">
           <span>{{ order.items.length }} item{{ order.items.length === 1 ? '' : 's' }}</span>
-          <strong>{{ formatCurrency(order.grand_total, order.currency) }}</strong>
+          <strong v-if="!isQuotationRequest(order)">
+            {{ formatCurrency(order.grand_total, order.currency) }}
+          </strong>
+          <strong v-else>Quotation request</strong>
         </div>
 
         <p v-if="order.purchase_orders?.length" class="order-purchase-orders">
           Purchase order {{ order.purchase_orders.join(', ') }}
+        </p>
+
+        <p v-if="isQuotationRequest(order) && order.required_date" class="order-purchase-orders">
+          Required date {{ formatDate(order.required_date) }}
+        </p>
+
+        <p
+          v-if="isQuotationRequest(order) && order.billing_address_display"
+          class="order-purchase-orders"
+        >
+          Address {{ order.billing_address_display }}
+        </p>
+
+        <p
+          v-if="isQuotationRequest(order) && (order.contact_display || order.contact_mobile || order.contact_email)"
+          class="order-purchase-orders"
+        >
+          Contact
+          {{ [order.contact_display, order.contact_mobile, order.contact_email].filter(Boolean).join(' · ') }}
         </p>
 
         <div class="order-history-items" @click.stop @keydown.stop>
@@ -255,9 +291,12 @@ onMounted(loadOrders)
                   <p>Qty {{ item.qty }}</p>
                 </div>
                 <div class="ordered-product-review-actions">
-                  <strong>{{ formatCurrency(item.amount, order.currency) }}</strong>
+                  <strong v-if="!isQuotationRequest(order)">
+                    {{ formatCurrency(item.amount, order.currency) }}
+                  </strong>
+                  <strong v-else>Qty {{ item.qty }}</strong>
                   <button
-                    v-if="!getSubmittedReview(order.name, item)"
+                    v-if="!isQuotationRequest(order) && !getSubmittedReview(order.name, item)"
                     class="ordered-product-review-toggle"
                     type="button"
                     @click.stop="toggleReviewExpanded(order.name, item.item_code)"
@@ -268,7 +307,7 @@ onMounted(loadOrders)
               </div>
 
               <div
-                v-if="getSubmittedReview(order.name, item)"
+                v-if="!isQuotationRequest(order) && getSubmittedReview(order.name, item)"
                 class="ordered-product-submitted-review is-inline"
               >
                 <div class="ordered-product-submitted-review-header">
@@ -279,7 +318,7 @@ onMounted(loadOrders)
               </div>
 
               <div
-                v-if="isReviewExpanded(order.name, item) && !getSubmittedReview(order.name, item)"
+                v-if="!isQuotationRequest(order) && isReviewExpanded(order.name, item) && !getSubmittedReview(order.name, item)"
                 class="ordered-product-review-form"
               >
                 <div class="ordered-product-review-field is-wide">
@@ -328,13 +367,13 @@ onMounted(loadOrders)
               </div>
 
               <p
-                v-if="getReviewStatus(order.name, item.item_code).successMessage"
+                v-if="!isQuotationRequest(order) && getReviewStatus(order.name, item.item_code).successMessage"
                 class="ordered-product-review-message is-success"
               >
                 {{ getReviewStatus(order.name, item.item_code).successMessage }}
               </p>
               <p
-                v-if="getReviewStatus(order.name, item.item_code).errorMessage"
+                v-if="!isQuotationRequest(order) && getReviewStatus(order.name, item.item_code).errorMessage"
                 class="ordered-product-review-message is-error"
               >
                 {{ getReviewStatus(order.name, item.item_code).errorMessage }}
@@ -349,7 +388,7 @@ onMounted(loadOrders)
       <div class="empty-cart-copy">
         <p class="empty-cart-kicker">No orders</p>
         <h2>Your order history is empty</h2>
-        <p>Orders placed from this account will appear here.</p>
+        <p>Orders and submitted quotation requests from this account will appear here.</p>
       </div>
       <RouterLink class="primary-dark-button" :to="{ name: 'home' }">
         Start shopping

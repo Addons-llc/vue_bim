@@ -16,6 +16,7 @@ defineEmits(['set-default', 'edit', 'delete'])
       <span v-if="address.isDefault">Default</span>
     </header>
     <p>{{ address.contactName }} · {{ address.phone }}</p>
+    <p v-if="address.email">{{ address.email }}</p>
     <p v-if="address.apartmentOfficeName">
       {{ address.label === 'Office' ? 'Office name' : 'Apartment name' }}: {{ address.apartmentOfficeName }}
     </p>

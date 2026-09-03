@@ -804,18 +804,15 @@ async function submitCartRequestForQuotation() {
   isSubmittingRfq.value = true
 
   try {
-    const quotationRequests = await createRequestForQuotationFromCart(
+    const quotationRequest = await createRequestForQuotationFromCart(
       cartProducts.value,
       selectedDeliveryAddress.value,
       selectedRfqRequiredDate.value,
     )
-    const requestNames = quotationRequests
-      .map((request) => String(request?.name || '').trim())
-      .filter(Boolean)
 
     clearCart()
-    rfqSuccessMessage.value = requestNames.length
-      ? `Request for quotation created: ${requestNames.join(', ')}`
+    rfqSuccessMessage.value = quotationRequest?.name
+      ? `Request for quotation created: ${quotationRequest.name}`
       : 'Request for quotation created successfully.'
   } catch (error) {
     if (isAuthenticationError(error)) {
