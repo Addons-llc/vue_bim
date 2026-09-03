@@ -41,6 +41,7 @@ export async function createRequestForQuotation({
   selectedSize = '',
   deliveryAddress = null,
   requiredDate = '',
+  email = '',
   submitRequest = false,
 } = {}) {
   const response = await apiRequest('/method/buy_in_minutes.api.create_request_for_quotation', {
@@ -51,6 +52,7 @@ export async function createRequestForQuotation({
       selected_size: String(selectedSize || '').trim(),
       delivery_address: serializeDeliveryAddress(deliveryAddress),
       required_date: String(requiredDate || '').trim(),
+      email: String(email || '').trim(),
       submit_request: Boolean(submitRequest),
     }),
   })
@@ -58,7 +60,12 @@ export async function createRequestForQuotation({
   return response?.message || null
 }
 
-export async function createRequestForQuotationFromCart(cartItems = [], deliveryAddress = null, requiredDate = '') {
+export async function createRequestForQuotationFromCart(
+  cartItems = [],
+  deliveryAddress = null,
+  requiredDate = '',
+  email = '',
+) {
   const response = await apiRequest('/method/buy_in_minutes.api.create_request_for_quotation_from_cart', {
     method: 'POST',
     body: JSON.stringify({
@@ -72,6 +79,7 @@ export async function createRequestForQuotationFromCart(cartItems = [], delivery
       })),
       delivery_address: serializeDeliveryAddress(deliveryAddress),
       required_date: String(requiredDate || '').trim(),
+      email: String(email || '').trim(),
       submit_request: true,
     }),
   })

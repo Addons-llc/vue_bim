@@ -134,3 +134,19 @@ export function clearCart() {
   cartItems.value = []
   saveCart(cartItems.value)
 }
+
+export function replaceCartItems(items = []) {
+  cartItems.value = Array.isArray(items)
+    ? items.map((item) => ({
+      ...item,
+      customRfqOnly: isRfqOnlyFlag(item?.customRfqOnly ?? item?.custom_rfq_only),
+      customDeliverySlots: isTruthyFlag(
+        item?.customDeliverySlots ?? item?.custom_delivery_slots,
+      ),
+      customDeliveryFee: toNumber(
+        item?.customDeliveryFee ?? item?.custom_delivery_fee,
+      ),
+    }))
+    : []
+  saveCart(cartItems.value)
+}

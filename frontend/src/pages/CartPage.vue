@@ -49,6 +49,7 @@ const isSubmittingRfq = ref(false)
 const checkoutError = ref('')
 const rfqSuccessMessage = ref('')
 const rfqErrorMessage = ref('')
+const rfqEmail = ref('')
 const isAddressRequired = ref(false)
 const isAddressExpanded = ref(false)
 const fulfillmentMode = ref('delivery')
@@ -141,6 +142,13 @@ const selectedDeliveryAddressSummary = computed(() => {
     selectedDeliveryAddress.value.emirate,
   ].filter(Boolean).slice(0, 3).join(', ')
 })
+const rfqEmailPrefill = computed(() =>
+  String(
+    selectedDeliveryAddress.value?.email
+    || currentUser.value?.email
+    || '',
+  ).trim(),
+)
 const totalUnits = computed(() =>
   cartProducts.value.reduce((total, item) => total + Number(item.quantity || 0), 0),
 )
@@ -801,6 +809,11 @@ async function submitCartRequestForQuotation() {
     return
   }
 
+  if (!String(rfqEmail.value || '').trim()) {
+    rfqErrorMessage.value = 'Please enter an email before requesting a quotation.'
+    return
+  }
+
   isSubmittingRfq.value = true
 
   try {
@@ -808,6 +821,7 @@ async function submitCartRequestForQuotation() {
       cartProducts.value,
       selectedDeliveryAddress.value,
       selectedRfqRequiredDate.value,
+      rfqEmail.value,
     )
 
     clearCart()
@@ -882,6 +896,16 @@ watch(
     refreshDeliveryDistance()
   },
   { deep: true },
+)
+
+watch(
+  rfqEmailPrefill,
+  (nextEmail) => {
+    if (!String(rfqEmail.value || '').trim()) {
+      rfqEmail.value = nextEmail
+    }
+  },
+  { immediate: true },
 )
 
 watch(
@@ -1324,6 +1348,16 @@ watch(
           </section>
 
           <section v-if="isRfqCart" class="cart-delivery-options" aria-label="Quotation schedule">
+            <label class="field-label" for="cart-rfq-email">Email</label>
+            <input
+              id="cart-rfq-email"
+              v-model="rfqEmail"
+              class="form-input"
+              type="email"
+              autocomplete="email"
+              placeholder="name@example.com"
+              required
+            />
             <div class="cart-date-picker">
               <label class="cart-date-label" for="cart-rfq-required-date">Required Date</label>
               <div class="cart-date-input-shell" @click="openRfqRequiredDatePicker">

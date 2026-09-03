@@ -30,12 +30,17 @@ function normalizeOrderHistoryOrder(order = {}) {
     transaction_date: order.transaction_date || '',
     requiredDate: order.required_date || '',
     required_date: order.required_date || '',
+    validTill: order.valid_till || '',
+    valid_till: order.valid_till || '',
     grandTotal: Number(order.grand_total || 0),
     grand_total: Number(order.grand_total || 0),
     currency: String(order.currency || 'AED'),
     customer: String(order.customer || ''),
     customerName: String(order.customer_name || order.customer || ''),
     customer_name: String(order.customer_name || order.customer || ''),
+    supplier: String(order.supplier || ''),
+    supplierName: String(order.supplier_name || order.supplier || ''),
+    supplier_name: String(order.supplier_name || order.supplier || ''),
     purchaseOrders: Array.isArray(order.purchase_orders) ? order.purchase_orders : [],
     purchase_orders: Array.isArray(order.purchase_orders) ? order.purchase_orders : [],
     company: String(order.company || ''),
@@ -63,4 +68,16 @@ export async function getOrderHistory() {
     ...response,
     message: orders,
   }
+}
+
+export async function confirmSupplierQuotationOrder(supplierQuotationName, deliveryAddress = null) {
+  const response = await apiRequest('/method/buy_in_minutes.payment.confirm_supplier_quotation_order', {
+    method: 'POST',
+    body: JSON.stringify({
+      supplier_quotation_name: String(supplierQuotationName || '').trim(),
+      delivery_address: deliveryAddress,
+    }),
+  })
+
+  return response?.message || null
 }
