@@ -231,9 +231,13 @@ def _normalize_cart_items(cart_items):
 	for cart_item in cart_items:
 		item_code = (cart_item.get("item_code") or cart_item.get("itemCode") or cart_item.get("id") or "").strip()
 		quantity = frappe.utils.cint(cart_item.get("quantity"))
+		rate = flt(cart_item.get("rate"))
 		supplier = _resolve_supplier_name(
 			cart_item.get("supplier"),
 			cart_item.get("supplier_name") or cart_item.get("supplierName"),
+		)
+		supplier_quotation = _clean_text(
+			cart_item.get("supplier_quotation") or cart_item.get("supplierQuotation")
 		)
 		size = _clean_text(
 			cart_item.get("size")
@@ -249,7 +253,9 @@ def _normalize_cart_items(cart_items):
 			{
 				"item_code": item_code,
 				"quantity": quantity,
+				"rate": rate,
 				"supplier": supplier,
+				"supplier_quotation": supplier_quotation,
 				"size": size,
 			}
 		)
@@ -872,7 +878,12 @@ def _get_checkout_items(cart_items, delivery_fee=None, include_delivery_fee_item
 		if not item:
 			frappe.throw(_("Item {0} is not available.").format(cart_item["item_code"]))
 
-		rate = _get_item_selling_price(item.name, item.standard_rate)
+		rate = flt(cart_item.get("rate"))
+		if cart_item.get("supplier_quotation"):
+			if rate <= 0:
+				frappe.throw(_("Item {0} does not have a valid quoted price.").format(item.item_name or item.name))
+		else:
+			rate = _get_item_selling_price(item.name, item.standard_rate)
 		if rate <= 0:
 			frappe.throw(_("Item {0} does not have a valid price.").format(item.item_name or item.name))
 

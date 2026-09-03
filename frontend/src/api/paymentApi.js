@@ -12,8 +12,10 @@ function serializeCartItems(cartItems) {
     id: item.id,
     item_code: item.itemCode || item.id,
     quantity: item.quantity,
+    rate: Number(item.price || 0),
     supplier: item.supplier || '',
     supplier_name: item.supplierName || '',
+    supplier_quotation: item.supplierQuotation || '',
     size: item.size || item.selectedSize || '',
   }))
 }

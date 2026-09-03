@@ -210,6 +210,7 @@ async function confirmOrderFromSupplierQuotation(quotation) {
       image: String(item.image || ''),
       supplier: String(quotation?.supplier || ''),
       supplierName: String(quotation?.supplier_name || quotation?.supplier || ''),
+      supplierQuotation: quotationName,
       customRfqOnly: false,
       customDeliveryFee: 0,
       customDeliverySlots: false,
