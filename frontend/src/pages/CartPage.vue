@@ -10,6 +10,7 @@ import {
   syncCartSalesOrder,
   storeCheckoutResumeToken,
 } from '../api/paymentApi'
+import { createRequestForQuotationFromCart } from '../api/rfqApi'
 import { customerAddresses } from '../data/addressStore'
 import { clearCurrentUser, currentUser, isAuthReady, setCurrentUser } from '../data/authStore'
 import { clearCart } from '../data/cartStore'
@@ -44,7 +45,10 @@ const payableTotal = computed(() =>
 )
 const isStartingCheckout = ref(false)
 const isPlacingCodOrder = ref(false)
+const isSubmittingRfq = ref(false)
 const checkoutError = ref('')
+const rfqSuccessMessage = ref('')
+const rfqErrorMessage = ref('')
 const isAddressRequired = ref(false)
 const isAddressExpanded = ref(false)
 const fulfillmentMode = ref('delivery')
@@ -136,6 +140,10 @@ const totalUnits = computed(() =>
   cartProducts.value.reduce((total, item) => total + Number(item.quantity || 0), 0),
 )
 const totalLines = computed(() => cartProducts.value.length)
+const isRfqCart = computed(() =>
+  cartProducts.value.length > 0
+  && cartProducts.value.every((item) => item?.customRfqOnly === true),
+)
 const pickupLocations = computed(() => {
   const locations = []
   const seen = new Set()
@@ -565,6 +573,8 @@ function isAuthenticationError(error) {
 
 async function startStripeCheckout() {
   checkoutError.value = ''
+  rfqSuccessMessage.value = ''
+  rfqErrorMessage.value = ''
   isAddressRequired.value = false
 
   if (!(await ensureCheckoutSession())) {
@@ -643,6 +653,8 @@ async function startStripeCheckout() {
 
 async function placeCashOnDeliveryOrder() {
   checkoutError.value = ''
+  rfqSuccessMessage.value = ''
+  rfqErrorMessage.value = ''
   isAddressRequired.value = false
 
   if (!(await ensureCheckoutSession())) {
@@ -731,6 +743,55 @@ async function placeCashOnDeliveryOrder() {
   }
 }
 
+async function submitCartRequestForQuotation() {
+  checkoutError.value = ''
+  rfqSuccessMessage.value = ''
+  rfqErrorMessage.value = ''
+
+  if (!(await ensureCheckoutSession())) {
+    return
+  }
+
+  if (!isRfqCart.value || !cartProducts.value.length) {
+    rfqErrorMessage.value = 'No quotation items found in the cart.'
+    return
+  }
+
+  isSubmittingRfq.value = true
+
+  try {
+    const quotationRequests = await createRequestForQuotationFromCart(cartProducts.value)
+    const requestNames = quotationRequests
+      .map((request) => String(request?.name || '').trim())
+      .filter(Boolean)
+
+    clearCart()
+    rfqSuccessMessage.value = requestNames.length
+      ? `Request for quotation created: ${requestNames.join(', ')}`
+      : 'Request for quotation created successfully.'
+  } catch (error) {
+    if (isAuthenticationError(error)) {
+      const sessionRecovered = await refreshCurrentSession()
+
+      if (sessionRecovered && currentUser.value) {
+        rfqErrorMessage.value = 'Session restored. Please click Request for Quotation again.'
+        return
+      }
+
+      if (!hasPersistedPhoneAuthState()) {
+        clearCurrentUser()
+      }
+
+      emit('login')
+      return
+    }
+
+    rfqErrorMessage.value = error.message || 'Unable to create request for quotation.'
+  } finally {
+    isSubmittingRfq.value = false
+  }
+}
+
 function goToAddAddress() {
   router.push({
     name: 'profile',
@@ -771,6 +832,8 @@ onUnmounted(() => {
 watch(
   cartProducts,
   () => {
+    rfqSuccessMessage.value = ''
+    rfqErrorMessage.value = ''
     refreshDeliveryDistance()
   },
   { deep: true },
@@ -920,7 +983,7 @@ watch(
           <div class="cart-summary-heading">
             <div>
               <h2>Order summary</h2>
-              <p>Review totals, delivery details, and payment options.</p>
+              <p>{{ isRfqCart ? 'Review quotation items and submit your request.' : 'Review totals, delivery details, and payment options.' }}</p>
             </div>
             <span class="cart-summary-badge">{{ totalUnits }} {{ totalUnits === 1 ? 'unit' : 'units' }}</span>
           </div>
@@ -935,16 +998,16 @@ watch(
             <span>Savings</span>
             <strong>- {{ formatCurrency(itemSavings) }}</strong>
           </div>
-          <div class="cart-summary-row">
+          <div v-if="!isRfqCart" class="cart-summary-row">
             <span>Delivery charge</span>
             <strong>{{ isDeliveryDistanceLoading ? 'Calculating...' : (deliveryFee ? formatCurrency(deliveryFee) : 'FREE') }}</strong>
           </div>
           <div class="cart-summary-total">
-            <span>Grand total</span>
-            <strong>{{ formatCurrency(payableTotal) }}</strong>
+            <span>{{ isRfqCart ? 'Estimated total' : 'Grand total' }}</span>
+            <strong>{{ formatCurrency(isRfqCart ? discountedItemsTotal : payableTotal) }}</strong>
           </div>
 
-          <section class="cart-coupon-card" aria-label="Apply Coupon">
+          <section v-if="!isRfqCart" class="cart-coupon-card" aria-label="Apply Coupon">
             <div class="cart-coupon-header">
               <h3>Apply Coupon</h3>
             </div>
@@ -979,7 +1042,7 @@ watch(
             </p>
           </section>
 
-          <section class="cart-address-card" aria-label="Choose Address">
+          <section v-if="!isRfqCart" class="cart-address-card" aria-label="Choose Address">
             <div class="cart-address-header">
               <div>
                 <h3>Choose Address</h3>
@@ -1061,7 +1124,7 @@ watch(
             </p>
           </section>
 
-          <section class="cart-delivery-options" aria-label="Delivery schedule">
+          <section v-if="!isRfqCart" class="cart-delivery-options" aria-label="Delivery schedule">
             <div class="cart-fulfillment-mode" role="group" aria-label="Choose how you would like to receive your order">
               <p class="cart-fulfillment-title">How would you like to receive your order?</p>
               <div class="cart-fulfillment-options">
@@ -1211,7 +1274,24 @@ watch(
               Add Address
             </button>
           </div>
-          <div class="cart-payment-actions">
+          <p v-if="rfqSuccessMessage" class="form-message success-message">
+            {{ rfqSuccessMessage }}
+          </p>
+          <p v-if="rfqErrorMessage" class="form-message error-message">
+            {{ rfqErrorMessage }}
+          </p>
+          <div v-if="isRfqCart" class="cart-payment-actions">
+            <button
+              class="cart-login-button"
+              type="button"
+              :disabled="isSubmittingRfq || !isAuthReady"
+              @click="submitCartRequestForQuotation"
+            >
+              {{ canCheckout ? (isSubmittingRfq ? 'SUBMITTING...' : 'REQUEST FOR QUOTATION') : checkoutButtonLabel }}
+              <span aria-hidden="true">›</span>
+            </button>
+          </div>
+          <div v-else class="cart-payment-actions">
             <button
               class="cart-secondary-button"
               type="button"

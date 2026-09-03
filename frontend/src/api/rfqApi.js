@@ -12,3 +12,21 @@ export async function createRequestForQuotation({ productId, quantity = 1, selec
 
   return response?.message || null
 }
+
+export async function createRequestForQuotationFromCart(cartItems = []) {
+  const quotationRequests = []
+
+  for (const item of cartItems) {
+    const rfq = await createRequestForQuotation({
+      productId: item.itemCode || item.id,
+      quantity: Number(item.quantity || 1),
+      selectedSize: item.size || item.selectedSize || '',
+    })
+
+    if (rfq) {
+      quotationRequests.push(rfq)
+    }
+  }
+
+  return quotationRequests
+}

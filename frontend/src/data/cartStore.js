@@ -12,6 +12,10 @@ function toNumber(value) {
   return Number.isFinite(numberValue) ? numberValue : 0
 }
 
+function isRfqOnlyFlag(value) {
+  return value === true || value === 1 || value === '1' || value === 'Yes'
+}
+
 function readStoredCart() {
   try {
     const storedItems = JSON.parse(localStorage.getItem(CART_STORAGE_KEY)) || []
@@ -19,6 +23,7 @@ function readStoredCart() {
     return Array.isArray(storedItems)
       ? storedItems.map((item) => ({
         ...item,
+        customRfqOnly: isRfqOnlyFlag(item?.customRfqOnly ?? item?.custom_rfq_only),
         customDeliverySlots: isTruthyFlag(
           item?.customDeliverySlots ?? item?.custom_delivery_slots,
         ),
@@ -81,6 +86,7 @@ export function addProductToCart(product) {
       supplierAddress: product.supplierAddress || product.supplierDetails?.customGoogleAddress || '',
       supplierLatitude: product.supplierLatitude || product.supplierDetails?.customLatitude || '',
       supplierLongitude: product.supplierLongitude || product.supplierDetails?.customLongitude || '',
+      customRfqOnly: isRfqOnlyFlag(product.customRfqOnly ?? product.custom_rfq_only),
       customDeliveryFee: toNumber(product.customDeliveryFee ?? product.custom_delivery_fee),
       size: selectedSize,
       customDeliverySlots: productRequiresDeliverySlot,

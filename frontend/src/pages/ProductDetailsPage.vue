@@ -10,7 +10,6 @@ import { getCustomerToSupplierDistanceKm, LOCATION_UPDATED_EVENT } from '../api/
 import { getSelectedProduct, saveSelectedProduct } from '../data/productSelectionStore'
 import { saveSelectedSupplier } from '../data/supplierSelectionStore'
 import { getProductById, getProductVariants } from '../api/productApi'
-import { createRequestForQuotation } from '../api/rfqApi'
 import { getProductReviews } from '../api/reviewApi'
 import ProductCard from '../components/product/ProductCard.vue'
 
@@ -31,9 +30,6 @@ const isCheckingDeliverability = ref(false)
 const relatedProducts = ref([])
 const isLoadingRelatedProducts = ref(false)
 const productReviews = ref([])
-const isSubmittingRfq = ref(false)
-const rfqSuccessMessage = ref('')
-const rfqErrorMessage = ref('')
 
 const MAX_DELIVERABLE_DISTANCE_KM = 20
 
@@ -562,24 +558,8 @@ async function requestQuotationForProduct() {
     return
   }
 
-  isSubmittingRfq.value = true
-  rfqSuccessMessage.value = ''
-  rfqErrorMessage.value = ''
-
-  try {
-    const rfq = await createRequestForQuotation({
-      productId: product.value.itemCode || product.value.id,
-      quantity: productQuantity.value || 1,
-      selectedSize: selectedProductSizeLabel.value,
-    })
-    rfqSuccessMessage.value = rfq?.name
-      ? `Quotation request ${rfq.name} created successfully.`
-      : 'Quotation request created successfully.'
-  } catch (error) {
-    rfqErrorMessage.value = error.message || 'Unable to create quotation request.'
-  } finally {
-    isSubmittingRfq.value = false
-  }
+  addSelectedProductToCart()
+  await router.push({ name: 'cart' })
 }
 
 watch(productId, loadProduct, { immediate: true })
@@ -587,9 +567,6 @@ watch(productId, loadProduct, { immediate: true })
 watch(
   () => product.value?.id || '',
   () => {
-    rfqSuccessMessage.value = ''
-    rfqErrorMessage.value = ''
-    isSubmittingRfq.value = false
     refreshSupplierDistance()
   },
   { immediate: true },
@@ -834,26 +811,39 @@ onUnmounted(() => {
             </strong>
           </div>
 
-          <button
-            v-if="isRfqOnly"
-            class="product-detail-add-button is-rfq"
-            type="button"
-            :disabled="isSubmittingRfq"
-            @click="requestQuotationForProduct"
-          >
-            <span
-              v-if="isSubmittingRfq"
-              class="product-detail-button-loader"
-              aria-hidden="true"
-            />
-            <span>Request Quotation</span>
-          </button>
-          <p v-if="rfqSuccessMessage" class="product-detail-rfq-message is-success">
-            {{ rfqSuccessMessage }}
-          </p>
-          <p v-if="rfqErrorMessage" class="product-detail-rfq-message is-error">
-            {{ rfqErrorMessage }}
-          </p>
+          <template v-if="isRfqOnly">
+            <div
+              v-if="productQuantity"
+              class="product-quantity-control"
+              :aria-label="`${product.name} quantity`"
+            >
+              <button
+                type="button"
+                :aria-label="`Decrease ${product.name} quantity`"
+                @click="decreaseSelectedProductQuantity"
+              >
+                -
+              </button>
+              <span>{{ productQuantity }}</span>
+              <button
+                type="button"
+                :aria-label="`Increase ${product.name} quantity`"
+                :disabled="isOutOfDeliveryRange"
+                @click="addSelectedProductToCart"
+              >
+                +
+              </button>
+            </div>
+            <button
+              v-else
+              class="product-detail-add-button is-rfq"
+              type="button"
+              :disabled="isOutOfDeliveryRange"
+              @click="requestQuotationForProduct"
+            >
+              <span>Request Quotation</span>
+            </button>
+          </template>
 
           <div
             v-else-if="productQuantity"

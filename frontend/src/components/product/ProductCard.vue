@@ -1,6 +1,6 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { createRequestForQuotation } from '../../api/rfqApi'
+import { computed, onBeforeUnmount, onMounted, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { LOCATION_UPDATED_EVENT, getEstimatedDeliveryTimeLabel } from '../../api/deliveryEta'
 import { customerAddresses } from '../../data/addressStore'
 import {
@@ -24,15 +24,13 @@ const props = defineProps({
   },
 })
 const emit = defineEmits(['select'])
+const router = useRouter()
 
 const cartItem = computed(() => cartProducts.value.find((item) => item.id === props.product.id))
 const cartQuantity = computed(() => cartItem.value?.quantity || 0)
 const isWishlisted = computed(() => isProductWishlisted(props.product.id))
 const productPlaceholderImage = `${import.meta.env.BASE_URL}grocery-card-image-v3.svg?v=3`
 const isRfqOnly = computed(() => props.product.customRfqOnly === true)
-const isSubmittingRfq = ref(false)
-const rfqSuccessMessage = ref('')
-const rfqErrorMessage = ref('')
 const availableQuantity = computed(() => {
   const quantity = Number(props.product.customAvailableQty ?? props.product.stockQuantity ?? 0)
 
@@ -82,24 +80,8 @@ function handleWishlistToggle() {
 }
 
 async function handleRequestQuotation() {
-  isSubmittingRfq.value = true
-  rfqSuccessMessage.value = ''
-  rfqErrorMessage.value = ''
-
-  try {
-    const rfq = await createRequestForQuotation({
-      productId: props.product.itemCode || props.product.id,
-      quantity: 1,
-      selectedSize: defaultProductSize.value,
-    })
-    rfqSuccessMessage.value = rfq?.name
-      ? `RFQ ${rfq.name} created`
-      : 'Quotation request created'
-  } catch (error) {
-    rfqErrorMessage.value = error.message || 'Unable to create quotation request.'
-  } finally {
-    isSubmittingRfq.value = false
-  }
+  handleAddToCart()
+  await router.push({ name: 'cart' })
 }
 
 function selectProduct() {
@@ -145,15 +127,6 @@ watch(
   { deep: true },
 )
 
-watch(
-  () => props.product.id,
-  () => {
-    isSubmittingRfq.value = false
-    rfqSuccessMessage.value = ''
-    rfqErrorMessage.value = ''
-  },
-  { immediate: true },
-)
 </script>
 
 <template>
@@ -237,26 +210,36 @@ watch(
           AED {{ product.price }}
         </span>
         <div v-if="isRfqOnly" class="product-rfq-actions">
+          <div
+            v-if="cartQuantity"
+            class="product-quantity-control"
+            :aria-label="`${product.name} quantity`"
+          >
+            <button
+              type="button"
+              :aria-label="`Decrease ${product.name} quantity`"
+              @click.stop="decreaseCartQuantity"
+            >
+              -
+            </button>
+            <span>{{ cartQuantity }}</span>
+            <button
+              type="button"
+              :aria-label="`Increase ${product.name} quantity`"
+              @click.stop="handleAddToCart"
+            >
+              +
+            </button>
+          </div>
           <button
+            v-else
             class="add-cart-button is-rfq"
             type="button"
             :aria-label="`Request quotation for ${product.name}`"
-            :disabled="isSubmittingRfq"
             @click.stop="handleRequestQuotation"
           >
-            <span
-              v-if="isSubmittingRfq"
-              class="product-card-button-loader"
-              aria-hidden="true"
-            />
             <span>Request Quotation</span>
           </button>
-          <p v-if="rfqSuccessMessage" class="product-rfq-message is-success">
-            {{ rfqSuccessMessage }}
-          </p>
-          <p v-if="rfqErrorMessage" class="product-rfq-message is-error">
-            {{ rfqErrorMessage }}
-          </p>
         </div>
         <template v-else>
           <div
