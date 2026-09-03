@@ -1947,6 +1947,101 @@ def create_cash_on_delivery_order(
 	}
 
 
+@frappe.whitelist(methods=["POST"])
+def confirm_supplier_quotation_order(supplier_quotation_name=None, delivery_address=None):
+	_require_checkout_user()
+
+	supplier_quotation_name = _clean_text(supplier_quotation_name)
+	if not supplier_quotation_name:
+		frappe.throw(_("Supplier Quotation is required."))
+
+	if not frappe.db.exists("Supplier Quotation", supplier_quotation_name):
+		frappe.throw(_("Supplier Quotation {0} was not found.").format(supplier_quotation_name))
+
+	supplier_quotation = frappe.get_doc("Supplier Quotation", supplier_quotation_name)
+	if supplier_quotation.docstatus != 1:
+		frappe.throw(_("Only submitted Supplier Quotations can be confirmed."))
+
+	linked_rfq_names = list(
+		dict.fromkeys(
+			filter(None, [item.request_for_quotation for item in supplier_quotation.get("items") or []])
+		)
+	)
+	if not linked_rfq_names:
+		frappe.throw(_("This Supplier Quotation is not linked to a request for quotation."))
+
+	allowed_rfq_names = set(
+		frappe.get_all(
+			"Request for Quotation",
+			filters={
+				"name": ["in", linked_rfq_names],
+				"owner": frappe.session.user,
+				"docstatus": 1,
+			},
+			pluck="name",
+			ignore_permissions=True,
+			limit_page_length=0,
+		)
+	)
+	if not allowed_rfq_names:
+		frappe.throw(_("You are not allowed to confirm this Supplier Quotation."))
+
+	checkout_items = []
+	delivery_date_candidates = []
+	for item in supplier_quotation.get("items") or []:
+		if item.request_for_quotation and item.request_for_quotation not in allowed_rfq_names:
+			continue
+		if not item.item_code or flt(item.qty) <= 0:
+			continue
+
+		checkout_items.append(
+			{
+				"item_code": item.item_code,
+				"item_name": item.item_name or item.item_code,
+				"quantity": flt(item.qty),
+				"rate": flt(item.rate),
+				"supplier": supplier_quotation.supplier,
+			}
+		)
+		if item.expected_delivery_date:
+			delivery_date_candidates.append(getdate(item.expected_delivery_date))
+
+	if not checkout_items:
+		frappe.throw(_("No orderable items were found in this Supplier Quotation."))
+
+	if not delivery_date_candidates:
+		rfq_schedule_dates = frappe.get_all(
+			"Request for Quotation",
+			fields=["schedule_date"],
+			filters={"name": ["in", list(allowed_rfq_names)]},
+			ignore_permissions=True,
+			limit_page_length=0,
+		)
+		delivery_date_candidates = [
+			getdate(row.schedule_date)
+			for row in rfq_schedule_dates
+			if row.get("schedule_date")
+		]
+
+	delivery_date = str(min(delivery_date_candidates)) if delivery_date_candidates else nowdate()
+	address_display = _build_delivery_address_display(delivery_address)
+	sales_order = _upsert_sales_order(
+		checkout_items,
+		submit=True,
+		delivery_address=delivery_address,
+		delivery_date=delivery_date,
+		address_display=address_display,
+		use_delivery_charge_tax_template=False,
+	)
+
+	return {
+		"success": True,
+		"sales_order": sales_order.name,
+		"purchase_orders": _get_purchase_order_names_for_sales_order(sales_order.name),
+		"sales_order_status": sales_order.status,
+	}
+
+
 
 
 def _get_signature_timestamp_and_signatures(signature_header):

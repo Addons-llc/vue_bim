@@ -107,23 +107,23 @@ def _get_order_items(sales_order_names):
 	return items_by_order
 
 
-def _get_request_for_quotation_items(request_names):
-	if not request_names:
+def _get_supplier_quotation_items(quotation_names):
+	if not quotation_names:
 		return {}
 
 	rows = frappe.get_all(
-		"Request for Quotation Item",
-		fields=["parent", "item_code", "item_name", "description", "qty"],
-		filters={"parent": ["in", request_names]},
+		"Supplier Quotation Item",
+		fields=["parent", "item_code", "item_name", "description", "qty", "rate", "amount"],
+		filters={"parent": ["in", quotation_names]},
 		order_by="idx asc",
 		ignore_permissions=True,
 		limit_page_length=0,
 	)
 	item_images = _get_item_images(list({row.item_code for row in rows if row.item_code}))
-	items_by_request = {}
+	items_by_quotation = {}
 
 	for row in rows:
-		items_by_request.setdefault(row.parent, []).append(
+		items_by_quotation.setdefault(row.parent, []).append(
 			{
 				"id": row.item_code,
 				"product_id": row.item_code,
@@ -131,13 +131,13 @@ def _get_request_for_quotation_items(request_names):
 				"item_name": row.item_name or row.item_code,
 				"description": row.description,
 				"qty": flt(row.qty),
-				"rate": 0,
-				"amount": 0,
+				"rate": flt(row.rate),
+				"amount": flt(row.amount),
 				"image": item_images.get(row.item_code),
 			}
 		)
 
-	return items_by_request
+	return items_by_quotation
 
 
 def _get_customer_names(customer_ids):
@@ -236,6 +236,55 @@ def _get_contact_summary(contact_name):
 	}
 
 
+def _get_supplier_quotations_for_user(limit_page_length):
+	request_for_quotation_names = frappe.get_all(
+		"Request for Quotation",
+		filters={"docstatus": 1, "owner": frappe.session.user},
+		pluck="name",
+		ignore_permissions=True,
+		limit_page_length=0,
+	)
+	if not request_for_quotation_names:
+		return []
+
+	supplier_quotation_names = frappe.get_all(
+		"Supplier Quotation Item",
+		filters={"request_for_quotation": ["in", request_for_quotation_names], "docstatus": ["<", 2]},
+		pluck="parent",
+		ignore_permissions=True,
+		limit_page_length=0,
+	)
+	supplier_quotation_names = list(dict.fromkeys(filter(None, supplier_quotation_names)))
+	if not supplier_quotation_names:
+		return []
+
+	supplier_quotation_fields = _get_existing_fields(
+		"Supplier Quotation",
+		[
+			"name",
+			"supplier",
+			"supplier_name",
+			"status",
+			"transaction_date",
+			"valid_till",
+			"grand_total",
+			"currency",
+			"company",
+		],
+	)
+	return frappe.get_all(
+		"Supplier Quotation",
+		fields=supplier_quotation_fields,
+		filters={
+			"name": ["in", supplier_quotation_names],
+			"docstatus": 1,
+		},
+		order_by="transaction_date desc, creation desc",
+		ignore_permissions=True,
+		limit_page_length=limit_page_length,
+	)
+
+
 @frappe.whitelist()
 def get_order_history(limit_page_length=20):
 	limit_page_length = frappe.utils.cint(limit_page_length) or 20
@@ -263,38 +312,14 @@ def get_order_history(limit_page_length=20):
 		ignore_permissions=True,
 		limit_page_length=limit_page_length,
 	)
-	request_for_quotation_fields = _get_existing_fields(
-		"Request for Quotation",
-		[
-			"name",
-			"status",
-			"transaction_date",
-			"schedule_date",
-			"company",
-			"owner",
-			"billing_address",
-			"billing_address_display",
-			"contact_person",
-			"contact_display",
-			"contact_mobile",
-			"contact_email",
-		],
-	)
-	request_for_quotations = frappe.get_all(
-		"Request for Quotation",
-		fields=request_for_quotation_fields,
-		filters={"docstatus": 1, "owner": frappe.session.user},
-		order_by="transaction_date desc, creation desc",
-		ignore_permissions=True,
-		limit_page_length=limit_page_length,
-	)
+	supplier_quotations = _get_supplier_quotations_for_user(limit_page_length)
 
-	if not sales_orders and not request_for_quotations:
+	if not sales_orders and not supplier_quotations:
 		return []
 
 	items_by_order = _get_order_items([sales_order.name for sales_order in sales_orders])
-	items_by_request = _get_request_for_quotation_items(
-		[request_for_quotation.name for request_for_quotation in request_for_quotations]
+	items_by_supplier_quotation = _get_supplier_quotation_items(
+		[supplier_quotation.name for supplier_quotation in supplier_quotations]
 	)
 	customer_names = _get_customer_names([sales_order.customer for sales_order in sales_orders])
 	for sales_order in sales_orders:
@@ -319,32 +344,24 @@ def get_order_history(limit_page_length=20):
 		if _can_view_sales_order(sales_order)
 	]
 
-	for request_for_quotation in request_for_quotations:
-		if not _can_view_request_for_quotation(request_for_quotation):
-			continue
-
-		contact_summary = _get_contact_summary(request_for_quotation.get("contact_person"))
+	for supplier_quotation in supplier_quotations:
 		history_entries.append(
 			{
-				"name": request_for_quotation.name,
-				"history_type": "request_for_quotation",
-				"title": request_for_quotation.name,
-				"status": request_for_quotation.status,
-				"transaction_date": request_for_quotation.transaction_date,
-				"required_date": request_for_quotation.get("schedule_date"),
-				"grand_total": 0,
-				"currency": "AED",
+				"name": supplier_quotation.name,
+				"history_type": "supplier_quotation",
+				"title": supplier_quotation.name,
+				"status": supplier_quotation.status,
+				"transaction_date": supplier_quotation.transaction_date,
+				"valid_till": supplier_quotation.get("valid_till"),
+				"grand_total": flt(supplier_quotation.get("grand_total")),
+				"currency": supplier_quotation.get("currency") or "AED",
 				"customer": "",
 				"customer_name": "",
 				"purchase_orders": [],
-				"items": items_by_request.get(request_for_quotation.name, []),
-				"company": request_for_quotation.get("company") or "",
-				"billing_address": request_for_quotation.get("billing_address") or "",
-				"billing_address_display": request_for_quotation.get("billing_address_display")
-				or _build_address_display_from_doc(request_for_quotation.get("billing_address")),
-				"contact_display": request_for_quotation.get("contact_display") or contact_summary["display"],
-				"contact_mobile": request_for_quotation.get("contact_mobile") or contact_summary["mobile"],
-				"contact_email": request_for_quotation.get("contact_email") or contact_summary["email"],
+				"items": items_by_supplier_quotation.get(supplier_quotation.name, []),
+				"company": supplier_quotation.get("company") or "",
+				"supplier": supplier_quotation.get("supplier") or "",
+				"supplier_name": supplier_quotation.get("supplier_name") or supplier_quotation.get("supplier") or "",
 			}
 		)
 

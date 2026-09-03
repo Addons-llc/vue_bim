@@ -897,6 +897,7 @@ def create_request_for_quotation(
 	selected_size=None,
 	delivery_address=None,
 	required_date=None,
+	email=None,
 	submit_request=0,
 ):
 	if _is_guest_session_user():
@@ -905,6 +906,7 @@ def create_request_for_quotation(
 	product_id = str(product_id or "").strip()
 	selected_size = str(selected_size or "").strip()
 	required_date = str(required_date or "").strip()
+	email = str(email or "").strip()
 	requested_qty = max(1, int(flt(quantity or 1)))
 
 	if not product_id:
@@ -944,34 +946,7 @@ def create_request_for_quotation(
 	if selected_size:
 		item_description = f"{item_description}\n\nSelected Size: {selected_size}"
 	schedule_date = getdate(required_date) if required_date else getdate(today())
-
-	user_name = frappe.session.user
-	customer = _get_or_create_customer_for_user(user_name) if delivery_address else None
-	customer_address = _get_or_create_customer_address(customer, delivery_address) if customer else None
-	customer_contact = _get_or_create_customer_contact(customer, delivery_address) if customer else None
 	address_display = _build_delivery_address_display(delivery_address) if delivery_address else ""
-	contact_display = ""
-	contact_mobile = ""
-	contact_email = ""
-	if customer_contact:
-		contact_doc = frappe.get_doc("Contact", customer_contact)
-		contact_display = contact_doc.get("full_name") or contact_doc.get("first_name") or ""
-		contact_mobile = contact_doc.get("mobile_no") or contact_doc.get("phone") or ""
-		if not contact_mobile:
-			contact_mobile = frappe.db.get_value(
-				"Contact Phone",
-				{"parent": customer_contact, "is_primary_mobile_no": 1},
-				"phone",
-			) or frappe.db.get_value(
-				"Contact Phone",
-				{"parent": customer_contact, "is_primary_phone": 1},
-				"phone",
-			) or ""
-		contact_email = contact_doc.get("email_id") or frappe.db.get_value(
-			"Contact Email",
-			{"parent": customer_contact, "is_primary": 1},
-			"email_id",
-		) or ""
 
 	rfq_doc = frappe.get_doc(
 		{
@@ -1005,12 +980,7 @@ def create_request_for_quotation(
 			],
 		}
 	)
-	_set_doc_value_if_field_exists(rfq_doc, "billing_address", customer_address)
-	_set_doc_value_if_field_exists(rfq_doc, "billing_address_display", address_display)
-	_set_doc_value_if_field_exists(rfq_doc, "contact_person", customer_contact)
-	_set_doc_value_if_field_exists(rfq_doc, "contact_display", contact_display)
-	_set_doc_value_if_field_exists(rfq_doc, "contact_mobile", contact_mobile)
-	_set_doc_value_if_field_exists(rfq_doc, "contact_email", contact_email)
+	_set_doc_value_if_field_exists(rfq_doc, "custom_email", email)
 	rfq_doc.flags.ignore_permissions = True
 	rfq_doc.insert(ignore_permissions=True)
 	if submit_request:
@@ -1021,49 +991,8 @@ def create_request_for_quotation(
 		"supplier": supplier,
 		"company": company,
 		"status": rfq_doc.status,
-		"billing_address": customer_address or "",
+		"billing_address": "",
 		"billing_address_display": address_display,
-	}
-
-
-def _get_rfq_contact_context(delivery_address=None):
-	user_name = frappe.session.user
-	customer = _get_or_create_customer_for_user(user_name) if delivery_address else None
-	customer_address = _get_or_create_customer_address(customer, delivery_address) if customer else None
-	customer_contact = _get_or_create_customer_contact(customer, delivery_address) if customer else None
-	address_display = _build_delivery_address_display(delivery_address) if delivery_address else ""
-	contact_display = ""
-	contact_mobile = ""
-	contact_email = ""
-
-	if customer_contact:
-		contact_doc = frappe.get_doc("Contact", customer_contact)
-		contact_display = contact_doc.get("full_name") or contact_doc.get("first_name") or ""
-		contact_mobile = contact_doc.get("mobile_no") or contact_doc.get("phone") or ""
-		if not contact_mobile:
-			contact_mobile = frappe.db.get_value(
-				"Contact Phone",
-				{"parent": customer_contact, "is_primary_mobile_no": 1},
-				"phone",
-			) or frappe.db.get_value(
-				"Contact Phone",
-				{"parent": customer_contact, "is_primary_phone": 1},
-				"phone",
-			) or ""
-		contact_email = contact_doc.get("email_id") or frappe.db.get_value(
-			"Contact Email",
-			{"parent": customer_contact, "is_primary": 1},
-			"email_id",
-		) or ""
-
-	return {
-		"customer": customer,
-		"customer_address": customer_address,
-		"customer_contact": customer_contact,
-		"address_display": address_display,
-		"contact_display": contact_display,
-		"contact_mobile": contact_mobile,
-		"contact_email": contact_email,
 	}
 
 
@@ -1072,12 +1001,14 @@ def create_request_for_quotation_from_cart(
 	cart_items=None,
 	delivery_address=None,
 	required_date=None,
+	email=None,
 	submit_request=1,
 ):
 	if _is_guest_session_user():
 		frappe.throw("Please sign in to request a quotation.", frappe.AuthenticationError)
 
 	required_date = str(required_date or "").strip()
+	email = str(email or "").strip()
 	if not required_date:
 		frappe.throw("Required date is mandatory.")
 
@@ -1145,7 +1076,7 @@ def create_request_for_quotation_from_cart(
 		)
 		supplier_names.append(supplier)
 
-	contact_context = _get_rfq_contact_context(delivery_address)
+	address_display = _build_delivery_address_display(delivery_address) if delivery_address else ""
 	rfq_doc = frappe.get_doc(
 		{
 			"doctype": "Request for Quotation",
@@ -1164,12 +1095,7 @@ def create_request_for_quotation_from_cart(
 			"items": rfq_items,
 		}
 	)
-	_set_doc_value_if_field_exists(rfq_doc, "billing_address", contact_context["customer_address"])
-	_set_doc_value_if_field_exists(rfq_doc, "billing_address_display", contact_context["address_display"])
-	_set_doc_value_if_field_exists(rfq_doc, "contact_person", contact_context["customer_contact"])
-	_set_doc_value_if_field_exists(rfq_doc, "contact_display", contact_context["contact_display"])
-	_set_doc_value_if_field_exists(rfq_doc, "contact_mobile", contact_context["contact_mobile"])
-	_set_doc_value_if_field_exists(rfq_doc, "contact_email", contact_context["contact_email"])
+	_set_doc_value_if_field_exists(rfq_doc, "custom_email", email)
 	rfq_doc.flags.ignore_permissions = True
 	rfq_doc.insert(ignore_permissions=True)
 	if submit_request:
@@ -1180,8 +1106,8 @@ def create_request_for_quotation_from_cart(
 		"suppliers": sorted(set(supplier_names)),
 		"company": company,
 		"status": rfq_doc.status,
-		"billing_address": contact_context["customer_address"] or "",
-		"billing_address_display": contact_context["address_display"],
+		"billing_address": "",
+		"billing_address_display": address_display,
 		"item_count": len(rfq_items),
 	}
 
