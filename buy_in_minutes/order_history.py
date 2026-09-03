@@ -140,6 +140,39 @@ def _get_supplier_quotation_items(quotation_names):
 	return items_by_quotation
 
 
+def _allocate_supplier_quotation_totals(items_by_quotation, supplier_quotations):
+	for supplier_quotation in supplier_quotations or []:
+		quotation_name = supplier_quotation.name
+		items = items_by_quotation.get(quotation_name) or []
+		if not items:
+			continue
+
+		grand_total = flt(supplier_quotation.get("grand_total"))
+		raw_total = sum(flt(item.get("amount")) for item in items)
+		if grand_total <= 0 or raw_total <= 0:
+			continue
+
+		allocated_total = 0
+		for index, item in enumerate(items):
+			quantity = flt(item.get("qty")) or 0
+			raw_amount = flt(item.get("amount"))
+			if quantity <= 0 or raw_amount <= 0:
+				item["rate"] = 0
+				item["amount"] = 0
+				continue
+
+			if index == len(items) - 1:
+				adjusted_amount = grand_total - allocated_total
+			else:
+				adjusted_amount = flt((grand_total * raw_amount) / raw_total, 2)
+				allocated_total += adjusted_amount
+
+			item["amount"] = flt(adjusted_amount, 2)
+			item["rate"] = flt(item["amount"] / quantity, 2)
+
+	return items_by_quotation
+
+
 def _get_customer_names(customer_ids):
 	customer_ids = [customer_id for customer_id in customer_ids if customer_id]
 	if not customer_ids:
@@ -320,6 +353,10 @@ def get_order_history(limit_page_length=20):
 	items_by_order = _get_order_items([sales_order.name for sales_order in sales_orders])
 	items_by_supplier_quotation = _get_supplier_quotation_items(
 		[supplier_quotation.name for supplier_quotation in supplier_quotations]
+	)
+	items_by_supplier_quotation = _allocate_supplier_quotation_totals(
+		items_by_supplier_quotation,
+		supplier_quotations,
 	)
 	customer_names = _get_customer_names([sales_order.customer for sales_order in sales_orders])
 	for sales_order in sales_orders:

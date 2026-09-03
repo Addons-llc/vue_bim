@@ -288,7 +288,7 @@ onMounted(loadOrders)
     <header class="cart-page-header orders-page-header">
       <div>
         <p class="section-label">Orders</p>
-        <h1>Orders and Supplier Quotations</h1>
+        <h1>Orders</h1>
       </div>
       <RouterLink class="cart-continue-button" :to="{ name: 'home' }">
         Continue shopping
@@ -532,7 +532,7 @@ onMounted(loadOrders)
       <div class="empty-cart-copy">
         <p class="empty-cart-kicker">No activity</p>
         <h2>Your orders and supplier quotations are empty</h2>
-        <p>Orders and supplier quotations from this account will appear here.</p>
+        <p>Orders will appear under Orders, and supplier quotations will appear in their own section.</p>
       </div>
       <RouterLink class="primary-dark-button" :to="{ name: 'home' }">
         Start shopping
