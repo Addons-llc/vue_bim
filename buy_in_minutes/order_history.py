@@ -159,6 +159,83 @@ def _get_customer_names(customer_ids):
 	}
 
 
+def _get_existing_fields(doctype, fieldnames):
+	meta = frappe.get_meta(doctype)
+	return [fieldname for fieldname in fieldnames if fieldname == "name" or meta.has_field(fieldname)]
+
+
+def _build_address_display_from_doc(address_name):
+	address_name = str(address_name or "").strip()
+	if not address_name or not frappe.db.exists("Address", address_name):
+		return ""
+
+	address_doc = frappe.get_doc("Address", address_name)
+	lines = [
+		str(address_doc.get("address_title") or "").strip(),
+		str(address_doc.get("address_line1") or "").strip(),
+		str(address_doc.get("address_line2") or "").strip(),
+		str(address_doc.get("address_line3") or "").strip(),
+		", ".join(
+			part
+			for part in [
+				str(address_doc.get("city") or "").strip(),
+				str(address_doc.get("state") or "").strip(),
+				str(address_doc.get("country") or "").strip(),
+			]
+			if part
+		),
+	]
+	phone = str(address_doc.get("phone") or "").strip()
+	if phone:
+		lines.append(phone)
+
+	return "\n".join(line for line in lines if line)
+
+
+def _get_contact_summary(contact_name):
+	contact_name = str(contact_name or "").strip()
+	if not contact_name or not frappe.db.exists("Contact", contact_name):
+		return {
+			"display": "",
+			"mobile": "",
+			"email": "",
+		}
+
+	contact_doc = frappe.get_doc("Contact", contact_name)
+	contact_mobile = str(contact_doc.get("mobile_no") or contact_doc.get("phone") or "").strip()
+	if not contact_mobile:
+		contact_mobile = str(
+			frappe.db.get_value(
+				"Contact Phone",
+				{"parent": contact_name, "is_primary_mobile_no": 1},
+				"phone",
+			)
+			or frappe.db.get_value(
+				"Contact Phone",
+				{"parent": contact_name, "is_primary_phone": 1},
+				"phone",
+			)
+			or ""
+		).strip()
+
+	contact_email = str(contact_doc.get("email_id") or "").strip()
+	if not contact_email:
+		contact_email = str(
+			frappe.db.get_value(
+				"Contact Email",
+				{"parent": contact_name, "is_primary": 1},
+				"email_id",
+			)
+			or ""
+		).strip()
+
+	return {
+		"display": str(contact_doc.get("full_name") or contact_doc.get("first_name") or "").strip(),
+		"mobile": contact_mobile,
+		"email": contact_email,
+	}
+
+
 @frappe.whitelist()
 def get_order_history(limit_page_length=20):
 	limit_page_length = frappe.utils.cint(limit_page_length) or 20
@@ -186,9 +263,9 @@ def get_order_history(limit_page_length=20):
 		ignore_permissions=True,
 		limit_page_length=limit_page_length,
 	)
-	request_for_quotations = frappe.get_all(
+	request_for_quotation_fields = _get_existing_fields(
 		"Request for Quotation",
-		fields=[
+		[
 			"name",
 			"status",
 			"transaction_date",
@@ -197,10 +274,15 @@ def get_order_history(limit_page_length=20):
 			"owner",
 			"billing_address",
 			"billing_address_display",
+			"contact_person",
 			"contact_display",
 			"contact_mobile",
 			"contact_email",
 		],
+	)
+	request_for_quotations = frappe.get_all(
+		"Request for Quotation",
+		fields=request_for_quotation_fields,
 		filters={"docstatus": 1, "owner": frappe.session.user},
 		order_by="transaction_date desc, creation desc",
 		ignore_permissions=True,
@@ -237,32 +319,34 @@ def get_order_history(limit_page_length=20):
 		if _can_view_sales_order(sales_order)
 	]
 
-	history_entries.extend(
-		[
+	for request_for_quotation in request_for_quotations:
+		if not _can_view_request_for_quotation(request_for_quotation):
+			continue
+
+		contact_summary = _get_contact_summary(request_for_quotation.get("contact_person"))
+		history_entries.append(
 			{
 				"name": request_for_quotation.name,
 				"history_type": "request_for_quotation",
 				"title": request_for_quotation.name,
 				"status": request_for_quotation.status,
 				"transaction_date": request_for_quotation.transaction_date,
-				"required_date": request_for_quotation.schedule_date,
+				"required_date": request_for_quotation.get("schedule_date"),
 				"grand_total": 0,
 				"currency": "AED",
 				"customer": "",
 				"customer_name": "",
 				"purchase_orders": [],
 				"items": items_by_request.get(request_for_quotation.name, []),
-				"company": request_for_quotation.company or "",
-				"billing_address": request_for_quotation.billing_address or "",
-				"billing_address_display": request_for_quotation.billing_address_display or "",
-				"contact_display": request_for_quotation.contact_display or "",
-				"contact_mobile": request_for_quotation.contact_mobile or "",
-				"contact_email": request_for_quotation.contact_email or "",
+				"company": request_for_quotation.get("company") or "",
+				"billing_address": request_for_quotation.get("billing_address") or "",
+				"billing_address_display": request_for_quotation.get("billing_address_display")
+				or _build_address_display_from_doc(request_for_quotation.get("billing_address")),
+				"contact_display": request_for_quotation.get("contact_display") or contact_summary["display"],
+				"contact_mobile": request_for_quotation.get("contact_mobile") or contact_summary["mobile"],
+				"contact_email": request_for_quotation.get("contact_email") or contact_summary["email"],
 			}
-			for request_for_quotation in request_for_quotations
-			if _can_view_request_for_quotation(request_for_quotation)
-		]
-	)
+		)
 
 	return sorted(
 		history_entries,
