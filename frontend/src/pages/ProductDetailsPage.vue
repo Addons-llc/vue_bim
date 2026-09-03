@@ -559,7 +559,6 @@ async function requestQuotationForProduct() {
   }
 
   addSelectedProductToCart()
-  await router.push({ name: 'cart' })
 }
 
 watch(productId, loadProduct, { immediate: true })

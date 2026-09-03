@@ -55,6 +55,9 @@ const fulfillmentMode = ref('delivery')
 const selectedDeliverySlot = ref('')
 const deliveryDateInput = ref(null)
 const isDeliveryDatePickerVisible = ref(false)
+const rfqRequiredDateInput = ref(null)
+const isRfqRequiredDatePickerVisible = ref(false)
+const selectedRfqRequiredDate = ref('')
 const LAST_COD_ORDER_ITEMS_STORAGE_KEY = 'buyInMinutesLastCodOrderItems'
 const ALLOWED_DELIVERY_DATES = [
   '2026-08-30',
@@ -116,9 +119,11 @@ const checkoutButtonLabel = computed(() => {
 })
 const hasDeliveryAddress = computed(() => customerAddresses.value.length > 0)
 const selectedDeliveryDateLabel = computed(() => formatDeliveryDate(selectedDeliveryDate.value))
+const selectedRfqRequiredDateLabel = computed(() => formatDeliveryDate(selectedRfqRequiredDate.value))
 const deliveryDatePrompt = computed(() =>
   isCustomerPickup.value ? 'Choose pickup date' : 'Choose delivery date',
 )
+const rfqRequiredDatePrompt = computed(() => 'Choose required date')
 const selectedDeliveryAddress = computed(() =>
   customerAddresses.value.find((address) => address.isDefault)
   || customerAddresses.value[0]
@@ -480,6 +485,33 @@ function openDeliveryDatePicker() {
   input.click()
 }
 
+function getTodayDateValue() {
+  const today = new Date()
+  const year = today.getFullYear()
+  const month = String(today.getMonth() + 1).padStart(2, '0')
+  const day = String(today.getDate()).padStart(2, '0')
+
+  return `${year}-${month}-${day}`
+}
+
+function openRfqRequiredDatePicker() {
+  isRfqRequiredDatePickerVisible.value = true
+  const input = rfqRequiredDateInput.value
+
+  if (!input) {
+    return
+  }
+
+  input.focus()
+
+  if (typeof input.showPicker === 'function') {
+    input.showPicker()
+    return
+  }
+
+  input.click()
+}
+
 function isAllowedDeliveryDate(dateValue) {
   return ALLOWED_DELIVERY_DATES.includes(dateValue)
 }
@@ -747,6 +779,7 @@ async function submitCartRequestForQuotation() {
   checkoutError.value = ''
   rfqSuccessMessage.value = ''
   rfqErrorMessage.value = ''
+  isAddressRequired.value = false
 
   if (!(await ensureCheckoutSession())) {
     return
@@ -757,10 +790,25 @@ async function submitCartRequestForQuotation() {
     return
   }
 
+  if (!selectedDeliveryAddress.value) {
+    rfqErrorMessage.value = 'Please add a delivery address before requesting a quotation.'
+    isAddressRequired.value = true
+    return
+  }
+
+  if (!selectedRfqRequiredDate.value) {
+    rfqErrorMessage.value = 'Please choose a required date before requesting a quotation.'
+    return
+  }
+
   isSubmittingRfq.value = true
 
   try {
-    const quotationRequests = await createRequestForQuotationFromCart(cartProducts.value)
+    const quotationRequests = await createRequestForQuotationFromCart(
+      cartProducts.value,
+      selectedDeliveryAddress.value,
+      selectedRfqRequiredDate.value,
+    )
     const requestNames = quotationRequests
       .map((request) => String(request?.name || '').trim())
       .filter(Boolean)
@@ -872,6 +920,23 @@ watch(
     }
   },
   { immediate: true },
+)
+
+watch(
+  selectedRfqRequiredDate,
+  (dateValue) => {
+    if (!dateValue) {
+      return
+    }
+
+    const minimumDate = getTodayDateValue()
+    if (dateValue < minimumDate) {
+      selectedRfqRequiredDate.value = minimumDate
+      return
+    }
+
+    isRfqRequiredDatePickerVisible.value = false
+  },
 )
 
 watch(
@@ -1261,6 +1326,40 @@ watch(
             </label>
           </section>
 
+          <section v-if="isRfqCart" class="cart-delivery-options" aria-label="Quotation schedule">
+            <div class="cart-date-picker">
+              <label class="cart-date-label" for="cart-rfq-required-date">Required Date</label>
+              <div class="cart-date-input-shell" @click="openRfqRequiredDatePicker">
+                <div class="cart-date-display">
+                  <span class="cart-date-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                      <rect x="3" y="5" width="18" height="16" rx="3" />
+                      <path d="M16 3v4M8 3v4M3 10h18" />
+                    </svg>
+                  </span>
+                  <div class="cart-date-copy">
+                    <span>Required Date</span>
+                    <strong>{{ selectedRfqRequiredDateLabel || rfqRequiredDatePrompt }}</strong>
+                  </div>
+                  <span class="cart-date-action" aria-hidden="true">{{ selectedRfqRequiredDate ? 'Change' : 'Choose' }}</span>
+                </div>
+                <input
+                  v-if="isRfqRequiredDatePickerVisible"
+                  id="cart-rfq-required-date"
+                  ref="rfqRequiredDateInput"
+                  v-model="selectedRfqRequiredDate"
+                  class="cart-date-input"
+                  type="date"
+                  :min="getTodayDateValue()"
+                  @click="openRfqRequiredDatePicker"
+                />
+              </div>
+              <p v-if="selectedRfqRequiredDate" class="cart-delivery-selection">
+                Required date selected for <strong>{{ selectedRfqRequiredDateLabel }}</strong>.
+              </p>
+            </div>
+          </section>
+
           <div v-if="checkoutError" class="cart-checkout-message">
             <p class="form-message error-message">
               {{ checkoutError }}
@@ -1280,7 +1379,7 @@ watch(
           <p v-if="rfqErrorMessage" class="form-message error-message">
             {{ rfqErrorMessage }}
           </p>
-          <div v-if="isRfqCart" class="cart-payment-actions">
+          <div v-if="isRfqCart" class="cart-payment-actions is-rfq-cart">
             <button
               class="cart-login-button"
               type="button"

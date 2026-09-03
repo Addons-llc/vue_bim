@@ -2,6 +2,14 @@ import frappe
 from frappe import _
 from frappe.utils import flt, getdate, today
 
+from buy_in_minutes.payment import (
+	_build_delivery_address_display,
+	_get_or_create_customer_address,
+	_get_or_create_customer_contact,
+	_get_or_create_customer_for_user,
+	_set_doc_value_if_field_exists,
+)
+
 
 SELLING_PRICE_LIST = "Selling Price"
 ITEM_SUPPLIER_PORTAL_PUBLISH_FIELDS = (
@@ -882,16 +890,27 @@ def add_product_review(order_name=None, product_id=None, rating=None, descriptio
 
 
 @frappe.whitelist()
-def create_request_for_quotation(product_id=None, quantity=1, selected_size=None):
+def create_request_for_quotation(
+	product_id=None,
+	quantity=1,
+	selected_size=None,
+	delivery_address=None,
+	required_date=None,
+	submit_request=0,
+):
 	if _is_guest_session_user():
 		frappe.throw("Please sign in to request a quotation.", frappe.AuthenticationError)
 
 	product_id = str(product_id or "").strip()
 	selected_size = str(selected_size or "").strip()
+	required_date = str(required_date or "").strip()
 	requested_qty = max(1, int(flt(quantity or 1)))
 
 	if not product_id:
 		frappe.throw("Product is required.")
+
+	if submit_request and not required_date:
+		frappe.throw("Required date is mandatory.")
 
 	if not frappe.db.exists("Item", product_id):
 		frappe.throw("Product was not found.")
@@ -923,12 +942,42 @@ def create_request_for_quotation(product_id=None, quantity=1, selected_size=None
 	item_description = item_doc.description or item_doc.item_name or item_doc.item_code or item_doc.name
 	if selected_size:
 		item_description = f"{item_description}\n\nSelected Size: {selected_size}"
+	schedule_date = getdate(required_date) if required_date else getdate(today())
+
+	user_name = frappe.session.user
+	customer = _get_or_create_customer_for_user(user_name) if delivery_address else None
+	customer_address = _get_or_create_customer_address(customer, delivery_address) if customer else None
+	customer_contact = _get_or_create_customer_contact(customer, delivery_address) if customer else None
+	address_display = _build_delivery_address_display(delivery_address) if delivery_address else ""
+	contact_display = ""
+	contact_mobile = ""
+	contact_email = ""
+	if customer_contact:
+		contact_doc = frappe.get_doc("Contact", customer_contact)
+		contact_display = contact_doc.get("full_name") or contact_doc.get("first_name") or ""
+		contact_mobile = contact_doc.get("mobile_no") or contact_doc.get("phone") or ""
+		if not contact_mobile:
+			contact_mobile = frappe.db.get_value(
+				"Contact Phone",
+				{"parent": customer_contact, "is_primary_mobile_no": 1},
+				"phone",
+			) or frappe.db.get_value(
+				"Contact Phone",
+				{"parent": customer_contact, "is_primary_phone": 1},
+				"phone",
+			) or ""
+		contact_email = contact_doc.get("email_id") or frappe.db.get_value(
+			"Contact Email",
+			{"parent": customer_contact, "is_primary": 1},
+			"email_id",
+		) or ""
 
 	rfq_doc = frappe.get_doc(
 		{
 			"doctype": "Request for Quotation",
 			"company": company,
 			"transaction_date": today(),
+			"schedule_date": schedule_date,
 			"message_for_supplier": _("Please share your best quotation for the requested item."),
 			"suppliers": [
 				{
@@ -949,18 +998,30 @@ def create_request_for_quotation(product_id=None, quantity=1, selected_size=None
 					"uom": item_doc.stock_uom,
 					"stock_uom": item_doc.stock_uom,
 					"conversion_factor": 1,
-					"schedule_date": today(),
+					"schedule_date": schedule_date,
 					"warehouse": request_warehouse or None,
 				}
 			],
 		}
 	)
+	_set_doc_value_if_field_exists(rfq_doc, "billing_address", customer_address)
+	_set_doc_value_if_field_exists(rfq_doc, "billing_address_display", address_display)
+	_set_doc_value_if_field_exists(rfq_doc, "contact_person", customer_contact)
+	_set_doc_value_if_field_exists(rfq_doc, "contact_display", contact_display)
+	_set_doc_value_if_field_exists(rfq_doc, "contact_mobile", contact_mobile)
+	_set_doc_value_if_field_exists(rfq_doc, "contact_email", contact_email)
+	rfq_doc.flags.ignore_permissions = True
 	rfq_doc.insert(ignore_permissions=True)
+	if submit_request:
+		rfq_doc.submit()
 
 	return {
 		"name": rfq_doc.name,
 		"supplier": supplier,
 		"company": company,
+		"status": rfq_doc.status,
+		"billing_address": customer_address or "",
+		"billing_address_display": address_display,
 	}
 
 

@@ -936,6 +936,14 @@
   margin-top: 16px;
 }
 
+.cart-payment-actions.is-rfq-cart {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.cart-payment-actions.is-rfq-cart .cart-login-button {
+  width: 100%;
+}
+
 .primary-dark-button {
   width: 100%;
   min-height: 46px;

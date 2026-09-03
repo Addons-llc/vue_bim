@@ -1,6 +1,5 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
 import { LOCATION_UPDATED_EVENT, getEstimatedDeliveryTimeLabel } from '../../api/deliveryEta'
 import { customerAddresses } from '../../data/addressStore'
 import {
@@ -24,7 +23,6 @@ const props = defineProps({
   },
 })
 const emit = defineEmits(['select'])
-const router = useRouter()
 
 const cartItem = computed(() => cartProducts.value.find((item) => item.id === props.product.id))
 const cartQuantity = computed(() => cartItem.value?.quantity || 0)
@@ -79,9 +77,8 @@ function handleWishlistToggle() {
   toggleProductWishlist(props.product)
 }
 
-async function handleRequestQuotation() {
+function handleRequestQuotation() {
   handleAddToCart()
-  await router.push({ name: 'cart' })
 }
 
 function selectProduct() {
