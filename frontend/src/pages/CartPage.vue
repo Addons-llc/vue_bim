@@ -60,14 +60,6 @@ const rfqRequiredDateInput = ref(null)
 const isRfqRequiredDatePickerVisible = ref(false)
 const selectedRfqRequiredDate = ref('')
 const LAST_COD_ORDER_ITEMS_STORAGE_KEY = 'buyInMinutesLastCodOrderItems'
-const ALLOWED_DELIVERY_DATES = [
-  '2026-08-30',
-  '2026-08-31',
-  '2026-09-05',
-  '2026-09-09',
-]
-const deliveryDateMin = ALLOWED_DELIVERY_DATES[0]
-const deliveryDateMax = ALLOWED_DELIVERY_DATES[ALLOWED_DELIVERY_DATES.length - 1]
 const deliverySlots = [
   '10 AM - 12 PM',
   '12 PM - 2 PM',
@@ -520,18 +512,6 @@ function openRfqRequiredDatePicker() {
   input.click()
 }
 
-function isAllowedDeliveryDate(dateValue) {
-  return ALLOWED_DELIVERY_DATES.includes(dateValue)
-}
-
-function normalizeDeliveryDate(dateValue) {
-  if (!dateValue) {
-    return ''
-  }
-
-  return isAllowedDeliveryDate(dateValue) ? dateValue : ''
-}
-
 function formatDeliveryDate(dateValue) {
   if (!dateValue) {
     return ''
@@ -923,14 +903,7 @@ watch(
 watch(
   selectedDeliveryDate,
   (dateValue) => {
-    const normalizedDate = normalizeDeliveryDate(dateValue)
-
-    if (normalizedDate !== dateValue) {
-      selectedDeliveryDate.value = normalizedDate
-      return
-    }
-
-    if (normalizedDate) {
+    if (dateValue) {
       isDeliveryDatePickerVisible.value = false
     }
   },
@@ -1278,10 +1251,7 @@ watch(
                   v-model="selectedDeliveryDate"
                   class="cart-date-input"
                   type="date"
-                  :min="deliveryDateMin"
-                  :max="deliveryDateMax"
                   @click="openDeliveryDatePicker"
-                  @input="selectedDeliveryDate = normalizeDeliveryDate(selectedDeliveryDate)"
                 />
               </div>
             </div>
