@@ -43,6 +43,14 @@ function normalizeWebsiteUrl(url) {
   return `https://${value}`
 }
 
+function normalizeIdentifier(value) {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/&/g, 'and')
+    .replace(/[^a-z0-9]+/g, '')
+}
+
 function getStoreProductIds(store = {}) {
   const productRows = [
     store.products,
@@ -68,7 +76,11 @@ function getStoreProductIds(store = {}) {
 function mapSupplierStoreToBrand(store) {
   const storeName = store.store_name || store.name
   const storeLogo = store.store_logo
+    || store.store_image
     || store.logo
+    || store.image
+    || store.website_image
+    || store.supplier_image
     || store.supplier_logo
     || store.custom_store_logo
     || store.custom_supplier_logo
@@ -152,7 +164,7 @@ export async function getSupplierStore(identifier) {
   const stores = await getSupplierStores({
     limit_page_length: 5000,
   })
-  const normalizedIdentifier = String(identifier || '').toLowerCase()
+  const normalizedIdentifier = normalizeIdentifier(identifier)
 
   return stores.find((store) =>
     [
@@ -160,7 +172,7 @@ export async function getSupplierStore(identifier) {
       store.name,
       store.supplier,
       store.storeCode,
-    ].some((value) => String(value || '').toLowerCase() === normalizedIdentifier),
+    ].some((value) => normalizeIdentifier(value) === normalizedIdentifier),
   ) || null
 }
 

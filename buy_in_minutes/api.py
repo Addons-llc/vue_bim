@@ -2,6 +2,15 @@ import frappe
 from frappe import _
 from frappe.utils import flt, getdate, today
 
+from buy_in_minutes.payment import (
+	_build_delivery_address_display,
+	_get_or_create_customer_address,
+	_get_or_create_customer_contact,
+	_get_or_create_customer_for_user,
+	_normalize_cart_items,
+	_set_doc_value_if_field_exists,
+)
+
 
 SELLING_PRICE_LIST = "Selling Price"
 ITEM_SUPPLIER_PORTAL_PUBLISH_FIELDS = (
@@ -342,6 +351,54 @@ def _get_item_supplier_links(item_names):
 			item_suppliers[row.parent] = row.supplier
 
 	return item_suppliers
+
+
+def _row_matches_supplier(row, supplier=None):
+	supplier = str(supplier or "").strip()
+	if not supplier:
+		return True
+
+	row_supplier_candidates = [
+		row.get("supplier"),
+		row.get("supplier_name"),
+		row.get("default_supplier"),
+		row.get("custom_supplier"),
+		row.get("custom_supplier_name"),
+	]
+	row_supplier_candidates = {str(value).strip() for value in row_supplier_candidates if value}
+	if supplier in row_supplier_candidates:
+		return True
+
+	resolved_candidates = {
+		_resolve_supplier_name(value)
+		for value in row_supplier_candidates
+		if value
+	}
+	return supplier in resolved_candidates
+
+
+def _get_item_supplier_warehouse(item_doc, supplier=None):
+	if not item_doc:
+		return ""
+
+	item_meta = item_doc.meta
+	for df in item_meta.fields:
+		if df.fieldtype != "Table" or not df.fieldname:
+			continue
+		if (
+			df.fieldname not in ("supplier_list", "supplier_items")
+			and df.options not in ("Supplier List", "Item Supplier")
+			and df.label not in ("Supplier List", "Supplier Items")
+		):
+			continue
+
+		for row in item_doc.get(df.fieldname) or []:
+			if not _row_matches_supplier(row, supplier):
+				continue
+			if row.get("custom_supplier_warehouse"):
+				return row.get("custom_supplier_warehouse")
+
+	return ""
 
 
 def _get_supplier_from_item_fields(item):
@@ -834,16 +891,29 @@ def add_product_review(order_name=None, product_id=None, rating=None, descriptio
 
 
 @frappe.whitelist()
-def create_request_for_quotation(product_id=None, quantity=1, selected_size=None):
+def create_request_for_quotation(
+	product_id=None,
+	quantity=1,
+	selected_size=None,
+	delivery_address=None,
+	required_date=None,
+	email=None,
+	submit_request=0,
+):
 	if _is_guest_session_user():
 		frappe.throw("Please sign in to request a quotation.", frappe.AuthenticationError)
 
 	product_id = str(product_id or "").strip()
 	selected_size = str(selected_size or "").strip()
+	required_date = str(required_date or "").strip()
+	email = str(email or "").strip()
 	requested_qty = max(1, int(flt(quantity or 1)))
 
 	if not product_id:
 		frappe.throw("Product is required.")
+
+	if submit_request and not required_date:
+		frappe.throw("Required date is mandatory.")
 
 	if not frappe.db.exists("Item", product_id):
 		frappe.throw("Product was not found.")
@@ -865,15 +935,25 @@ def create_request_for_quotation(product_id=None, quantity=1, selected_size=None
 		frappe.throw("Supplier was not found for this product.")
 
 	company = _get_default_company()
+	request_warehouse = _get_item_supplier_warehouse(item_doc, supplier)
+	if item_doc.is_stock_item and not request_warehouse:
+		frappe.throw(
+			_(
+				"Please configure Custom Supplier Warehouse in the Supplier List for stock item {0} before creating a quotation request."
+			).format(frappe.bold(item_doc.name))
+		)
 	item_description = item_doc.description or item_doc.item_name or item_doc.item_code or item_doc.name
 	if selected_size:
 		item_description = f"{item_description}\n\nSelected Size: {selected_size}"
+	schedule_date = getdate(required_date) if required_date else getdate(today())
+	address_display = _build_delivery_address_display(delivery_address) if delivery_address else ""
 
 	rfq_doc = frappe.get_doc(
 		{
 			"doctype": "Request for Quotation",
 			"company": company,
 			"transaction_date": today(),
+			"schedule_date": schedule_date,
 			"message_for_supplier": _("Please share your best quotation for the requested item."),
 			"suppliers": [
 				{
@@ -893,17 +973,142 @@ def create_request_for_quotation(product_id=None, quantity=1, selected_size=None
 					"qty": requested_qty,
 					"uom": item_doc.stock_uom,
 					"stock_uom": item_doc.stock_uom,
-					"schedule_date": today(),
+					"conversion_factor": 1,
+					"schedule_date": schedule_date,
+					"warehouse": request_warehouse or None,
 				}
 			],
 		}
 	)
+	_set_doc_value_if_field_exists(rfq_doc, "custom_email", email)
+	rfq_doc.flags.ignore_permissions = True
 	rfq_doc.insert(ignore_permissions=True)
+	if submit_request:
+		rfq_doc.submit()
 
 	return {
 		"name": rfq_doc.name,
 		"supplier": supplier,
 		"company": company,
+		"status": rfq_doc.status,
+		"billing_address": "",
+		"billing_address_display": address_display,
+	}
+
+
+@frappe.whitelist()
+def create_request_for_quotation_from_cart(
+	cart_items=None,
+	delivery_address=None,
+	required_date=None,
+	email=None,
+	submit_request=1,
+):
+	if _is_guest_session_user():
+		frappe.throw("Please sign in to request a quotation.", frappe.AuthenticationError)
+
+	required_date = str(required_date or "").strip()
+	email = str(email or "").strip()
+	if not required_date:
+		frappe.throw("Required date is mandatory.")
+
+	normalized_items = _normalize_cart_items(cart_items)
+	if not normalized_items:
+		frappe.throw("No quotation items found in the cart.")
+
+	schedule_date = getdate(required_date)
+	company = _get_default_company()
+	rfq_items = []
+	supplier_names = []
+
+	for cart_item in normalized_items:
+		product_id = str(cart_item.get("item_code") or "").strip()
+		selected_size = str(cart_item.get("size") or "").strip()
+		requested_qty = max(1, int(flt(cart_item.get("quantity") or 1)))
+
+		if not frappe.db.exists("Item", product_id):
+			frappe.throw(f"Product {product_id} was not found.")
+
+		item_doc = frappe.get_doc("Item", product_id)
+		item_group_meta = frappe.get_meta("Item Group")
+		rfq_only_enabled = (
+			item_group_meta.has_field("custom_rfq_only")
+			and _is_truthy_flag(frappe.db.get_value("Item Group", item_doc.item_group, "custom_rfq_only"))
+		)
+		if not rfq_only_enabled:
+			frappe.throw(f"Product {product_id} is not configured for quotation requests.")
+
+		supplier = (
+			_resolve_supplier_name(cart_item.get("supplier"))
+			or _resolve_supplier_name(_get_supplier_from_item_fields(item_doc))
+			or _resolve_supplier_name(_get_item_supplier_links([item_doc.name]).get(item_doc.name))
+		)
+		if not supplier:
+			frappe.throw(f"Supplier was not found for product {product_id}.")
+
+		request_warehouse = _get_item_supplier_warehouse(item_doc, supplier)
+		if item_doc.is_stock_item and not request_warehouse:
+			frappe.throw(
+				_(
+					"Please configure Custom Supplier Warehouse in the Supplier List for stock item {0} before creating a quotation request."
+				).format(frappe.bold(item_doc.name))
+			)
+
+		item_description = item_doc.description or item_doc.item_name or item_doc.item_code or item_doc.name
+		if selected_size:
+			item_description = f"{item_description}\n\nSelected Size: {selected_size}"
+
+		rfq_items.append(
+			{
+				"doctype": "Request for Quotation Item",
+				"item_code": item_doc.name,
+				"item_name": item_doc.item_name or item_doc.name,
+				"description": item_description,
+				"item_group": item_doc.item_group,
+				"brand": item_doc.brand,
+				"qty": requested_qty,
+				"uom": item_doc.stock_uom,
+				"stock_uom": item_doc.stock_uom,
+				"conversion_factor": 1,
+				"schedule_date": schedule_date,
+				"warehouse": request_warehouse or None,
+			}
+		)
+		supplier_names.append(supplier)
+
+	address_display = _build_delivery_address_display(delivery_address) if delivery_address else ""
+	rfq_doc = frappe.get_doc(
+		{
+			"doctype": "Request for Quotation",
+			"company": company,
+			"transaction_date": today(),
+			"schedule_date": schedule_date,
+			"message_for_supplier": _("Please share your best quotation for the requested items."),
+			"suppliers": [
+				{
+					"doctype": "Request for Quotation Supplier",
+					"supplier": supplier,
+					"send_email": 0,
+				}
+				for supplier in sorted(set(supplier_names))
+			],
+			"items": rfq_items,
+		}
+	)
+	_set_doc_value_if_field_exists(rfq_doc, "custom_email", email)
+	rfq_doc.flags.ignore_permissions = True
+	rfq_doc.insert(ignore_permissions=True)
+	if submit_request:
+		rfq_doc.submit()
+
+	return {
+		"name": rfq_doc.name,
+		"suppliers": sorted(set(supplier_names)),
+		"company": company,
+		"status": rfq_doc.status,
+		"billing_address": "",
+		"billing_address_display": address_display,
+		"item_count": len(rfq_items),
 	}
 
 
@@ -1054,18 +1259,35 @@ def get_supplier_stores(limit_page_length=24, published=1):
 			"store_status",
 			"published",
 			"store_logo",
+			"store_image",
 			"logo",
+			"image",
+			"website_image",
+			"supplier_image",
 			"supplier_logo",
 			"custom_store_logo",
 			"custom_supplier_logo",
 			"banner_image",
+			"banner",
 			"store_banner",
 			"store_banner_image",
+			"store_cover",
+			"store_cover_image",
+			"cover_image",
+			"cover_photo",
+			"website_banner",
+			"website_banner_image",
 			"supplier_banner",
 			"supplier_banner_image",
 			"custom_banner_image",
 			"custom_store_banner",
 			"custom_store_banner_image",
+			"custom_store_cover",
+			"custom_store_cover_image",
+			"custom_cover_image",
+			"custom_cover_photo",
+			"custom_website_banner",
+			"custom_website_banner_image",
 			"custom_supplier_banner",
 			"custom_supplier_banner_image",
 			"primary_colour",

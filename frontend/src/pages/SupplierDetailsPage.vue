@@ -21,29 +21,59 @@ const isSupplierDescriptionExpanded = ref(false)
 const isSupplierReviewsExpanded = ref(false)
 const isShowingAllSupplierReviews = ref(false)
 const supplierReviews = ref([])
+const productSupplierDetails = computed(() => {
+  const candidateProducts = [
+    selectedSupplier.value?.product,
+    ...(selectedSupplier.value?.products || []),
+    ...loadedProducts.value,
+  ].filter(Boolean)
+
+  for (const product of candidateProducts) {
+    const details = product?.supplierDetails
+    if (!details) {
+      continue
+    }
+
+    if (
+      [
+        details.name,
+        details.displayName,
+        product.supplier,
+        product.supplierName,
+      ].filter(Boolean).includes(supplierName.value)
+    ) {
+      return details
+    }
+  }
+
+  return candidateProducts.find((product) => product?.supplierDetails)?.supplierDetails || {}
+})
 const supplierDetails = computed(() => {
   const store = supplierStore.value
   const supplier = supplierRecord.value || {}
   const selectedDetails = selectedSupplier.value?.details || {}
+  const productDetails = productSupplierDetails.value || {}
 
   return {
+    ...productDetails,
     ...selectedDetails,
     ...supplier,
     displayName: store?.name || supplier.displayName || selectedDetails.displayName || supplierName.value,
     storeName: store?.name || selectedDetails.storeName || '',
     supplier: supplier.supplier || store?.supplier || selectedDetails.supplier || '',
-    image: store?.image || supplier.image || selectedDetails.image,
-    bannerImage: store?.bannerImage || supplier.bannerImage || selectedDetails.bannerImage,
-    phone: store?.contactNumber || supplier.phone || selectedDetails.phone,
-    email: store?.email || supplier.email || selectedDetails.email,
-    website: store?.website || supplier.website || selectedDetails.website,
+    image: store?.image || supplier.image || selectedDetails.image || productDetails.image,
+    bannerImage: store?.bannerImage || supplier.bannerImage || selectedDetails.bannerImage || productDetails.bannerImage,
+    phone: store?.contactNumber || supplier.phone || selectedDetails.phone || productDetails.phone,
+    email: store?.email || supplier.email || selectedDetails.email || productDetails.email,
+    website: store?.website || supplier.website || selectedDetails.website || productDetails.website,
     details:
       store?.shortDescription
       || store?.description
       || store?.supplierDetails
       || supplier.details
-      || selectedDetails.details,
-    sellerSince: store?.sellerSince || supplier.sellerSince || selectedDetails.sellerSince,
+      || selectedDetails.details
+      || productDetails.details,
+    sellerSince: store?.sellerSince || supplier.sellerSince || selectedDetails.sellerSince || productDetails.sellerSince,
     primaryColour: store?.primaryColour || selectedDetails.primaryColour,
     secondaryColour: store?.secondaryColour || selectedDetails.secondaryColour,
   }

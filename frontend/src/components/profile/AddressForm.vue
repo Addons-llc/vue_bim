@@ -66,6 +66,30 @@ const apartmentOfficeNoPlaceholder = computed(() =>
       @input="$emit('edited')"
     />
 
+    <label class="field-label" for="address-phone">Phone number</label>
+    <input
+      id="address-phone"
+      v-model="form.phone"
+      class="form-input"
+      type="tel"
+      inputmode="tel"
+      autocomplete="tel"
+      placeholder="50 123 4567"
+      required
+      @input="$emit('edited')"
+    />
+
+    <label class="field-label" for="address-email">Email address</label>
+    <input
+      id="address-email"
+      v-model="form.email"
+      class="form-input"
+      type="email"
+      autocomplete="email"
+      placeholder="name@example.com"
+      @input="$emit('edited')"
+    />
+
     <button
       class="profile-address-location-button"
       type="button"

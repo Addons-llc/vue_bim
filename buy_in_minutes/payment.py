@@ -231,9 +231,13 @@ def _normalize_cart_items(cart_items):
 	for cart_item in cart_items:
 		item_code = (cart_item.get("item_code") or cart_item.get("itemCode") or cart_item.get("id") or "").strip()
 		quantity = frappe.utils.cint(cart_item.get("quantity"))
+		rate = flt(cart_item.get("rate"))
 		supplier = _resolve_supplier_name(
 			cart_item.get("supplier"),
 			cart_item.get("supplier_name") or cart_item.get("supplierName"),
+		)
+		supplier_quotation = _clean_text(
+			cart_item.get("supplier_quotation") or cart_item.get("supplierQuotation")
 		)
 		size = _clean_text(
 			cart_item.get("size")
@@ -249,7 +253,9 @@ def _normalize_cart_items(cart_items):
 			{
 				"item_code": item_code,
 				"quantity": quantity,
+				"rate": rate,
 				"supplier": supplier,
+				"supplier_quotation": supplier_quotation,
 				"size": size,
 			}
 		)
@@ -549,6 +555,7 @@ def _normalize_delivery_address(delivery_address):
 		"label": _clean_text(delivery_address.get("label") or "Home") or "Home",
 		"contact_name": _clean_text(delivery_address.get("contactName") or delivery_address.get("contact_name")),
 		"phone": _clean_text(delivery_address.get("phone")),
+		"email": _clean_text(delivery_address.get("email") or delivery_address.get("contact_email")),
 		"area": _clean_text(delivery_address.get("area")),
 		"apartment_office_name": _clean_text(
 			delivery_address.get("apartmentOfficeName")
@@ -579,6 +586,9 @@ def _build_delivery_address_display(delivery_address):
 	contact_line = ", ".join(filter(None, [address.get("contact_name"), address.get("phone")]))
 	if contact_line:
 		lines.append(contact_line)
+
+	if address.get("email"):
+		lines.append(address["email"])
 
 	apartment_line = ", ".join(
 		filter(
@@ -718,7 +728,8 @@ def _get_or_create_customer_contact(customer, delivery_address):
 
 	contact_name = address.get("contact_name")
 	phone = address.get("phone")
-	if not contact_name and not phone:
+	email = address.get("email")
+	if not contact_name and not phone and not email:
 		return None
 
 	linked_contacts = frappe.get_all(
@@ -738,6 +749,18 @@ def _get_or_create_customer_contact(customer, delivery_address):
 			{
 				"parent": ["in", linked_contacts],
 				"phone": phone,
+			},
+			"parent",
+		)
+		if existing_contact:
+			return existing_contact
+
+	if linked_contacts and email:
+		existing_contact = frappe.db.get_value(
+			"Contact Email",
+			{
+				"parent": ["in", linked_contacts],
+				"email_id": email,
 			},
 			"parent",
 		)
@@ -765,6 +788,14 @@ def _get_or_create_customer_contact(customer, delivery_address):
 				"phone": phone,
 				"is_primary_phone": 1,
 				"is_primary_mobile_no": 1,
+			},
+		)
+	if email:
+		contact_doc.append(
+			"email_ids",
+			{
+				"email_id": email,
+				"is_primary": 1,
 			},
 		)
 	contact_doc.insert(ignore_permissions=True)
@@ -847,7 +878,12 @@ def _get_checkout_items(cart_items, delivery_fee=None, include_delivery_fee_item
 		if not item:
 			frappe.throw(_("Item {0} is not available.").format(cart_item["item_code"]))
 
-		rate = _get_item_selling_price(item.name, item.standard_rate)
+		rate = flt(cart_item.get("rate"))
+		if cart_item.get("supplier_quotation"):
+			if rate <= 0:
+				frappe.throw(_("Item {0} does not have a valid quoted price.").format(item.item_name or item.name))
+		else:
+			rate = _get_item_selling_price(item.name, item.standard_rate)
 		if rate <= 0:
 			frappe.throw(_("Item {0} does not have a valid price.").format(item.item_name or item.name))
 
@@ -1919,6 +1955,101 @@ def create_cash_on_delivery_order(
 		"sales_order": sales_order.name,
 		"purchase_orders": purchase_order_names,
 		"payment_method": "cod",
+	}
+
+
+@frappe.whitelist(methods=["POST"])
+def confirm_supplier_quotation_order(supplier_quotation_name=None, delivery_address=None):
+	_require_checkout_user()
+
+	supplier_quotation_name = _clean_text(supplier_quotation_name)
+	if not supplier_quotation_name:
+		frappe.throw(_("Supplier Quotation is required."))
+
+	if not frappe.db.exists("Supplier Quotation", supplier_quotation_name):
+		frappe.throw(_("Supplier Quotation {0} was not found.").format(supplier_quotation_name))
+
+	supplier_quotation = frappe.get_doc("Supplier Quotation", supplier_quotation_name)
+	if supplier_quotation.docstatus != 1:
+		frappe.throw(_("Only submitted Supplier Quotations can be confirmed."))
+
+	linked_rfq_names = list(
+		dict.fromkeys(
+			filter(None, [item.request_for_quotation for item in supplier_quotation.get("items") or []])
+		)
+	)
+	if not linked_rfq_names:
+		frappe.throw(_("This Supplier Quotation is not linked to a request for quotation."))
+
+	allowed_rfq_names = set(
+		frappe.get_all(
+			"Request for Quotation",
+			filters={
+				"name": ["in", linked_rfq_names],
+				"owner": frappe.session.user,
+				"docstatus": 1,
+			},
+			pluck="name",
+			ignore_permissions=True,
+			limit_page_length=0,
+		)
+	)
+	if not allowed_rfq_names:
+		frappe.throw(_("You are not allowed to confirm this Supplier Quotation."))
+
+	checkout_items = []
+	delivery_date_candidates = []
+	for item in supplier_quotation.get("items") or []:
+		if item.request_for_quotation and item.request_for_quotation not in allowed_rfq_names:
+			continue
+		if not item.item_code or flt(item.qty) <= 0:
+			continue
+
+		checkout_items.append(
+			{
+				"item_code": item.item_code,
+				"item_name": item.item_name or item.item_code,
+				"quantity": flt(item.qty),
+				"rate": flt(item.rate),
+				"supplier": supplier_quotation.supplier,
+			}
+		)
+		if item.expected_delivery_date:
+			delivery_date_candidates.append(getdate(item.expected_delivery_date))
+
+	if not checkout_items:
+		frappe.throw(_("No orderable items were found in this Supplier Quotation."))
+
+	if not delivery_date_candidates:
+		rfq_schedule_dates = frappe.get_all(
+			"Request for Quotation",
+			fields=["schedule_date"],
+			filters={"name": ["in", list(allowed_rfq_names)]},
+			ignore_permissions=True,
+			limit_page_length=0,
+		)
+		delivery_date_candidates = [
+			getdate(row.schedule_date)
+			for row in rfq_schedule_dates
+			if row.get("schedule_date")
+		]
+
+	delivery_date = str(min(delivery_date_candidates)) if delivery_date_candidates else nowdate()
+	address_display = _build_delivery_address_display(delivery_address)
+	sales_order = _upsert_sales_order(
+		checkout_items,
+		submit=True,
+		delivery_address=delivery_address,
+		delivery_date=delivery_date,
+		address_display=address_display,
+		use_delivery_charge_tax_template=False,
+	)
+
+	return {
+		"success": True,
+		"sales_order": sales_order.name,
+		"purchase_orders": _get_purchase_order_names_for_sales_order(sales_order.name),
+		"sales_order_status": sales_order.status,
 	}
 
 

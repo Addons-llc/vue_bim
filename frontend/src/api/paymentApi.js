@@ -12,8 +12,10 @@ function serializeCartItems(cartItems) {
     id: item.id,
     item_code: item.itemCode || item.id,
     quantity: item.quantity,
+    rate: Number(item.price || 0),
     supplier: item.supplier || '',
     supplier_name: item.supplierName || '',
+    supplier_quotation: item.supplierQuotation || '',
     size: item.size || item.selectedSize || '',
   }))
 }
@@ -38,6 +40,7 @@ function serializeDeliveryAddress(deliveryAddress) {
     label: normalizeAddressValue(deliveryAddress.label),
     contactName: normalizeAddressValue(deliveryAddress.contactName),
     phone: normalizeAddressValue(deliveryAddress.phone),
+    email: normalizeAddressValue(deliveryAddress.email),
     area: normalizeAddressValue(deliveryAddress.area),
     apartmentOfficeName: normalizeAddressValue(deliveryAddress.apartmentOfficeName),
     apartmentOfficeNo: normalizeAddressValue(deliveryAddress.apartmentOfficeNo),
@@ -69,6 +72,7 @@ function formatSavedAddress(deliveryAddress) {
   const parts = [
     address.label,
     [address.contactName, address.phone].filter(Boolean).join(' - '),
+    address.email,
     address.area,
     address.apartmentOfficeName ? `${apartmentLabel} name: ${address.apartmentOfficeName}` : '',
     address.apartmentOfficeNo ? `${apartmentLabel} no: ${address.apartmentOfficeNo}` : '',

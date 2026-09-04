@@ -10,6 +10,7 @@ import {
   syncCartSalesOrder,
   storeCheckoutResumeToken,
 } from '../api/paymentApi'
+import { createRequestForQuotationFromCart } from '../api/rfqApi'
 import { customerAddresses } from '../data/addressStore'
 import { clearCurrentUser, currentUser, isAuthReady, setCurrentUser } from '../data/authStore'
 import { clearCart } from '../data/cartStore'
@@ -44,22 +45,21 @@ const payableTotal = computed(() =>
 )
 const isStartingCheckout = ref(false)
 const isPlacingCodOrder = ref(false)
+const isSubmittingRfq = ref(false)
 const checkoutError = ref('')
+const rfqSuccessMessage = ref('')
+const rfqErrorMessage = ref('')
+const rfqEmail = ref('')
 const isAddressRequired = ref(false)
 const isAddressExpanded = ref(false)
 const fulfillmentMode = ref('delivery')
 const selectedDeliverySlot = ref('')
 const deliveryDateInput = ref(null)
 const isDeliveryDatePickerVisible = ref(false)
+const rfqRequiredDateInput = ref(null)
+const isRfqRequiredDatePickerVisible = ref(false)
+const selectedRfqRequiredDate = ref('')
 const LAST_COD_ORDER_ITEMS_STORAGE_KEY = 'buyInMinutesLastCodOrderItems'
-const ALLOWED_DELIVERY_DATES = [
-  '2026-08-30',
-  '2026-08-31',
-  '2026-09-05',
-  '2026-09-09',
-]
-const deliveryDateMin = ALLOWED_DELIVERY_DATES[0]
-const deliveryDateMax = ALLOWED_DELIVERY_DATES[ALLOWED_DELIVERY_DATES.length - 1]
 const deliverySlots = [
   '10 AM - 12 PM',
   '12 PM - 2 PM',
@@ -112,9 +112,11 @@ const checkoutButtonLabel = computed(() => {
 })
 const hasDeliveryAddress = computed(() => customerAddresses.value.length > 0)
 const selectedDeliveryDateLabel = computed(() => formatDeliveryDate(selectedDeliveryDate.value))
+const selectedRfqRequiredDateLabel = computed(() => formatDeliveryDate(selectedRfqRequiredDate.value))
 const deliveryDatePrompt = computed(() =>
   isCustomerPickup.value ? 'Choose pickup date' : 'Choose delivery date',
 )
+const rfqRequiredDatePrompt = computed(() => 'Choose required date')
 const selectedDeliveryAddress = computed(() =>
   customerAddresses.value.find((address) => address.isDefault)
   || customerAddresses.value[0]
@@ -132,10 +134,21 @@ const selectedDeliveryAddressSummary = computed(() => {
     selectedDeliveryAddress.value.emirate,
   ].filter(Boolean).slice(0, 3).join(', ')
 })
+const rfqEmailPrefill = computed(() =>
+  String(
+    selectedDeliveryAddress.value?.email
+    || currentUser.value?.email
+    || '',
+  ).trim(),
+)
 const totalUnits = computed(() =>
   cartProducts.value.reduce((total, item) => total + Number(item.quantity || 0), 0),
 )
 const totalLines = computed(() => cartProducts.value.length)
+const isRfqCart = computed(() =>
+  cartProducts.value.length > 0
+  && cartProducts.value.every((item) => item?.customRfqOnly === true),
+)
 const pickupLocations = computed(() => {
   const locations = []
   const seen = new Set()
@@ -472,16 +485,31 @@ function openDeliveryDatePicker() {
   input.click()
 }
 
-function isAllowedDeliveryDate(dateValue) {
-  return ALLOWED_DELIVERY_DATES.includes(dateValue)
+function getTodayDateValue() {
+  const today = new Date()
+  const year = today.getFullYear()
+  const month = String(today.getMonth() + 1).padStart(2, '0')
+  const day = String(today.getDate()).padStart(2, '0')
+
+  return `${year}-${month}-${day}`
 }
 
-function normalizeDeliveryDate(dateValue) {
-  if (!dateValue) {
-    return ''
+function openRfqRequiredDatePicker() {
+  isRfqRequiredDatePickerVisible.value = true
+  const input = rfqRequiredDateInput.value
+
+  if (!input) {
+    return
   }
 
-  return isAllowedDeliveryDate(dateValue) ? dateValue : ''
+  input.focus()
+
+  if (typeof input.showPicker === 'function') {
+    input.showPicker()
+    return
+  }
+
+  input.click()
 }
 
 function formatDeliveryDate(dateValue) {
@@ -565,6 +593,8 @@ function isAuthenticationError(error) {
 
 async function startStripeCheckout() {
   checkoutError.value = ''
+  rfqSuccessMessage.value = ''
+  rfqErrorMessage.value = ''
   isAddressRequired.value = false
 
   if (!(await ensureCheckoutSession())) {
@@ -643,6 +673,8 @@ async function startStripeCheckout() {
 
 async function placeCashOnDeliveryOrder() {
   checkoutError.value = ''
+  rfqSuccessMessage.value = ''
+  rfqErrorMessage.value = ''
   isAddressRequired.value = false
 
   if (!(await ensureCheckoutSession())) {
@@ -731,6 +763,68 @@ async function placeCashOnDeliveryOrder() {
   }
 }
 
+async function submitCartRequestForQuotation() {
+  checkoutError.value = ''
+  rfqSuccessMessage.value = ''
+  rfqErrorMessage.value = ''
+  isAddressRequired.value = false
+
+  if (!(await ensureCheckoutSession())) {
+    return
+  }
+
+  if (!isRfqCart.value || !cartProducts.value.length) {
+    rfqErrorMessage.value = 'No quotation items found in the cart.'
+    return
+  }
+
+  if (!selectedRfqRequiredDate.value) {
+    rfqErrorMessage.value = 'Please choose a required date before requesting a quotation.'
+    return
+  }
+
+  if (!String(rfqEmail.value || '').trim()) {
+    rfqErrorMessage.value = 'Please enter an email before requesting a quotation.'
+    return
+  }
+
+  isSubmittingRfq.value = true
+
+  try {
+    const quotationRequest = await createRequestForQuotationFromCart(
+      cartProducts.value,
+      null,
+      selectedRfqRequiredDate.value,
+      rfqEmail.value,
+    )
+
+    clearCart()
+    rfqSuccessMessage.value = quotationRequest?.name
+      ? `Request for quotation created: ${quotationRequest.name}`
+      : 'Request for quotation created successfully.'
+  } catch (error) {
+    if (isAuthenticationError(error)) {
+      const sessionRecovered = await refreshCurrentSession()
+
+      if (sessionRecovered && currentUser.value) {
+        rfqErrorMessage.value = 'Session restored. Please click Request for Quotation again.'
+        return
+      }
+
+      if (!hasPersistedPhoneAuthState()) {
+        clearCurrentUser()
+      }
+
+      emit('login')
+      return
+    }
+
+    rfqErrorMessage.value = error.message || 'Unable to create request for quotation.'
+  } finally {
+    isSubmittingRfq.value = false
+  }
+}
+
 function goToAddAddress() {
   router.push({
     name: 'profile',
@@ -771,9 +865,21 @@ onUnmounted(() => {
 watch(
   cartProducts,
   () => {
+    rfqSuccessMessage.value = ''
+    rfqErrorMessage.value = ''
     refreshDeliveryDistance()
   },
   { deep: true },
+)
+
+watch(
+  rfqEmailPrefill,
+  (nextEmail) => {
+    if (!String(rfqEmail.value || '').trim()) {
+      rfqEmail.value = nextEmail
+    }
+  },
+  { immediate: true },
 )
 
 watch(
@@ -797,18 +903,28 @@ watch(
 watch(
   selectedDeliveryDate,
   (dateValue) => {
-    const normalizedDate = normalizeDeliveryDate(dateValue)
-
-    if (normalizedDate !== dateValue) {
-      selectedDeliveryDate.value = normalizedDate
-      return
-    }
-
-    if (normalizedDate) {
+    if (dateValue) {
       isDeliveryDatePickerVisible.value = false
     }
   },
   { immediate: true },
+)
+
+watch(
+  selectedRfqRequiredDate,
+  (dateValue) => {
+    if (!dateValue) {
+      return
+    }
+
+    const minimumDate = getTodayDateValue()
+    if (dateValue < minimumDate) {
+      selectedRfqRequiredDate.value = minimumDate
+      return
+    }
+
+    isRfqRequiredDatePickerVisible.value = false
+  },
 )
 
 watch(
@@ -920,7 +1036,7 @@ watch(
           <div class="cart-summary-heading">
             <div>
               <h2>Order summary</h2>
-              <p>Review totals, delivery details, and payment options.</p>
+              <p>{{ isRfqCart ? 'Review quotation items and submit your request.' : 'Review totals, delivery details, and payment options.' }}</p>
             </div>
             <span class="cart-summary-badge">{{ totalUnits }} {{ totalUnits === 1 ? 'unit' : 'units' }}</span>
           </div>
@@ -935,16 +1051,16 @@ watch(
             <span>Savings</span>
             <strong>- {{ formatCurrency(itemSavings) }}</strong>
           </div>
-          <div class="cart-summary-row">
+          <div v-if="!isRfqCart" class="cart-summary-row">
             <span>Delivery charge</span>
             <strong>{{ isDeliveryDistanceLoading ? 'Calculating...' : (deliveryFee ? formatCurrency(deliveryFee) : 'FREE') }}</strong>
           </div>
           <div class="cart-summary-total">
-            <span>Grand total</span>
-            <strong>{{ formatCurrency(payableTotal) }}</strong>
+            <span>{{ isRfqCart ? 'Estimated total' : 'Grand total' }}</span>
+            <strong>{{ formatCurrency(isRfqCart ? discountedItemsTotal : payableTotal) }}</strong>
           </div>
 
-          <section class="cart-coupon-card" aria-label="Apply Coupon">
+          <section v-if="!isRfqCart" class="cart-coupon-card" aria-label="Apply Coupon">
             <div class="cart-coupon-header">
               <h3>Apply Coupon</h3>
             </div>
@@ -979,7 +1095,7 @@ watch(
             </p>
           </section>
 
-          <section class="cart-address-card" aria-label="Choose Address">
+          <section v-if="!isRfqCart" class="cart-address-card" aria-label="Choose Address">
             <div class="cart-address-header">
               <div>
                 <h3>Choose Address</h3>
@@ -1061,7 +1177,7 @@ watch(
             </p>
           </section>
 
-          <section class="cart-delivery-options" aria-label="Delivery schedule">
+          <section v-if="!isRfqCart" class="cart-delivery-options" aria-label="Delivery schedule">
             <div class="cart-fulfillment-mode" role="group" aria-label="Choose how you would like to receive your order">
               <p class="cart-fulfillment-title">How would you like to receive your order?</p>
               <div class="cart-fulfillment-options">
@@ -1135,10 +1251,7 @@ watch(
                   v-model="selectedDeliveryDate"
                   class="cart-date-input"
                   type="date"
-                  :min="deliveryDateMin"
-                  :max="deliveryDateMax"
                   @click="openDeliveryDatePicker"
-                  @input="selectedDeliveryDate = normalizeDeliveryDate(selectedDeliveryDate)"
                 />
               </div>
             </div>
@@ -1198,6 +1311,40 @@ watch(
             </label>
           </section>
 
+          <section v-if="isRfqCart" class="cart-delivery-options" aria-label="Quotation schedule">
+            <div class="cart-date-picker">
+              <label class="cart-date-label" for="cart-rfq-required-date">Required Date</label>
+              <div class="cart-date-input-shell" @click="openRfqRequiredDatePicker">
+                <div class="cart-date-display">
+                  <span class="cart-date-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                      <rect x="3" y="5" width="18" height="16" rx="3" />
+                      <path d="M16 3v4M8 3v4M3 10h18" />
+                    </svg>
+                  </span>
+                  <div class="cart-date-copy">
+                    <span>Required Date</span>
+                    <strong>{{ selectedRfqRequiredDateLabel || rfqRequiredDatePrompt }}</strong>
+                  </div>
+                  <span class="cart-date-action" aria-hidden="true">{{ selectedRfqRequiredDate ? 'Change' : 'Choose' }}</span>
+                </div>
+                <input
+                  v-if="isRfqRequiredDatePickerVisible"
+                  id="cart-rfq-required-date"
+                  ref="rfqRequiredDateInput"
+                  v-model="selectedRfqRequiredDate"
+                  class="cart-date-input"
+                  type="date"
+                  :min="getTodayDateValue()"
+                  @click="openRfqRequiredDatePicker"
+                />
+              </div>
+              <p v-if="selectedRfqRequiredDate" class="cart-delivery-selection">
+                Required date selected for <strong>{{ selectedRfqRequiredDateLabel }}</strong>.
+              </p>
+            </div>
+          </section>
+
           <div v-if="checkoutError" class="cart-checkout-message">
             <p class="form-message error-message">
               {{ checkoutError }}
@@ -1211,7 +1358,34 @@ watch(
               Add Address
             </button>
           </div>
-          <div class="cart-payment-actions">
+          <p v-if="rfqSuccessMessage" class="form-message success-message">
+            {{ rfqSuccessMessage }}
+          </p>
+          <p v-if="rfqErrorMessage" class="form-message error-message">
+            {{ rfqErrorMessage }}
+          </p>
+          <div v-if="isRfqCart" class="cart-payment-actions is-rfq-cart">
+            <label class="field-label" for="cart-rfq-email">Email</label>
+            <input
+              id="cart-rfq-email"
+              v-model="rfqEmail"
+              class="form-input"
+              type="email"
+              autocomplete="email"
+              placeholder="name@example.com"
+              required
+            />
+            <button
+              class="cart-login-button"
+              type="button"
+              :disabled="isSubmittingRfq || !isAuthReady"
+              @click="submitCartRequestForQuotation"
+            >
+              {{ canCheckout ? (isSubmittingRfq ? 'SUBMITTING...' : 'REQUEST FOR QUOTATION') : checkoutButtonLabel }}
+              <span aria-hidden="true">›</span>
+            </button>
+          </div>
+          <div v-else class="cart-payment-actions">
             <button
               class="cart-secondary-button"
               type="button"
