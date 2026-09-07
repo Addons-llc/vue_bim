@@ -9,7 +9,7 @@ import {
 import { getCustomerToSupplierDistanceKm, LOCATION_UPDATED_EVENT } from '../api/deliveryEta'
 import { getSelectedProduct, saveSelectedProduct } from '../data/productSelectionStore'
 import { saveSelectedSupplier } from '../data/supplierSelectionStore'
-import { getProductById, getProductVariants } from '../api/productApi'
+import { getProductById, getProductVariants, getProducts } from '../api/productApi'
 import { getProductReviews } from '../api/reviewApi'
 import ProductCard from '../components/product/ProductCard.vue'
 
@@ -25,6 +25,7 @@ const activeImageIndex = ref(0)
 const isProductDescriptionExpanded = ref(false)
 const selectedProductSize = ref('')
 const selectedVariantAttributes = ref({})
+const selectedSupplierName = ref('')
 const supplierDistanceKm = ref(null)
 const isCheckingDeliverability = ref(false)
 const relatedProducts = ref([])
@@ -42,14 +43,76 @@ const productQuantity = computed(() => {
 
   return cartProducts.value.find((item) => item.id === product.value.id)?.quantity || 0
 })
-const supplierName = computed(() =>
+const baseSupplierName = computed(() =>
   product.value?.supplierName || product.value?.supplier || 'Supplier not set',
 )
+const baseSupplierIdentifier = computed(() =>
+  product.value?.supplier || product.value?.supplierDetails?.name || baseSupplierName.value,
+)
+const supplierOptions = computed(() => {
+  const options = []
+  const seenSuppliers = new Set()
+
+  const pushSupplierOption = (option = {}) => {
+    const name = String(option.name || option.supplier || '').trim()
+    const displayName = String(
+      option.displayName || option.supplierName || option.display_name || option.supplier_name || name,
+    ).trim()
+    const optionKey = name || displayName
+
+    if (!optionKey || seenSuppliers.has(optionKey)) {
+      return
+    }
+
+    seenSuppliers.add(optionKey)
+    options.push({
+      ...option,
+      name: name || displayName,
+      supplier: name || displayName,
+      displayName: displayName || name,
+      supplierName: displayName || name,
+    })
+  }
+
+  ;(product.value?.supplierOptions || []).forEach(pushSupplierOption)
+  pushSupplierOption({
+    ...(product.value?.supplierDetails || {}),
+    name: baseSupplierIdentifier.value,
+    supplier: baseSupplierIdentifier.value,
+    displayName: baseSupplierName.value,
+    supplierName: baseSupplierName.value,
+  })
+
+  return options
+})
+const selectedSupplierOption = computed(() => {
+  const selectedName = selectedSupplierName.value || baseSupplierIdentifier.value
+
+  return supplierOptions.value.find((option) => (
+    option.name === selectedName
+    || option.supplier === selectedName
+    || option.displayName === selectedName
+    || option.supplierName === selectedName
+  )) || supplierOptions.value[0] || null
+})
+const supplierName = computed(() =>
+  selectedSupplierOption.value?.displayName || baseSupplierName.value,
+)
 const supplierIdentifier = computed(() =>
-  product.value?.supplier || product.value?.supplierDetails?.name || supplierName.value,
+  selectedSupplierOption.value?.name || baseSupplierIdentifier.value,
+)
+const activeSupplierDetails = computed(() =>
+  selectedSupplierOption.value
+    ? {
+      ...(product.value?.supplierDetails || {}),
+      ...selectedSupplierOption.value,
+      name: selectedSupplierOption.value.name,
+      displayName: selectedSupplierOption.value.displayName,
+    }
+    : product.value?.supplierDetails || {},
 )
 const supplierImage = computed(() =>
-  product.value?.supplierDetails?.image || '',
+  activeSupplierDetails.value?.image || '',
 )
 const supplierInitials = computed(() =>
   supplierName.value
@@ -99,9 +162,19 @@ const showVariantDropdowns = computed(() =>
 const isOutOfDeliveryRange = computed(() =>
   Number.isFinite(supplierDistanceKm.value) && supplierDistanceKm.value > MAX_DELIVERABLE_DISTANCE_KM,
 )
+const isSelectedSupplierOutOfStock = computed(() =>
+  selectedSupplierProduct.value?.inStock === false,
+)
+const isSelectedProductUnavailable = computed(() =>
+  isOutOfDeliveryRange.value || isSelectedSupplierOutOfStock.value,
+)
 const deliveryStatusMessage = computed(() => {
   if (isCheckingDeliverability.value) {
     return 'Checking delivery availability...'
+  }
+
+  if (isSelectedSupplierOutOfStock.value) {
+    return 'Out of stock for selected supplier.'
   }
 
   if (isOutOfDeliveryRange.value) {
@@ -114,8 +187,19 @@ const deliveryStatusMessage = computed(() => {
 
   return ''
 })
+const productDetailActionLabel = computed(() => {
+  if (isSelectedSupplierOutOfStock.value) {
+    return 'Out of stock'
+  }
+
+  if (isOutOfDeliveryRange.value) {
+    return 'Not deliverable'
+  }
+
+  return isRfqOnly.value ? 'Request Quotation' : 'Add to cart'
+})
 const productSupplierWebsite = computed(() =>
-  String(product.value?.supplierDetails?.website || '').trim(),
+  String(activeSupplierDetails.value?.website || '').trim(),
 )
 const productDeliveryTimeLabel = computed(() => {
   const deliveryTime = String(product.value?.deliveryTime || '').trim()
@@ -144,6 +228,23 @@ const productSizeOptions = computed(() => {
 })
 const selectedProductSizeLabel = computed(() =>
   selectedProductSize.value || productSizeOptions.value[0] || '',
+)
+const selectedSupplierProduct = computed(() =>
+  product.value
+    ? {
+      ...product.value,
+      supplier: supplierIdentifier.value,
+      supplierName: supplierName.value,
+      supplierDetails: activeSupplierDetails.value,
+      supplierAddress: activeSupplierDetails.value?.customGoogleAddress || '',
+      supplierLatitude: activeSupplierDetails.value?.customLatitude || '',
+      supplierLongitude: activeSupplierDetails.value?.customLongitude || '',
+      customOutOfStock: selectedSupplierOption.value?.customOutOfStock === true,
+      inStock: selectedSupplierOption.value
+        ? selectedSupplierOption.value.customOutOfStock !== true
+        : product.value.inStock,
+    }
+    : null,
 )
 const variantAttributeGroups = computed(() => {
   const groups = []
@@ -197,10 +298,14 @@ function mergeProductDetails(cachedProduct, loadedProduct) {
     supplier: loadedProduct.supplier || cachedProduct.supplier,
     brand: loadedProduct.brand || cachedProduct.brand,
     supplierDetails: loadedProduct.supplierDetails || cachedProduct.supplierDetails,
+    supplierOptions: loadedProduct.supplierOptions?.length
+      ? loadedProduct.supplierOptions
+      : (cachedProduct.supplierOptions || []),
     sourceListing: cachedProduct.sourceListing || loadedProduct.sourceListing,
     deliveryTime: loadedProduct.deliveryTime || cachedProduct.deliveryTime,
     reviewCount: loadedProduct.reviewCount || cachedProduct.reviewCount,
     stockQuantity: loadedProduct.stockQuantity || cachedProduct.stockQuantity,
+    customOutOfStock: loadedProduct.customOutOfStock ?? cachedProduct.customOutOfStock,
     inStock: loadedProduct.inStock ?? cachedProduct.inStock,
     customDeliverySlots: loadedProduct.customDeliverySlots ?? cachedProduct.customDeliverySlots,
     customSize: loadedProduct.customSize || cachedProduct.customSize || loadedProduct.custom_size || cachedProduct.custom_size,
@@ -236,7 +341,11 @@ const productDetails = computed(() => {
   }
 
   if (product.value.details?.length) {
-    const details = [...product.value.details]
+    const details = product.value.details.filter((detail) => (
+      detail.label !== 'Supplier'
+      && detail.label !== 'Supplier website'
+      && detail.label !== 'Delivery time'
+    ))
 
     if (selectedProductSizeLabel.value && !details.some((detail) => detail.label === 'Size')) {
       details.push({ label: 'Size', value: selectedProductSizeLabel.value })
@@ -246,9 +355,8 @@ const productDetails = computed(() => {
       details.push({ label: 'Supplier website', value: productSupplierWebsite.value })
     }
 
-    if (!details.some((detail) => detail.label === 'Delivery time')) {
-      details.push({ label: 'Delivery time', value: productDeliveryTimeLabel.value })
-    }
+    details.push({ label: 'Choose Supplier', type: 'supplier', value: supplierIdentifier.value })
+    details.push({ label: 'Delivery time', value: productDeliveryTimeLabel.value })
 
     return details
   }
@@ -257,7 +365,6 @@ const productDetails = computed(() => {
     sourceListing.value?.name
       ? { label: sourceListing.value.label || 'Selected from', value: sourceListing.value.name }
       : null,
-    { label: 'Supplier', value: supplierName.value },
     { label: 'Supplier website', value: productSupplierWebsite.value },
     sourceListing.value?.storeCode
       ? { label: 'Store code', value: sourceListing.value.storeCode }
@@ -265,6 +372,7 @@ const productDetails = computed(() => {
     selectedProductSizeLabel.value
       ? { label: 'Size', value: selectedProductSizeLabel.value }
       : null,
+    { label: 'Choose Supplier', type: 'supplier', value: supplierIdentifier.value },
     { label: 'Delivery time', value: productDeliveryTimeLabel.value },
     { label: 'Category', value: product.value.category },
   ].filter((detail) => detail?.value)
@@ -426,6 +534,7 @@ async function loadProduct() {
   hasProductDetailLoaded.value = false
   const cachedProduct = getSelectedProduct(productId.value)
   product.value = cachedProduct
+  selectedSupplierName.value = cachedProduct?.supplier || cachedProduct?.supplierDetails?.name || ''
   productVariants.value = []
   await loadProductReviews(
     productId.value,
@@ -443,9 +552,10 @@ async function loadProduct() {
     }
 
     product.value = mergeProductDetails(cachedProduct, loadedProduct)
+    selectedSupplierName.value = product.value?.supplier || product.value?.supplierDetails?.name || ''
     await loadProductReviews(
       productId.value,
-      product.value?.supplier || product.value?.supplierDetails?.name || '',
+      supplierIdentifier.value,
     )
     const redirectedToVariant = await loadVariantsForProduct(product.value)
     if (redirectedToVariant) {
@@ -454,7 +564,7 @@ async function loadProduct() {
 
     await loadRelatedProducts(product.value)
     syncSelectedVariantAttributes(product.value)
-    saveSelectedProduct(product.value)
+    saveSelectedProduct(selectedSupplierProduct.value || product.value)
     activeImageIndex.value = 0
     isProductDescriptionExpanded.value = false
     hasProductDetailLoaded.value = true
@@ -480,7 +590,7 @@ async function refreshSupplierDistance() {
   isCheckingDeliverability.value = true
 
   try {
-    supplierDistanceKm.value = await getCustomerToSupplierDistanceKm(product.value)
+    supplierDistanceKm.value = await getCustomerToSupplierDistanceKm(selectedSupplierProduct.value || product.value)
   } catch {
     supplierDistanceKm.value = null
   } finally {
@@ -503,9 +613,9 @@ function moveProductDetailImage(direction) {
 }
 
 function addSelectedProductToCart() {
-  if (product.value && !isOutOfDeliveryRange.value) {
+  if (product.value && !isSelectedProductUnavailable.value) {
     addProductToCart({
-      ...product.value,
+      ...(selectedSupplierProduct.value || product.value),
       selectedSize: selectedProductSizeLabel.value,
     })
   }
@@ -519,6 +629,12 @@ function decreaseSelectedProductQuantity() {
 
 function selectProductSize(size) {
   selectedProductSize.value = size
+}
+
+async function selectProductSupplier(supplierName) {
+  selectedSupplierName.value = supplierName
+  await loadProductReviews(productId.value, supplierIdentifier.value)
+  refreshSupplierDistance()
 }
 
 async function updateVariantSelection(attributeName, attributeValue) {
@@ -548,8 +664,8 @@ function toggleProductDescription() {
 function rememberSupplierSelection() {
   saveSelectedSupplier({
     name: supplierIdentifier.value,
-    details: product.value?.supplierDetails,
-    product: product.value,
+    details: activeSupplierDetails.value,
+    product: selectedSupplierProduct.value || product.value,
   })
 }
 
@@ -724,7 +840,23 @@ onUnmounted(() => {
             class="product-detail-row"
           >
             <dt>{{ detail.label }}</dt>
-            <dd>{{ detail.value }}</dd>
+            <dd v-if="detail.type === 'supplier'">
+              <select
+                class="product-detail-supplier-select"
+                :value="supplierIdentifier"
+                aria-label="Choose Supplier"
+                @change="selectProductSupplier($event.target.value)"
+              >
+                <option
+                  v-for="option in supplierOptions"
+                  :key="option.name"
+                  :value="option.name"
+                >
+                  {{ option.displayName }}{{ option.customOutOfStock ? ' (Out of stock)' : '' }}
+                </option>
+              </select>
+            </dd>
+            <dd v-else>{{ detail.value }}</dd>
           </div>
         </dl>
 
@@ -798,7 +930,7 @@ onUnmounted(() => {
           <p
             v-if="deliveryStatusMessage"
             class="product-detail-delivery-status"
-            :class="{ 'is-blocked': isOutOfDeliveryRange }"
+            :class="{ 'is-blocked': isSelectedProductUnavailable }"
           >
             {{ deliveryStatusMessage }}
           </p>
@@ -827,7 +959,7 @@ onUnmounted(() => {
               <button
                 type="button"
                 :aria-label="`Increase ${product.name} quantity`"
-                :disabled="isOutOfDeliveryRange"
+                :disabled="isSelectedProductUnavailable"
                 @click="addSelectedProductToCart"
               >
                 +
@@ -837,10 +969,10 @@ onUnmounted(() => {
               v-else
               class="product-detail-add-button is-rfq"
               type="button"
-              :disabled="isOutOfDeliveryRange"
+              :disabled="isSelectedProductUnavailable"
               @click="requestQuotationForProduct"
             >
-              <span>Request Quotation</span>
+              <span>{{ productDetailActionLabel }}</span>
             </button>
           </template>
 
@@ -860,7 +992,7 @@ onUnmounted(() => {
             <button
               type="button"
               :aria-label="`Increase ${product.name} quantity`"
-              :disabled="isOutOfDeliveryRange"
+              :disabled="isSelectedProductUnavailable"
               @click="addSelectedProductToCart"
             >
               +
@@ -870,10 +1002,10 @@ onUnmounted(() => {
             v-else
             class="product-detail-add-button"
             type="button"
-            :disabled="isOutOfDeliveryRange"
+            :disabled="isSelectedProductUnavailable"
             @click="addSelectedProductToCart"
           >
-            {{ isOutOfDeliveryRange ? 'Not deliverable' : 'Add to cart' }}
+            {{ productDetailActionLabel }}
           </button>
         </div>
       </aside>

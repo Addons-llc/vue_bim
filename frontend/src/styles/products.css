@@ -1199,6 +1199,25 @@
   line-height: 1.45;
 }
 
+.product-detail-supplier-select {
+  width: min(100%, 280px);
+  min-height: 38px;
+  color: #111827;
+  background: #fff;
+  border: 1px solid #dbe3ee;
+  border-radius: 8px;
+  padding: 0 34px 0 12px;
+  font: inherit;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.product-detail-supplier-select:focus {
+  border-color: #2563eb;
+  outline: 0;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.16);
+}
+
 .product-reviews-section {
   gap: 16px;
 }

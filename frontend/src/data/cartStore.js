@@ -30,6 +30,10 @@ function readStoredCart() {
         customDeliveryFee: toNumber(
           item?.customDeliveryFee ?? item?.custom_delivery_fee,
         ),
+        customOutOfStock: isTruthyFlag(
+          item?.customOutOfStock ?? item?.custom_out_of_stock,
+        ),
+        inStock: !isTruthyFlag(item?.customOutOfStock ?? item?.custom_out_of_stock),
       }))
       : []
   } catch {
@@ -88,6 +92,8 @@ export function addProductToCart(product) {
       supplierLongitude: product.supplierLongitude || product.supplierDetails?.customLongitude || '',
       customRfqOnly: isRfqOnlyFlag(product.customRfqOnly ?? product.custom_rfq_only),
       customDeliveryFee: toNumber(product.customDeliveryFee ?? product.custom_delivery_fee),
+      customOutOfStock: isTruthyFlag(product.customOutOfStock ?? product.custom_out_of_stock),
+      inStock: !isTruthyFlag(product.customOutOfStock ?? product.custom_out_of_stock),
       size: selectedSize,
       customDeliverySlots: productRequiresDeliverySlot,
       quantity: 1,
@@ -146,6 +152,10 @@ export function replaceCartItems(items = []) {
       customDeliveryFee: toNumber(
         item?.customDeliveryFee ?? item?.custom_delivery_fee,
       ),
+      customOutOfStock: isTruthyFlag(
+        item?.customOutOfStock ?? item?.custom_out_of_stock,
+      ),
+      inStock: !isTruthyFlag(item?.customOutOfStock ?? item?.custom_out_of_stock),
     }))
     : []
   saveCart(cartItems.value)

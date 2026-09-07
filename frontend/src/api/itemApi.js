@@ -32,8 +32,8 @@ function getAvailableQuantity(item) {
   return getStockQuantity(item)
 }
 
-function isOutOfStock(item, availableQuantity) {
-  return isTruthyFlag(item.custom_out_of_stock ?? item.customOutOfStock) && availableQuantity <= 0
+function isOutOfStock(item) {
+  return isTruthyFlag(item.custom_out_of_stock ?? item.customOutOfStock)
 }
 
 function getReviewCount(item) {
@@ -84,6 +84,51 @@ function getSupplierDetails(item) {
     ),
     sellerSince: item.seller_since || item.supplier_since || item.custom_seller_since || '',
   }
+}
+
+function getSupplierOptions(item, selectedSupplierDetails) {
+  const rawSupplierOptions = Array.isArray(item.supplier_options)
+    ? item.supplier_options
+    : Array.isArray(item.supplierOptions)
+      ? item.supplierOptions
+      : []
+  const options = []
+  const seenSuppliers = new Set()
+
+  const pushOption = (option = {}) => {
+    const supplierName = String(option.name || option.supplier || '').trim()
+    const displayName = String(
+      option.display_name
+        || option.displayName
+        || option.supplier_name
+        || option.supplierName
+        || supplierName,
+    ).trim()
+    const optionKey = supplierName || displayName
+
+    if (!optionKey || seenSuppliers.has(optionKey)) {
+      return
+    }
+
+    seenSuppliers.add(optionKey)
+    options.push({
+      name: supplierName || displayName,
+      displayName: displayName || supplierName,
+      supplierName: displayName || supplierName,
+      supplier: supplierName || displayName,
+      website: option.website || '',
+      image: getImageUrl(option.image || option.supplier_image || option.supplier_logo || ''),
+      customGoogleAddress: option.custom_google_address || option.customGoogleAddress || '',
+      customLatitude: option.custom_latitude || option.customLatitude || '',
+      customLongitude: option.custom_longitude || option.customLongitude || '',
+      customOutOfStock: isTruthyFlag(option.custom_out_of_stock ?? option.customOutOfStock),
+    })
+  }
+
+  rawSupplierOptions.forEach(pushOption)
+  pushOption(selectedSupplierDetails)
+
+  return options
 }
 
 function getItemSellingPrice(item) {
@@ -312,9 +357,10 @@ async function mapItemToProduct(item) {
   const customSize = getItemSize(item)
   const itemCode = item.item_code || item.name
   const stockQuantity = getAvailableQuantity(item)
-  const outOfStock = isOutOfStock(item, stockQuantity)
+  const outOfStock = isOutOfStock(item)
   const reviewCount = getReviewCount(item)
   const supplierDetails = getSupplierDetails(item)
+  const supplierOptions = getSupplierOptions(item, supplierDetails)
   const attachmentImages = getItemAttachmentImages(item)
   const images = getItemGalleryImages(item)
   const fallbackDeliveryTime = getItemDeliveryTime(item)
@@ -344,6 +390,7 @@ async function mapItemToProduct(item) {
     supplier: supplierDetails.name,
     supplierName: supplierDetails.displayName || supplierDetails.name,
     supplierDetails,
+    supplierOptions,
     customAvailableQty: stockQuantity,
     customOutOfStock: outOfStock,
     stockQuantity,
@@ -480,6 +527,15 @@ export async function getItemMasterItem(itemName) {
         image: detailedProduct.image || listedProduct.image,
         bannerImage: detailedProduct.bannerImage || listedProduct.bannerImage,
         images: detailedProduct.images?.length ? detailedProduct.images : (listedProduct.images || []),
+        supplierOptions: detailedProduct.supplierOptions?.length
+          ? detailedProduct.supplierOptions
+          : (listedProduct.supplierOptions || []),
+        customOutOfStock: listedProduct.supplierOptions?.length
+          ? listedProduct.customOutOfStock
+          : detailedProduct.customOutOfStock,
+        inStock: listedProduct.supplierOptions?.length
+          ? listedProduct.inStock
+          : detailedProduct.inStock,
       }
       : detailedProduct
   } catch (error) {

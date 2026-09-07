@@ -353,6 +353,39 @@ def _get_item_supplier_links(item_names):
 	return item_suppliers
 
 
+def _get_item_supplier_options(item_names):
+	item_names = [item_name for item_name in item_names if item_name]
+	if not item_names or not frappe.db.exists("DocType", "Item Supplier"):
+		return {}
+
+	item_supplier_fields = ["parent", "supplier"]
+	if frappe.get_meta("Item Supplier").has_field("custom_out_of_stock"):
+		item_supplier_fields.append("custom_out_of_stock")
+
+	item_supplier_rows = frappe.get_all(
+		"Item Supplier",
+		fields=item_supplier_fields,
+		filters={"parent": ["in", item_names]},
+		order_by="parent asc, idx asc",
+		ignore_permissions=True,
+		limit_page_length=len(item_names) * 10,
+	)
+	item_suppliers = {}
+	for row in item_supplier_rows:
+		if not row.parent or not row.supplier:
+			continue
+		suppliers = item_suppliers.setdefault(row.parent, [])
+		if not any(supplier.get("supplier") == row.supplier for supplier in suppliers):
+			suppliers.append(
+				{
+					"supplier": row.supplier,
+					"custom_out_of_stock": row.get("custom_out_of_stock"),
+				}
+			)
+
+	return item_suppliers
+
+
 def _row_matches_supplier(row, supplier=None):
 	supplier = str(supplier or "").strip()
 	if not supplier:
@@ -423,6 +456,7 @@ def _resolve_supplier_name(candidate_supplier):
 def _apply_supplier_details(items):
 	item_names = [item.name for item in items if item.name]
 	item_supplier_links = _get_item_supplier_links(item_names)
+	item_supplier_options = _get_item_supplier_options(item_names)
 	item_suppliers = {}
 
 	for item in items:
@@ -430,7 +464,20 @@ def _apply_supplier_details(items):
 		if supplier:
 			item_suppliers[item.name] = supplier
 
-	supplier_names = sorted({supplier for supplier in item_suppliers.values() if supplier})
+	supplier_names = sorted(
+		{
+			supplier
+			for supplier in [
+				*item_suppliers.values(),
+				*[
+					option.get("supplier")
+					for options in item_supplier_options.values()
+					for option in options
+				],
+			]
+			if supplier
+		}
+	)
 	if not supplier_names:
 		return
 
@@ -450,6 +497,52 @@ def _apply_supplier_details(items):
 	for item in items:
 		supplier_name = item_suppliers.get(item.name)
 		supplier = suppliers_by_name.get(supplier_name)
+		option_rows = item_supplier_options.get(item.name) or []
+		option_names = [option.get("supplier") for option in option_rows if option.get("supplier")]
+		if supplier_name:
+			option_names = [*option_names, supplier_name]
+		option_names = list(dict.fromkeys(option_names))
+		option_rows_by_supplier = {
+			option.get("supplier"): option
+			for option in option_rows
+			if option.get("supplier")
+		}
+		supplier_options = []
+		for option_name in option_names:
+			option_supplier = suppliers_by_name.get(option_name)
+			option_row = option_rows_by_supplier.get(option_name) or {}
+			supplier_options.append(
+				{
+					"name": option_name,
+					"display_name": (
+						option_supplier.get("supplier_name")
+						if option_supplier
+						else option_name
+					) or option_name,
+					"custom_google_address": (
+						option_supplier.get("custom_google_address") if option_supplier else ""
+					),
+					"custom_latitude": option_supplier.get("custom_latitude") if option_supplier else "",
+					"custom_longitude": option_supplier.get("custom_longitude") if option_supplier else "",
+					"website": option_supplier.get("website") if option_supplier else "",
+					"custom_out_of_stock": option_row.get("custom_out_of_stock"),
+					"image": (
+						option_supplier.get("image")
+						or option_supplier.get("supplier_logo")
+						or option_supplier.get("supplier_image")
+						or option_supplier.get("custom_supplier_logo")
+						or option_supplier.get("custom_supplier_image")
+						if option_supplier
+						else ""
+					),
+				}
+			)
+		item.supplier_options = supplier_options
+		item.custom_out_of_stock = (
+			option_rows_by_supplier.get(supplier_name, {}).get("custom_out_of_stock")
+			if supplier_name
+			else None
+		)
 		if not supplier_name:
 			continue
 
