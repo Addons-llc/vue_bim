@@ -6,7 +6,11 @@ import {
   cartProducts,
   updateCartProductQuantity,
 } from '../data/cartStore'
-import { getCustomerToSupplierDistanceKm, LOCATION_UPDATED_EVENT } from '../api/deliveryEta'
+import {
+  getCustomerToSupplierDistanceKm,
+  getEstimatedDeliveryTimeLabel,
+  LOCATION_UPDATED_EVENT,
+} from '../api/deliveryEta'
 import { getSelectedProduct, saveSelectedProduct } from '../data/productSelectionStore'
 import { saveSelectedSupplier } from '../data/supplierSelectionStore'
 import { getProductById, getProductVariants, getProducts } from '../api/productApi'
@@ -26,7 +30,10 @@ const isProductDescriptionExpanded = ref(false)
 const selectedProductSize = ref('')
 const selectedVariantAttributes = ref({})
 const selectedSupplierName = ref('')
+const hasManuallySelectedSupplier = ref(false)
 const supplierDistanceKm = ref(null)
+const supplierOptionDistances = ref({})
+const selectedSupplierDeliveryTimeLabel = ref('')
 const isCheckingDeliverability = ref(false)
 const relatedProducts = ref([])
 const isLoadingRelatedProducts = ref(false)
@@ -83,7 +90,26 @@ const supplierOptions = computed(() => {
     supplierName: baseSupplierName.value,
   })
 
-  return options
+  return options.sort((leftOption, rightOption) => {
+    const leftDistance = supplierOptionDistances.value[leftOption.name]
+    const rightDistance = supplierOptionDistances.value[rightOption.name]
+    const hasLeftDistance = Number.isFinite(leftDistance)
+    const hasRightDistance = Number.isFinite(rightDistance)
+
+    if (hasLeftDistance && hasRightDistance) {
+      return leftDistance - rightDistance
+    }
+
+    if (hasLeftDistance) {
+      return -1
+    }
+
+    if (hasRightDistance) {
+      return 1
+    }
+
+    return 0
+  })
 })
 const selectedSupplierOption = computed(() => {
   const selectedName = selectedSupplierName.value || baseSupplierIdentifier.value
@@ -202,7 +228,7 @@ const productSupplierWebsite = computed(() =>
   String(activeSupplierDetails.value?.website || '').trim(),
 )
 const productDeliveryTimeLabel = computed(() => {
-  const deliveryTime = String(product.value?.deliveryTime || '').trim()
+  const deliveryTime = String(selectedSupplierDeliveryTimeLabel.value || product.value?.deliveryTime || '').trim()
 
   return deliveryTime || 'Set delivery location to view'
 })
@@ -381,9 +407,86 @@ const relatedProductSuggestions = computed(() =>
   relatedProducts.value.filter((relatedProduct) => relatedProduct.id !== product.value?.id).slice(0, 8),
 )
 const reviewCountLabel = computed(() => `${productReviews.value.length} Ratings`)
+let supplierOptionDistanceRequestId = 0
+let selectedSupplierDeliveryTimeRequestId = 0
 
 async function loadProductReviews(targetProductId, targetSupplier = '') {
   productReviews.value = await getProductReviews(targetProductId, targetSupplier)
+}
+
+function getSupplierOptionProduct(supplierOption) {
+  if (!product.value || !supplierOption) {
+    return null
+  }
+
+  return {
+    ...product.value,
+    supplier: supplierOption.name,
+    supplierName: supplierOption.displayName,
+    supplierDetails: {
+      ...(product.value.supplierDetails || {}),
+      ...supplierOption,
+      name: supplierOption.name,
+      displayName: supplierOption.displayName,
+    },
+    supplierAddress: supplierOption.customGoogleAddress || '',
+    supplierLatitude: supplierOption.customLatitude || '',
+    supplierLongitude: supplierOption.customLongitude || '',
+  }
+}
+
+async function refreshSupplierOptionDistances() {
+  const requestId = ++supplierOptionDistanceRequestId
+  const options = supplierOptions.value
+
+  if (!product.value || !options.length) {
+    supplierOptionDistances.value = {}
+    return
+  }
+
+  const distanceEntries = await Promise.all(
+    options.map(async (supplierOption) => {
+      const distance = await getCustomerToSupplierDistanceKm(getSupplierOptionProduct(supplierOption))
+        .catch(() => null)
+
+      return [supplierOption.name, distance]
+    }),
+  )
+
+  if (requestId !== supplierOptionDistanceRequestId) {
+    return
+  }
+
+  supplierOptionDistances.value = Object.fromEntries(distanceEntries)
+
+  if (!hasManuallySelectedSupplier.value) {
+    const nearestSupplier = supplierOptions.value.find((supplierOption) =>
+      Number.isFinite(supplierOptionDistances.value[supplierOption.name]),
+    )
+
+    if (nearestSupplier?.name && nearestSupplier.name !== selectedSupplierName.value) {
+      selectedSupplierName.value = nearestSupplier.name
+      await loadProductReviews(productId.value, supplierIdentifier.value)
+    }
+  }
+}
+
+async function refreshSelectedSupplierDeliveryTime() {
+  const requestId = ++selectedSupplierDeliveryTimeRequestId
+  const selectedProduct = selectedSupplierProduct.value || product.value
+
+  if (!selectedProduct) {
+    selectedSupplierDeliveryTimeLabel.value = ''
+    return
+  }
+
+  const deliveryTimeLabel = await getEstimatedDeliveryTimeLabel(selectedProduct).catch(() => '')
+
+  if (requestId !== selectedSupplierDeliveryTimeRequestId) {
+    return
+  }
+
+  selectedSupplierDeliveryTimeLabel.value = deliveryTimeLabel
 }
 
 function getVariantAttributeMap(variant) {
@@ -535,6 +638,9 @@ async function loadProduct() {
   const cachedProduct = getSelectedProduct(productId.value)
   product.value = cachedProduct
   selectedSupplierName.value = cachedProduct?.supplier || cachedProduct?.supplierDetails?.name || ''
+  hasManuallySelectedSupplier.value = false
+  supplierOptionDistances.value = {}
+  selectedSupplierDeliveryTimeLabel.value = ''
   productVariants.value = []
   await loadProductReviews(
     productId.value,
@@ -564,6 +670,8 @@ async function loadProduct() {
 
     await loadRelatedProducts(product.value)
     syncSelectedVariantAttributes(product.value)
+    await refreshSupplierOptionDistances()
+    await refreshSelectedSupplierDeliveryTime()
     saveSelectedProduct(selectedSupplierProduct.value || product.value)
     activeImageIndex.value = 0
     isProductDescriptionExpanded.value = false
@@ -612,6 +720,29 @@ function moveProductDetailImage(direction) {
   activeImageIndex.value = (activeImageIndex.value + direction + imageCount) % imageCount
 }
 
+function openProductDetails(relatedProduct) {
+  if (!relatedProduct?.id) {
+    return
+  }
+
+  const relatedSupplierName = relatedProduct.supplierName || relatedProduct.supplier || 'Supplier not set'
+
+  saveSelectedProduct(relatedProduct)
+  saveSelectedSupplier({
+    name: relatedSupplierName,
+    details: relatedProduct.supplierDetails,
+    product: relatedProduct,
+    products: relatedProducts.value.filter((item) =>
+      (item.supplierName || item.supplier || 'Supplier not set') === relatedSupplierName,
+    ),
+  })
+
+  router.push({
+    name: 'product-details',
+    params: { productId: relatedProduct.id },
+  })
+}
+
 function addSelectedProductToCart() {
   if (product.value && !isSelectedProductUnavailable.value) {
     addProductToCart({
@@ -632,9 +763,22 @@ function selectProductSize(size) {
 }
 
 async function selectProductSupplier(supplierName) {
+  hasManuallySelectedSupplier.value = true
   selectedSupplierName.value = supplierName
   await loadProductReviews(productId.value, supplierIdentifier.value)
-  refreshSupplierDistance()
+  await Promise.all([
+    refreshSupplierDistance(),
+    refreshSelectedSupplierDeliveryTime(),
+  ])
+}
+
+async function refreshProductLocationContext() {
+  hasManuallySelectedSupplier.value = false
+  await refreshSupplierOptionDistances()
+  await Promise.all([
+    refreshSupplierDistance(),
+    refreshSelectedSupplierDeliveryTime(),
+  ])
 }
 
 async function updateVariantSelection(attributeName, attributeValue) {
@@ -682,7 +826,7 @@ watch(productId, loadProduct, { immediate: true })
 watch(
   () => product.value?.id || '',
   () => {
-    refreshSupplierDistance()
+    refreshProductLocationContext()
   },
   { immediate: true },
 )
@@ -699,11 +843,11 @@ watch(productSizeOptions, (sizes) => {
 }, { immediate: true })
 
 onMounted(() => {
-  window.addEventListener(LOCATION_UPDATED_EVENT, refreshSupplierDistance)
+  window.addEventListener(LOCATION_UPDATED_EVENT, refreshProductLocationContext)
 })
 
 onUnmounted(() => {
-  window.removeEventListener(LOCATION_UPDATED_EVENT, refreshSupplierDistance)
+  window.removeEventListener(LOCATION_UPDATED_EVENT, refreshProductLocationContext)
 })
 </script>
 
@@ -838,6 +982,7 @@ onUnmounted(() => {
             v-for="detail in productDetails"
             :key="detail.label"
             class="product-detail-row"
+            :class="{ 'is-supplier-select-row': detail.type === 'supplier' }"
           >
             <dt>{{ detail.label }}</dt>
             <dd v-if="detail.type === 'supplier'">
