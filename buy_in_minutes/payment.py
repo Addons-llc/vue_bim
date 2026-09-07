@@ -24,6 +24,12 @@ SELLING_PRICE_LIST = "Selling Price"
 STRIPE_SETTINGS_DOCTYPE = "Stripe Settings"
 CHECKOUT_RESUME_TOKEN_TTL_SECONDS = 3 * 60 * 60
 DELIVERY_CHARGE_TAX_TEMPLATE = "Delivery Charge"
+SUPPLIER_MINIMUM_ORDER_RULES = (
+	{
+		"supplier_names": ("Red Chilly Restaurant", "Red Chillies", "Red Chillies Restaurant"),
+		"minimum_quantity": 20,
+	},
+)
 
 
 def _error(message, status_code=400):
@@ -261,6 +267,50 @@ def _normalize_cart_items(cart_items):
 		)
 
 	return normalized_items
+
+
+def _normalize_supplier_key(value):
+	return str(value or "").strip().lower()
+
+
+def _get_supplier_display_name(supplier):
+	supplier = _clean_text(supplier)
+	if not supplier:
+		return ""
+
+	if frappe.db.exists("Supplier", supplier):
+		return frappe.db.get_value("Supplier", supplier, "supplier_name") or supplier
+
+	return supplier
+
+
+def _validate_supplier_minimum_order(checkout_items):
+	for rule in SUPPLIER_MINIMUM_ORDER_RULES:
+		rule_supplier_names = {
+			_normalize_supplier_key(supplier_name)
+			for supplier_name in rule.get("supplier_names", ())
+			if supplier_name
+		}
+		supplier_quantity = 0
+
+		for item in checkout_items:
+			item_supplier = item.get("supplier")
+			item_supplier_names = {
+				_normalize_supplier_key(item_supplier),
+				_normalize_supplier_key(_get_supplier_display_name(item_supplier)),
+			}
+
+			if rule_supplier_names.intersection(item_supplier_names):
+				supplier_quantity += flt(item.get("quantity"))
+
+		minimum_quantity = flt(rule.get("minimum_quantity"))
+		if supplier_quantity and supplier_quantity < minimum_quantity:
+			frappe.throw(
+				_("{0} requires a minimum order of {1} items.").format(
+					rule.get("supplier_names", ("Supplier",))[0],
+					f"{minimum_quantity:g}",
+				)
+			)
 
 
 def _resolve_supplier_name(supplier=None, supplier_name=None):
@@ -1880,6 +1930,7 @@ def create_checkout_session(
 		delivery_fee=delivery_fee,
 		include_delivery_fee_item=False,
 	)
+	_validate_supplier_minimum_order(sales_order_checkout_items)
 	sales_order = _upsert_sales_order(
 		sales_order_checkout_items,
 		sales_order_name=sales_order_name,
@@ -1927,6 +1978,7 @@ def create_cash_on_delivery_order(
 		delivery_fee=delivery_fee,
 		include_delivery_fee_item=False,
 	)
+	_validate_supplier_minimum_order(checkout_items)
 	sales_order = _upsert_sales_order(
 		checkout_items,
 		sales_order_name=sales_order_name,

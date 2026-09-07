@@ -61,6 +61,12 @@ const isRfqRequiredDatePickerVisible = ref(false)
 const selectedRfqRequiredDate = ref('')
 const LAST_COD_ORDER_ITEMS_STORAGE_KEY = 'buyInMinutesLastCodOrderItems'
 const PICKUP_ONLY_DATE_VALUE = '2026-09-09'
+const SUPPLIER_MINIMUM_ORDER_RULES = [
+  {
+    supplierNames: ['Red Chilly Restaurant', 'Red Chillies', 'Red Chillies Restaurant'],
+    minimumQuantity: 20,
+  },
+]
 const deliverySlots = [
   '10 AM - 12 PM',
   '12 PM - 2 PM',
@@ -241,6 +247,31 @@ function formatCurrency(value) {
 
 function getItemLineTotal(item) {
   return Number(item?.price || 0) * Number(item?.quantity || 0)
+}
+
+function normalizeSupplierName(value = '') {
+  return String(value).trim().toLowerCase()
+}
+
+function getCartSupplierName(item = {}) {
+  return String(item.supplierName || item.supplier || item.supplierDetails?.displayName || item.supplierDetails?.name || '').trim()
+}
+
+function getSupplierMinimumOrderError() {
+  for (const rule of SUPPLIER_MINIMUM_ORDER_RULES) {
+    const supplierNameSet = new Set(rule.supplierNames.map(normalizeSupplierName))
+    const supplierQuantity = cartProducts.value.reduce((total, item) => (
+      supplierNameSet.has(normalizeSupplierName(getCartSupplierName(item)))
+        ? total + Number(item.quantity || 0)
+        : total
+    ), 0)
+
+    if (supplierQuantity > 0 && supplierQuantity < rule.minimumQuantity) {
+      return `${rule.supplierNames[0]} requires a minimum order of ${rule.minimumQuantity} items.`
+    }
+  }
+
+  return ''
 }
 
 function getCouponItemPricing(index) {
@@ -637,6 +668,12 @@ async function startStripeCheckout() {
     return
   }
 
+  const supplierMinimumOrderError = getSupplierMinimumOrderError()
+  if (supplierMinimumOrderError) {
+    checkoutError.value = supplierMinimumOrderError
+    return
+  }
+
   isStartingCheckout.value = true
 
   try {
@@ -719,6 +756,12 @@ async function placeCashOnDeliveryOrder() {
 
   if (requiresDeliverySlot.value && !selectedDeliverySlot.value) {
     checkoutError.value = 'Please choose a delivery slot before placing the order.'
+    return
+  }
+
+  const supplierMinimumOrderError = getSupplierMinimumOrderError()
+  if (supplierMinimumOrderError) {
+    checkoutError.value = supplierMinimumOrderError
     return
   }
 
