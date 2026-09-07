@@ -54,13 +54,11 @@ const isAddressRequired = ref(false)
 const isAddressExpanded = ref(false)
 const fulfillmentMode = ref('delivery')
 const selectedDeliverySlot = ref('')
-const deliveryDateInput = ref(null)
-const isDeliveryDatePickerVisible = ref(false)
 const rfqRequiredDateInput = ref(null)
 const isRfqRequiredDatePickerVisible = ref(false)
 const selectedRfqRequiredDate = ref('')
 const LAST_COD_ORDER_ITEMS_STORAGE_KEY = 'buyInMinutesLastCodOrderItems'
-const PICKUP_ONLY_DATE_VALUE = '2026-09-09'
+const ALLOWED_ORDER_DATE_VALUES = ['2026-09-09', '2026-09-13']
 const SUPPLIER_MINIMUM_ORDER_RULES = [
   {
     supplierNames: ['Red Chilly Restaurant', 'Red Chillies', 'Red Chillies Restaurant'],
@@ -123,11 +121,11 @@ const selectedRfqRequiredDateLabel = computed(() => formatDeliveryDate(selectedR
 const deliveryDatePrompt = computed(() =>
   isCustomerPickup.value ? 'Choose pickup date' : 'Choose delivery date',
 )
-const deliveryDateMin = computed(() =>
-  isRfqCart.value ? undefined : PICKUP_ONLY_DATE_VALUE,
-)
-const deliveryDateMax = computed(() =>
-  isRfqCart.value ? undefined : PICKUP_ONLY_DATE_VALUE,
+const allowedOrderDateOptions = computed(() =>
+  ALLOWED_ORDER_DATE_VALUES.map((dateValue) => ({
+    value: dateValue,
+    label: formatDeliveryDate(dateValue),
+  })),
 )
 const rfqRequiredDatePrompt = computed(() => 'Choose required date')
 const selectedDeliveryAddress = computed(() =>
@@ -504,27 +502,13 @@ function selectDeliverySlot(slot) {
 function selectFulfillmentMode(mode) {
   fulfillmentMode.value = mode
 
-  if (!isRfqCart.value && selectedDeliveryDate.value !== PICKUP_ONLY_DATE_VALUE) {
+  if (!isRfqCart.value && !ALLOWED_ORDER_DATE_VALUES.includes(selectedDeliveryDate.value)) {
     selectedDeliveryDate.value = ''
   }
 }
 
-function openDeliveryDatePicker() {
-  isDeliveryDatePickerVisible.value = true
-  const input = deliveryDateInput.value
-
-  if (!input) {
-    return
-  }
-
-  input.focus()
-
-  if (typeof input.showPicker === 'function') {
-    input.showPicker()
-    return
-  }
-
-  input.click()
+function selectDeliveryDate(dateValue) {
+  selectedDeliveryDate.value = dateValue
 }
 
 function getTodayDateValue() {
@@ -537,7 +521,7 @@ function getTodayDateValue() {
 }
 
 function hasInvalidOrderDate() {
-  return !isRfqCart.value && selectedDeliveryDate.value !== PICKUP_ONLY_DATE_VALUE
+  return !isRfqCart.value && !ALLOWED_ORDER_DATE_VALUES.includes(selectedDeliveryDate.value)
 }
 
 function openRfqRequiredDatePicker() {
@@ -659,7 +643,7 @@ async function startStripeCheckout() {
   }
 
   if (hasInvalidOrderDate()) {
-    checkoutError.value = 'Orders are available only on September 9, 2026.'
+    checkoutError.value = 'Orders are available only on September 9 or September 13, 2026.'
     return
   }
 
@@ -750,7 +734,7 @@ async function placeCashOnDeliveryOrder() {
   }
 
   if (hasInvalidOrderDate()) {
-    checkoutError.value = 'Orders are available only on September 9, 2026.'
+    checkoutError.value = 'Orders are available only on September 9 or September 13, 2026.'
     return
   }
 
@@ -963,16 +947,6 @@ watch(
   (isReady) => {
     if (!isReady) {
       couponCodeInput.value = ''
-    }
-  },
-  { immediate: true },
-)
-
-watch(
-  selectedDeliveryDate,
-  (dateValue) => {
-    if (dateValue) {
-      isDeliveryDatePickerVisible.value = false
     }
   },
   { immediate: true },
@@ -1297,8 +1271,8 @@ watch(
             </div>
 
             <div class="cart-date-picker">
-              <label class="cart-date-label" for="cart-delivery-date">{{ orderScheduleLabel }}</label>
-              <div class="cart-date-input-shell" @click="openDeliveryDatePicker">
+              <span class="cart-date-label">{{ orderScheduleLabel }}</span>
+              <div class="cart-date-input-shell is-option-picker">
                 <div class="cart-date-display">
                   <span class="cart-date-icon" aria-hidden="true">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
@@ -1310,19 +1284,19 @@ watch(
                     <span>{{ selectedDeliveryDateContext }}</span>
                     <strong>{{ selectedDeliveryDateLabel || deliveryDatePrompt }}</strong>
                   </div>
-                  <span class="cart-date-action" aria-hidden="true">{{ selectedDeliveryDate ? 'Change' : 'Choose' }}</span>
                 </div>
-                <input
-                  v-if="isDeliveryDatePickerVisible"
-                  id="cart-delivery-date"
-                  ref="deliveryDateInput"
-                  v-model="selectedDeliveryDate"
-                  class="cart-date-input"
-                  type="date"
-                  :min="deliveryDateMin"
-                  :max="deliveryDateMax"
-                  @click="openDeliveryDatePicker"
-                />
+                <div class="cart-allowed-date-options" role="group" :aria-label="deliveryDatePrompt">
+                  <button
+                    v-for="dateOption in allowedOrderDateOptions"
+                    :key="dateOption.value"
+                    class="cart-allowed-date-option"
+                    :class="{ 'is-selected': selectedDeliveryDate === dateOption.value }"
+                    type="button"
+                    @click="selectDeliveryDate(dateOption.value)"
+                  >
+                    {{ dateOption.label }}
+                  </button>
+                </div>
               </div>
             </div>
 
