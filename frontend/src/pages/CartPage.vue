@@ -60,6 +60,7 @@ const rfqRequiredDateInput = ref(null)
 const isRfqRequiredDatePickerVisible = ref(false)
 const selectedRfqRequiredDate = ref('')
 const LAST_COD_ORDER_ITEMS_STORAGE_KEY = 'buyInMinutesLastCodOrderItems'
+const PICKUP_ONLY_DATE_VALUE = '2026-09-09'
 const deliverySlots = [
   '10 AM - 12 PM',
   '12 PM - 2 PM',
@@ -115,6 +116,12 @@ const selectedDeliveryDateLabel = computed(() => formatDeliveryDate(selectedDeli
 const selectedRfqRequiredDateLabel = computed(() => formatDeliveryDate(selectedRfqRequiredDate.value))
 const deliveryDatePrompt = computed(() =>
   isCustomerPickup.value ? 'Choose pickup date' : 'Choose delivery date',
+)
+const deliveryDateMin = computed(() =>
+  isCustomerPickup.value ? PICKUP_ONLY_DATE_VALUE : undefined,
+)
+const deliveryDateMax = computed(() =>
+  isCustomerPickup.value ? PICKUP_ONLY_DATE_VALUE : undefined,
 )
 const rfqRequiredDatePrompt = computed(() => 'Choose required date')
 const selectedDeliveryAddress = computed(() =>
@@ -465,6 +472,10 @@ function selectDeliverySlot(slot) {
 
 function selectFulfillmentMode(mode) {
   fulfillmentMode.value = mode
+
+  if (mode === 'pickup' && selectedDeliveryDate.value !== PICKUP_ONLY_DATE_VALUE) {
+    selectedDeliveryDate.value = ''
+  }
 }
 
 function openDeliveryDatePicker() {
@@ -492,6 +503,10 @@ function getTodayDateValue() {
   const day = String(today.getDate()).padStart(2, '0')
 
   return `${year}-${month}-${day}`
+}
+
+function hasInvalidPickupDate() {
+  return isCustomerPickup.value && selectedDeliveryDate.value !== PICKUP_ONLY_DATE_VALUE
 }
 
 function openRfqRequiredDatePicker() {
@@ -612,6 +627,11 @@ async function startStripeCheckout() {
     return
   }
 
+  if (hasInvalidPickupDate()) {
+    checkoutError.value = 'Pickup is available only on September 9, 2026.'
+    return
+  }
+
   if (requiresDeliverySlot.value && !selectedDeliverySlot.value) {
     checkoutError.value = 'Please choose a delivery slot before checkout.'
     return
@@ -689,6 +709,11 @@ async function placeCashOnDeliveryOrder() {
 
   if (!selectedDeliveryDate.value) {
     checkoutError.value = `Please choose a ${isCustomerPickup.value ? 'pickup' : 'delivery'} date before placing the order.`
+    return
+  }
+
+  if (hasInvalidPickupDate()) {
+    checkoutError.value = 'Pickup is available only on September 9, 2026.'
     return
   }
 
@@ -1251,6 +1276,8 @@ watch(
                   v-model="selectedDeliveryDate"
                   class="cart-date-input"
                   type="date"
+                  :min="deliveryDateMin"
+                  :max="deliveryDateMax"
                   @click="openDeliveryDatePicker"
                 />
               </div>
