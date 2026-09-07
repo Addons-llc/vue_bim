@@ -118,10 +118,10 @@ const deliveryDatePrompt = computed(() =>
   isCustomerPickup.value ? 'Choose pickup date' : 'Choose delivery date',
 )
 const deliveryDateMin = computed(() =>
-  isCustomerPickup.value ? PICKUP_ONLY_DATE_VALUE : undefined,
+  isRfqCart.value ? undefined : PICKUP_ONLY_DATE_VALUE,
 )
 const deliveryDateMax = computed(() =>
-  isCustomerPickup.value ? PICKUP_ONLY_DATE_VALUE : undefined,
+  isRfqCart.value ? undefined : PICKUP_ONLY_DATE_VALUE,
 )
 const rfqRequiredDatePrompt = computed(() => 'Choose required date')
 const selectedDeliveryAddress = computed(() =>
@@ -473,7 +473,7 @@ function selectDeliverySlot(slot) {
 function selectFulfillmentMode(mode) {
   fulfillmentMode.value = mode
 
-  if (mode === 'pickup' && selectedDeliveryDate.value !== PICKUP_ONLY_DATE_VALUE) {
+  if (!isRfqCart.value && selectedDeliveryDate.value !== PICKUP_ONLY_DATE_VALUE) {
     selectedDeliveryDate.value = ''
   }
 }
@@ -505,8 +505,8 @@ function getTodayDateValue() {
   return `${year}-${month}-${day}`
 }
 
-function hasInvalidPickupDate() {
-  return isCustomerPickup.value && selectedDeliveryDate.value !== PICKUP_ONLY_DATE_VALUE
+function hasInvalidOrderDate() {
+  return !isRfqCart.value && selectedDeliveryDate.value !== PICKUP_ONLY_DATE_VALUE
 }
 
 function openRfqRequiredDatePicker() {
@@ -627,8 +627,8 @@ async function startStripeCheckout() {
     return
   }
 
-  if (hasInvalidPickupDate()) {
-    checkoutError.value = 'Pickup is available only on September 9, 2026.'
+  if (hasInvalidOrderDate()) {
+    checkoutError.value = 'Orders are available only on September 9, 2026.'
     return
   }
 
@@ -712,8 +712,8 @@ async function placeCashOnDeliveryOrder() {
     return
   }
 
-  if (hasInvalidPickupDate()) {
-    checkoutError.value = 'Pickup is available only on September 9, 2026.'
+  if (hasInvalidOrderDate()) {
+    checkoutError.value = 'Orders are available only on September 9, 2026.'
     return
   }
 
