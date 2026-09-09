@@ -1258,6 +1258,7 @@ def get_brands(limit_page_length=24, published=1):
 			"custom_website_banner_image",
 			"custom_cover_image",
 			"custom_cover_photo",
+			"custom_published",
 			"published",
 			"disabled",
 		),
@@ -1268,8 +1269,9 @@ def get_brands(limit_page_length=24, published=1):
 	if "disabled" in brand_fields:
 		filters["disabled"] = 0
 
-	if _is_truthy_flag(published) and "published" in brand_fields:
-		filters["published"] = 1
+	if _is_truthy_flag(published):
+		if "custom_published" in brand_fields:
+			filters["custom_published"] = 1
 
 	return frappe.get_all(
 		"Brand",
