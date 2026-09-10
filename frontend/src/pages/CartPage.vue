@@ -274,6 +274,95 @@ function getSupplierMinimumOrderError() {
   return ''
 }
 
+function toFiniteNumber(value) {
+  const numberValue = Number(value)
+
+  return Number.isFinite(numberValue) ? numberValue : null
+}
+
+function getCoordinatePair(latitudeValue, longitudeValue) {
+  const latitude = toFiniteNumber(latitudeValue)
+  const longitude = toFiniteNumber(longitudeValue)
+
+  if (latitude === null || longitude === null) {
+    return null
+  }
+
+  return { lat: latitude, lng: longitude }
+}
+
+function calculateDistanceKm(origin, destination) {
+  const earthRadiusKm = 6371.0088
+  const originLatitude = origin.lat * Math.PI / 180
+  const originLongitude = origin.lng * Math.PI / 180
+  const destinationLatitude = destination.lat * Math.PI / 180
+  const destinationLongitude = destination.lng * Math.PI / 180
+  const latitudeDelta = destinationLatitude - originLatitude
+  const longitudeDelta = destinationLongitude - originLongitude
+  const haversine = Math.sin(latitudeDelta / 2) ** 2
+    + Math.cos(originLatitude)
+    * Math.cos(destinationLatitude)
+    * Math.sin(longitudeDelta / 2) ** 2
+
+  return 2 * earthRadiusKm * Math.asin(Math.sqrt(haversine))
+}
+
+function getSupplierDeliveryRadius(item = {}) {
+  return toFiniteNumber(
+    item?.supplierDetails?.customDeliveryRadius
+      ?? item?.supplierDetails?.custom_delivery_radius
+      ?? item?.supplierDeliveryRadius
+      ?? item?.customDeliveryRadius
+      ?? item?.custom_delivery_radius,
+  )
+}
+
+function getSupplierCoordinates(item = {}) {
+  return getCoordinatePair(
+    item?.supplierDetails?.customLatitude
+      || item?.supplierDetails?.custom_latitude
+      || item?.supplierLatitude
+      || item?.custom_latitude,
+    item?.supplierDetails?.customLongitude
+      || item?.supplierDetails?.custom_longitude
+      || item?.supplierLongitude
+      || item?.custom_longitude,
+  )
+}
+
+function getDeliveryRadiusError() {
+  if (isCustomerPickup.value) {
+    return ''
+  }
+
+  const customerCoordinates = getCoordinatePair(
+    selectedDeliveryAddress.value?.latitude,
+    selectedDeliveryAddress.value?.longitude,
+  )
+
+  if (!customerCoordinates) {
+    return ''
+  }
+
+  for (const item of cartProducts.value) {
+    const deliveryRadiusKm = getSupplierDeliveryRadius(item)
+    const supplierCoordinates = getSupplierCoordinates(item)
+
+    if (!deliveryRadiusKm || deliveryRadiusKm <= 0 || !supplierCoordinates) {
+      continue
+    }
+
+    const distanceKm = calculateDistanceKm(customerCoordinates, supplierCoordinates)
+    if (distanceKm <= deliveryRadiusKm) {
+      continue
+    }
+
+    return `${item.name || 'This item'} should not deliver in this location.`
+  }
+
+  return ''
+}
+
 function getCouponItemPricing(index) {
   return couponItemPricing.value[index] || null
 }
@@ -668,6 +757,12 @@ async function startStripeCheckout() {
     return
   }
 
+  const deliveryRadiusError = getDeliveryRadiusError()
+  if (deliveryRadiusError) {
+    checkoutError.value = deliveryRadiusError
+    return
+  }
+
   const supplierMinimumOrderError = getSupplierMinimumOrderError()
   if (supplierMinimumOrderError) {
     checkoutError.value = supplierMinimumOrderError
@@ -756,6 +851,12 @@ async function placeCashOnDeliveryOrder() {
 
   if (requiresDeliverySlot.value && !selectedDeliverySlot.value) {
     checkoutError.value = 'Please choose a delivery slot before placing the order.'
+    return
+  }
+
+  const deliveryRadiusError = getDeliveryRadiusError()
+  if (deliveryRadiusError) {
+    checkoutError.value = deliveryRadiusError
     return
   }
 

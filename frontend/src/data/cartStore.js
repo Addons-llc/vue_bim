@@ -90,6 +90,7 @@ export function addProductToCart(product) {
       supplierAddress: product.supplierAddress || product.supplierDetails?.customGoogleAddress || '',
       supplierLatitude: product.supplierLatitude || product.supplierDetails?.customLatitude || '',
       supplierLongitude: product.supplierLongitude || product.supplierDetails?.customLongitude || '',
+      supplierDeliveryRadius: product.supplierDeliveryRadius || product.supplierDetails?.customDeliveryRadius || '',
       customRfqOnly: isRfqOnlyFlag(product.customRfqOnly ?? product.custom_rfq_only),
       customDeliveryFee: toNumber(product.customDeliveryFee ?? product.custom_delivery_fee),
       customOutOfStock: isTruthyFlag(product.customOutOfStock ?? product.custom_out_of_stock),

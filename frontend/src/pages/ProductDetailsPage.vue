@@ -265,6 +265,7 @@ const selectedSupplierProduct = computed(() =>
       supplierAddress: activeSupplierDetails.value?.customGoogleAddress || '',
       supplierLatitude: activeSupplierDetails.value?.customLatitude || '',
       supplierLongitude: activeSupplierDetails.value?.customLongitude || '',
+      supplierDeliveryRadius: activeSupplierDetails.value?.customDeliveryRadius || '',
       customOutOfStock: selectedSupplierOption.value?.customOutOfStock === true,
       inStock: selectedSupplierOption.value
         ? selectedSupplierOption.value.customOutOfStock !== true
@@ -432,6 +433,7 @@ function getSupplierOptionProduct(supplierOption) {
     supplierAddress: supplierOption.customGoogleAddress || '',
     supplierLatitude: supplierOption.customLatitude || '',
     supplierLongitude: supplierOption.customLongitude || '',
+    supplierDeliveryRadius: supplierOption.customDeliveryRadius || '',
   }
 }
 

@@ -76,6 +76,7 @@ function getSupplierDetails(item) {
     customGoogleAddress: item.custom_google_address || item.customGoogleAddress || '',
     customLatitude: item.custom_latitude || item.customLatitude || item.supplier_custom_latitude || '',
     customLongitude: item.custom_longitude || item.customLongitude || item.supplier_custom_longitude || '',
+    customDeliveryRadius: item.custom_delivery_radius || item.customDeliveryRadius || item.supplier_custom_delivery_radius || '',
     bannerImage: getImageUrl(
       item.supplier_banner
         || item.supplier_banner_image
@@ -121,6 +122,7 @@ function getSupplierOptions(item, selectedSupplierDetails) {
       customGoogleAddress: option.custom_google_address || option.customGoogleAddress || '',
       customLatitude: option.custom_latitude || option.customLatitude || '',
       customLongitude: option.custom_longitude || option.customLongitude || '',
+      customDeliveryRadius: option.custom_delivery_radius || option.customDeliveryRadius || '',
       customOutOfStock: isTruthyFlag(option.custom_out_of_stock ?? option.customOutOfStock),
     })
   }

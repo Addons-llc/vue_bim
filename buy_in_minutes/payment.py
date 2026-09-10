@@ -2,6 +2,7 @@ import base64
 import hashlib
 import hmac
 import json
+import math
 from urllib.parse import urlencode, urlparse
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
@@ -24,6 +25,7 @@ SELLING_PRICE_LIST = "Selling Price"
 STRIPE_SETTINGS_DOCTYPE = "Stripe Settings"
 CHECKOUT_RESUME_TOKEN_TTL_SECONDS = 3 * 60 * 60
 DELIVERY_CHARGE_TAX_TEMPLATE = "Delivery Charge"
+EARTH_RADIUS_KM = 6371.0088
 SUPPLIER_MINIMUM_ORDER_RULES = (
 	{
 		"supplier_names": ("Red Chilly Restaurant", "Red Chillies", "Red Chillies Restaurant"),
@@ -619,9 +621,164 @@ def _normalize_delivery_address(delivery_address):
 		"street": _clean_text(delivery_address.get("street")),
 		"landmark": _clean_text(delivery_address.get("landmark")),
 		"emirate": _clean_text(delivery_address.get("emirate")),
-		"latitude": _clean_text(delivery_address.get("latitude")),
-		"longitude": _clean_text(delivery_address.get("longitude")),
+		"latitude": _clean_text(delivery_address.get("latitude") or delivery_address.get("lat")),
+		"longitude": _clean_text(delivery_address.get("longitude") or delivery_address.get("lng")),
 	}
+
+
+def _to_finite_float(value):
+	try:
+		number_value = float(str(value or "").strip())
+	except (TypeError, ValueError):
+		return None
+
+	return number_value if math.isfinite(number_value) else None
+
+
+def _get_coordinate_pair(latitude, longitude):
+	latitude = _to_finite_float(latitude)
+	longitude = _to_finite_float(longitude)
+
+	if latitude is None or longitude is None:
+		return None
+
+	return latitude, longitude
+
+
+def _get_delivery_address_coordinates(delivery_address):
+	address = _normalize_delivery_address(delivery_address)
+
+	return _get_coordinate_pair(address.get("latitude"), address.get("longitude"))
+
+
+def _calculate_distance_km(origin, destination):
+	origin_latitude, origin_longitude = origin
+	destination_latitude, destination_longitude = destination
+	origin_latitude = math.radians(origin_latitude)
+	origin_longitude = math.radians(origin_longitude)
+	destination_latitude = math.radians(destination_latitude)
+	destination_longitude = math.radians(destination_longitude)
+
+	latitude_delta = destination_latitude - origin_latitude
+	longitude_delta = destination_longitude - origin_longitude
+	haversine = (
+		math.sin(latitude_delta / 2) ** 2
+		+ math.cos(origin_latitude)
+		* math.cos(destination_latitude)
+		* math.sin(longitude_delta / 2) ** 2
+	)
+
+	return 2 * EARTH_RADIUS_KM * math.asin(math.sqrt(haversine))
+
+
+def _format_distance_km(distance_km):
+	if distance_km >= 10:
+		return f"{distance_km:.1f}".rstrip("0").rstrip(".")
+
+	return f"{distance_km:.2f}".rstrip("0").rstrip(".")
+
+
+def _validate_supplier_delivery_radius(checkout_items, delivery_address, company):
+	customer_coordinates = _get_delivery_address_coordinates(delivery_address)
+	if not customer_coordinates:
+		return
+
+	supplier_items = []
+	for item in checkout_items or []:
+		if item.get("item_code") == DELIVERY_FEE_ITEM_CODE:
+			continue
+
+		supplier = _get_default_supplier_for_item(
+			item.get("item_code"),
+			company,
+			item.get("supplier"),
+		)
+		if supplier:
+			supplier_items.append((supplier, item))
+
+	if not supplier_items:
+		return
+
+	supplier_names = list(dict.fromkeys(supplier for supplier, _item in supplier_items))
+	supplier_meta = frappe.get_meta("Supplier")
+	supplier_has_delivery_radius = supplier_meta.has_field("custom_delivery_radius")
+	item_supplier_meta = (
+		frappe.get_meta("Item Supplier")
+		if frappe.db.exists("DocType", "Item Supplier")
+		else None
+	)
+	item_supplier_has_delivery_radius = (
+		item_supplier_meta.has_field("custom_delivery_radius")
+		if item_supplier_meta
+		else False
+	)
+	required_fields = [
+		fieldname
+		for fieldname in ("supplier_name", "custom_delivery_radius", "custom_latitude", "custom_longitude")
+		if supplier_meta.has_field(fieldname)
+	]
+	if not supplier_has_delivery_radius and not item_supplier_has_delivery_radius:
+		return
+
+	supplier_records = frappe.get_all(
+		"Supplier",
+		fields=["name"] + required_fields,
+		filters={"name": ["in", supplier_names]},
+		ignore_permissions=True,
+		limit_page_length=len(supplier_names),
+	)
+	suppliers_by_name = {supplier.name: supplier for supplier in supplier_records}
+	item_supplier_delivery_radii = {}
+	if item_supplier_has_delivery_radius:
+		item_codes = list(
+			dict.fromkeys(
+				item.get("item_code")
+				for _supplier, item in supplier_items
+				if item.get("item_code")
+			)
+		)
+		item_supplier_rows = frappe.get_all(
+			"Item Supplier",
+			fields=["parent", "supplier", "custom_delivery_radius"],
+			filters={
+				"parent": ["in", item_codes],
+				"parenttype": "Item",
+				"supplier": ["in", supplier_names],
+			},
+			ignore_permissions=True,
+			limit_page_length=len(item_codes) * max(len(supplier_names), 1),
+		)
+		item_supplier_delivery_radii = {
+			(row.parent, row.supplier): row.get("custom_delivery_radius")
+			for row in item_supplier_rows
+			if row.parent and row.supplier
+		}
+
+	for supplier_name, item in supplier_items:
+		supplier = suppliers_by_name.get(supplier_name)
+		if not supplier:
+			continue
+
+		delivery_radius_km = _to_finite_float(
+			item_supplier_delivery_radii.get((item.get("item_code"), supplier_name))
+			or supplier.get("custom_delivery_radius")
+		)
+		supplier_coordinates = _get_coordinate_pair(
+			supplier.get("custom_latitude"),
+			supplier.get("custom_longitude"),
+		)
+		if not delivery_radius_km or delivery_radius_km <= 0 or not supplier_coordinates:
+			continue
+
+		distance_km = _calculate_distance_km(customer_coordinates, supplier_coordinates)
+		if distance_km <= delivery_radius_km:
+			continue
+
+		frappe.throw(
+			_("{0} should not deliver in this location.").format(
+				item.get("item_name") or item.get("item_code"),
+			)
+		)
 
 
 def _build_delivery_address_display(delivery_address):
@@ -1575,6 +1732,8 @@ def _upsert_sales_order(
 	company = _get_default_company()
 	order_date = nowdate()
 	delivery_date = _clean_text(delivery_date) or order_date
+	if not customer_pickup:
+		_validate_supplier_delivery_radius(checkout_items, delivery_address, company)
 	order_items = _build_sales_order_item_rows(checkout_items, company, delivery_date)
 
 	if not order_items:

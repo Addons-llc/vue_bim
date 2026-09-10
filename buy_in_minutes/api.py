@@ -52,6 +52,7 @@ SUPPLIER_DETAIL_FIELDS = (
 	"custom_google_address",
 	"custom_latitude",
 	"custom_longitude",
+	"custom_delivery_radius",
 	"custom_seller_since",
 )
 
@@ -359,8 +360,11 @@ def _get_item_supplier_options(item_names):
 		return {}
 
 	item_supplier_fields = ["parent", "supplier"]
-	if frappe.get_meta("Item Supplier").has_field("custom_out_of_stock"):
+	item_supplier_meta = frappe.get_meta("Item Supplier")
+	if item_supplier_meta.has_field("custom_out_of_stock"):
 		item_supplier_fields.append("custom_out_of_stock")
+	if item_supplier_meta.has_field("custom_delivery_radius"):
+		item_supplier_fields.append("custom_delivery_radius")
 
 	item_supplier_rows = frappe.get_all(
 		"Item Supplier",
@@ -380,6 +384,7 @@ def _get_item_supplier_options(item_names):
 				{
 					"supplier": row.supplier,
 					"custom_out_of_stock": row.get("custom_out_of_stock"),
+					"custom_delivery_radius": row.get("custom_delivery_radius"),
 				}
 			)
 
@@ -524,6 +529,8 @@ def _apply_supplier_details(items):
 					),
 					"custom_latitude": option_supplier.get("custom_latitude") if option_supplier else "",
 					"custom_longitude": option_supplier.get("custom_longitude") if option_supplier else "",
+					"custom_delivery_radius": option_row.get("custom_delivery_radius")
+					or (option_supplier.get("custom_delivery_radius") if option_supplier else ""),
 					"website": option_supplier.get("website") if option_supplier else "",
 					"custom_out_of_stock": option_row.get("custom_out_of_stock"),
 					"image": (
@@ -568,8 +575,13 @@ def _apply_supplier_details(items):
 		item.supplier_custom_google_address = supplier.get("custom_google_address")
 		item.custom_latitude = supplier.get("custom_latitude")
 		item.custom_longitude = supplier.get("custom_longitude")
+		item.custom_delivery_radius = (
+			option_rows_by_supplier.get(supplier_name, {}).get("custom_delivery_radius")
+			or supplier.get("custom_delivery_radius")
+		)
 		item.supplier_custom_latitude = supplier.get("custom_latitude")
 		item.supplier_custom_longitude = supplier.get("custom_longitude")
+		item.supplier_custom_delivery_radius = supplier.get("custom_delivery_radius")
 		item.supplier_image = (
 			supplier.get("image")
 			or supplier.get("supplier_logo")
