@@ -2118,6 +2118,106 @@ def create_checkout_session(
 
 
 @frappe.whitelist(methods=["POST"])
+def create_payment_intent(
+	cart_items=None,
+	sales_order_name=None,
+	delivery_address=None,
+	delivery_date=None,
+	delivery_slot=None,
+	customer_location=None,
+	address_display=None,
+	delivery_fee=None,
+	coupon_code=None,
+	customer_pickup=False,
+):
+	"""In-app PaymentSheet counterpart of create_checkout_session — same
+	Sales Order upsert, but returns a PaymentIntent client_secret instead of
+	a hosted Checkout Session URL, so the mobile app can collect card
+	details with Stripe's native PaymentSheet instead of a browser redirect.
+	"""
+	_require_checkout_user()
+
+	checkout_items = _get_checkout_items(cart_items, delivery_fee=delivery_fee)
+	sales_order_checkout_items = _get_checkout_items(
+		cart_items,
+		delivery_fee=delivery_fee,
+		include_delivery_fee_item=False,
+	)
+	_validate_supplier_minimum_order(sales_order_checkout_items)
+	sales_order = _upsert_sales_order(
+		sales_order_checkout_items,
+		sales_order_name=sales_order_name,
+		delivery_address=delivery_address,
+		delivery_date=delivery_date,
+		delivery_slot=delivery_slot,
+		customer_location=customer_location,
+		address_display=address_display,
+		coupon_code=coupon_code,
+		delivery_fee=delivery_fee,
+		customer_pickup=customer_pickup,
+		use_delivery_charge_tax_template=True,
+	)
+
+	stripe_settings = _get_stripe_settings()
+	stripe_currency = stripe_settings.get("currency") or DEFAULT_CURRENCY
+	checkout_user = _normalize_user_name(frappe.session.user)
+	amount = sum(int(round(item["rate"] * item["quantity"] * 100)) for item in checkout_items)
+
+	intent = _stripe_request(
+		"/payment_intents",
+		{
+			"amount": amount,
+			"currency": stripe_currency,
+			"metadata[sales_order]": sales_order.name,
+			"metadata[user]": checkout_user,
+			"metadata[payment_method]": "stripe",
+			"automatic_payment_methods[enabled]": "true",
+		},
+	)
+
+	return {
+		"success": True,
+		"client_secret": intent.get("client_secret"),
+		"payment_intent_id": intent.get("id"),
+		"sales_order": sales_order.name,
+		"publishable_key": stripe_settings.get("publishable_key"),
+	}
+
+
+@frappe.whitelist(methods=["POST"])
+def finalize_payment_intent(payment_intent_id=None):
+	"""Called right after presentPaymentSheet() succeeds in the app, so the
+	order is submitted immediately instead of waiting on the webhook — the
+	webhook (payment_intent.succeeded) still runs too and is idempotent via
+	_submit_sales_order's docstatus check, same relationship as
+	finalize_stripe_checkout has with checkout.session.completed.
+	"""
+	if not payment_intent_id:
+		frappe.throw(_("Missing Stripe payment intent id."))
+
+	intent = _stripe_get_request(f"/payment_intents/{payment_intent_id}")
+
+	if intent.get("status") != "succeeded":
+		frappe.throw(_("Stripe payment is not complete yet."))
+
+	sales_order_name = intent.get("metadata", {}).get("sales_order")
+	if not sales_order_name:
+		frappe.throw(_("Sales Order is missing from Stripe payment intent metadata."))
+
+	sales_order = _submit_sales_order(sales_order_name)
+
+	return {
+		"success": True,
+		"sales_order": sales_order.name,
+		"purchase_orders": _get_purchase_order_names_for_sales_order(sales_order.name),
+		"sales_order_status": sales_order.status,
+		"docstatus": sales_order.docstatus,
+		"payment_status": intent.get("status"),
+		"items": _get_sales_order_item_summary(sales_order),
+	}
+
+
+@frappe.whitelist(methods=["POST"])
 def create_cash_on_delivery_order(
 	cart_items=None,
 	sales_order_name=None,
@@ -2323,6 +2423,33 @@ def stripe_webhook():
 					"user": session.get("metadata", {}).get("user"),
 					"payment_method": session.get("metadata", {}).get("payment_method"),
 					"sales_order": session.get("metadata", {}).get("sales_order"),
+				},
+				indent=2,
+			),
+		)
+	elif event.get("type") == "payment_intent.succeeded":
+		# In-app PaymentSheet counterpart of checkout.session.completed above —
+		# backs up finalize_payment_intent's synchronous call in case the app
+		# call fails/never arrives (network drop right after payment, app
+		# killed, etc). _submit_sales_order is idempotent either way.
+		intent = event.get("data", {}).get("object", {})
+		sales_order_name = intent.get("metadata", {}).get("sales_order")
+		if sales_order_name:
+			try:
+				_submit_sales_order(sales_order_name)
+			except Exception:
+				frappe.log_error(
+					title="Stripe Payment Intent Sales Order Submission Failed",
+					message=frappe.get_traceback(),
+				)
+		frappe.log_error(
+			title="Stripe Payment Intent Succeeded",
+			message=json.dumps(
+				{
+					"payment_intent_id": intent.get("id"),
+					"user": intent.get("metadata", {}).get("user"),
+					"payment_method": intent.get("metadata", {}).get("payment_method"),
+					"sales_order": intent.get("metadata", {}).get("sales_order"),
 				},
 				indent=2,
 			),
