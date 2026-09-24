@@ -60,7 +60,8 @@ const rfqRequiredDateInput = ref(null)
 const isRfqRequiredDatePickerVisible = ref(false)
 const selectedRfqRequiredDate = ref('')
 const LAST_COD_ORDER_ITEMS_STORAGE_KEY = 'buyInMinutesLastCodOrderItems'
-const PICKUP_ONLY_DATE_VALUE = '2026-09-09'
+const ORDER_DATE_MIN_VALUE = '2026-09-26'
+const ORDER_DATE_MAX_VALUE = '2026-09-27'
 const SUPPLIER_MINIMUM_ORDER_RULES = [
   {
     supplierNames: ['Red Chilly Restaurant', 'Red Chillies', 'Red Chillies Restaurant'],
@@ -124,10 +125,10 @@ const deliveryDatePrompt = computed(() =>
   isCustomerPickup.value ? 'Choose pickup date' : 'Choose delivery date',
 )
 const deliveryDateMin = computed(() =>
-  isRfqCart.value ? undefined : PICKUP_ONLY_DATE_VALUE,
+  isRfqCart.value ? undefined : ORDER_DATE_MIN_VALUE,
 )
 const deliveryDateMax = computed(() =>
-  isRfqCart.value ? undefined : PICKUP_ONLY_DATE_VALUE,
+  isRfqCart.value ? undefined : ORDER_DATE_MAX_VALUE,
 )
 const rfqRequiredDatePrompt = computed(() => 'Choose required date')
 const selectedDeliveryAddress = computed(() =>
@@ -593,7 +594,11 @@ function selectDeliverySlot(slot) {
 function selectFulfillmentMode(mode) {
   fulfillmentMode.value = mode
 
-  if (!isRfqCart.value && selectedDeliveryDate.value !== PICKUP_ONLY_DATE_VALUE) {
+  if (
+    !isRfqCart.value
+    && selectedDeliveryDate.value
+    && (selectedDeliveryDate.value < ORDER_DATE_MIN_VALUE || selectedDeliveryDate.value > ORDER_DATE_MAX_VALUE)
+  ) {
     selectedDeliveryDate.value = ''
   }
 }
@@ -623,10 +628,6 @@ function getTodayDateValue() {
   const day = String(today.getDate()).padStart(2, '0')
 
   return `${year}-${month}-${day}`
-}
-
-function hasInvalidOrderDate() {
-  return !isRfqCart.value && selectedDeliveryDate.value !== PICKUP_ONLY_DATE_VALUE
 }
 
 function openRfqRequiredDatePicker() {
@@ -747,11 +748,6 @@ async function startStripeCheckout() {
     return
   }
 
-  if (hasInvalidOrderDate()) {
-    checkoutError.value = 'Orders are available only on September 9, 2026.'
-    return
-  }
-
   if (requiresDeliverySlot.value && !selectedDeliverySlot.value) {
     checkoutError.value = 'Please choose a delivery slot before checkout.'
     return
@@ -841,11 +837,6 @@ async function placeCashOnDeliveryOrder() {
 
   if (!selectedDeliveryDate.value) {
     checkoutError.value = `Please choose a ${isCustomerPickup.value ? 'pickup' : 'delivery'} date before placing the order.`
-    return
-  }
-
-  if (hasInvalidOrderDate()) {
-    checkoutError.value = 'Orders are available only on September 9, 2026.'
     return
   }
 
