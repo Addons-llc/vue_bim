@@ -66,28 +66,38 @@ function skipSignIn() {
 </script>
 
 <template>
-  <main class="auth-page">
-    <section class="login-panel">
-      <a class="auth-brand" :href="appBase" aria-label="Buy In Minutes home">
-        <img class="brand-logo" :src="`${appBase}bim.jpeg`" alt="" />
-        <span class="brand-name">BIM</span>
-      </a>
+  <main class="auth-page signin-page">
+    <section class="signin-shell">
+      <header class="signin-hero">
+        <a class="signin-brand" :href="appBase" aria-label="Buy In Minutes home">
+          <img class="signin-logo" :src="`${appBase}bim.jpeg`" alt="" />
+          <span class="signin-brand-name">Buy In Minutes</span>
+        </a>
+        <p class="signin-tagline">Groceries and essentials, delivered in minutes.</p>
+        <ul class="signin-perks" aria-hidden="true">
+          <li>Fast delivery</li>
+          <li>Trusted stores</li>
+          <li>Secure checkout</li>
+        </ul>
+      </header>
 
-      <div class="login-heading">
-        <p class="section-label">Account access</p>
-        <h1>Sign in</h1>
-        <p class="login-copy">Enter your mobile number to continue shopping.</p>
-      </div>
+      <section class="signin-card">
+        <div class="signin-heading">
+          <h1>Sign in</h1>
+          <p>Enter your mobile number and we'll send you a one-time code.</p>
+        </div>
 
-      <section class="auth-section">
-        <form class="login-form" @submit.prevent="handlePhoneSignIn">
-          <label class="field-label" for="phone">Phone number</label>
-          <div class="phone-input-row">
-            <span class="country-code">+971</span>
+        <form class="signin-form" @submit.prevent="handlePhoneSignIn">
+          <label class="signin-label" for="phone">Mobile number</label>
+          <div class="signin-phone">
+            <span class="signin-country">
+              <span class="signin-flag" aria-hidden="true">🇦🇪</span>
+              +971
+            </span>
             <input
               id="phone"
               v-model="phoneNumber"
-              class="form-input phone-input"
+              class="signin-input"
               type="tel"
               inputmode="tel"
               autocomplete="tel"
@@ -96,23 +106,54 @@ function skipSignIn() {
             />
           </div>
 
-          <button class="login-button" type="submit" :disabled="isSubmitting">
-            {{ isSubmitting ? 'Sending OTP...' : 'Continue' }}
+          <button class="signin-submit" type="submit" :disabled="isSubmitting">
+            <span>{{ isSubmitting ? 'Sending OTP...' : 'Continue' }}</span>
+            <svg
+              v-if="!isSubmitting"
+              aria-hidden="true"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.4"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M5 12h14" />
+              <path d="M13 6l6 6-6 6" />
+            </svg>
           </button>
         </form>
+
+        <p v-if="errorMessage" class="signin-message is-error">
+          {{ errorMessage }}
+        </p>
+
+        <p v-if="successMessage" class="signin-message is-success">
+          {{ successMessage }}
+        </p>
+
+        <div class="signin-divider"><span>or</span></div>
+
+        <button class="signin-skip" type="button" @click="skipSignIn">
+          Skip for now and browse
+        </button>
+
+        <p class="signin-note">
+          <svg
+            aria-hidden="true"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <rect x="5" y="11" width="14" height="10" rx="2" />
+            <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+          </svg>
+          Your number is only used to verify your account.
+        </p>
       </section>
-
-      <p v-if="errorMessage" class="form-message error-message">
-        {{ errorMessage }}
-      </p>
-
-      <p v-if="successMessage" class="form-message success-message">
-        {{ successMessage }}
-      </p>
-
-      <button class="skip-signin-button" type="button" @click="skipSignIn">
-        Skip for now
-      </button>
     </section>
   </main>
 </template>

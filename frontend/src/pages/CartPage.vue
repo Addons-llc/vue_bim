@@ -1112,7 +1112,7 @@ watch(
 </script>
 
 <template>
-  <section class="cart-page">
+  <section class="cart-page" @touchstart.passive="() => {}">
     <header class="cart-page-header">
       <div>
         <p class="section-label">Shopping cart</p>
@@ -1178,7 +1178,7 @@ watch(
               >
                 -
               </button>
-              <span>{{ item.quantity }}</span>
+              <span :key="item.quantity">{{ item.quantity }}</span>
               <button
                 type="button"
                 :aria-label="`Increase ${item.name} quantity`"

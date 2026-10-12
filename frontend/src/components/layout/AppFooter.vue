@@ -10,89 +10,82 @@ function openExternalUrl(url) {
 </script>
 
 <template>
-  <footer class="app-footer">
-    <section class="footer-supplier-section" aria-label="Partner enrollment">
-      <article class="supplier-dashboard-card" aria-label="SELL WITH US">
-        <div class="supplier-card-copy">
-          <h2>SELL WITH US</h2>
-          <p>Fast onboarding for trusted market partners.</p>
-          <div class="supplier-card-actions">
-            <a
-              class="supplier-card-cta"
-              :href="supplierRegistrationUrl"
-              target="_blank"
-              rel="noreferrer"
-              @click.prevent="openExternalUrl(supplierRegistrationUrl)"
-            >
-              Register
-            </a>
-            <a class="supplier-card-cta is-secondary" :href="supplierPortalUrl">Login</a>
+  <footer class="bf" @touchstart.passive="() => {}">
+    <section class="bf-partners" aria-label="Partner enrollment">
+      <div class="bf-partners-head">
+        <p class="bf-eyebrow">Partner with BIM</p>
+        <h2>Grow with Buy In Minutes</h2>
+      </div>
+
+      <div class="bf-partner-track">
+        <article class="bf-partner bf-partner--sell" aria-label="SELL WITH US">
+          <div class="bf-partner-media">
+            <img src="/supplier-card-image.svg" alt="" aria-hidden="true" />
           </div>
-        </div>
-        <img
-          class="supplier-card-image"
-          src="/supplier-card-image.svg"
-          alt=""
-          aria-hidden="true"
-        />
-      </article>
+          <div class="bf-partner-body">
+            <h3>Sell with us</h3>
+            <p>Fast onboarding for trusted market partners.</p>
+            <div class="bf-partner-actions">
+              <a
+                class="bf-btn bf-btn--primary"
+                :href="supplierRegistrationUrl"
+                target="_blank"
+                rel="noreferrer"
+                @click.prevent="openExternalUrl(supplierRegistrationUrl)"
+              >
+                Register
+              </a>
+              <a class="bf-btn bf-btn--ghost" :href="supplierPortalUrl">Login</a>
+            </div>
+          </div>
+        </article>
 
-      <a
-        class="supplier-dashboard-card delivery-company-card"
-        :href="deliveryCompanyUrl"
-        aria-label="Enroll a delivery company"
-      >
-        <div class="supplier-card-copy">
-          <h2>Enrollment of delivery companies</h2>
-          <p>Fast onboarding for fleet and delivery partners.</p>
-          <span class="supplier-card-cta">Enroll now</span>
-        </div>
-        <img
-          class="supplier-card-image"
-          src="/delivery-company-card-image.svg"
-          alt=""
-          aria-hidden="true"
-        />
-      </a>
+        <a
+          class="bf-partner bf-partner--fleet"
+          :href="deliveryCompanyUrl"
+          aria-label="Enroll a delivery company"
+        >
+          <div class="bf-partner-media">
+            <img src="/delivery-company-card-image.svg" alt="" aria-hidden="true" />
+          </div>
+          <div class="bf-partner-body">
+            <h3>Enrollment of delivery companies</h3>
+            <p>Fast onboarding for fleet and delivery partners.</p>
+            <span class="bf-partner-link">Enroll now</span>
+          </div>
+        </a>
 
-      <a
-        class="supplier-dashboard-card rider-card"
-        :href="deliveryCompanyUrl"
-        aria-label="Become a BIM Rider"
-      >
-        <div class="supplier-card-copy">
-          <h2>Become a BIM Rider</h2>
-          <p>Join the delivery team and start earning with BIM.</p>
-          <span class="supplier-card-cta">Join now</span>
-        </div>
-        <img
-          class="supplier-card-image"
-          src="/bim-rider-card-image.svg"
-          alt=""
-          aria-hidden="true"
-        />
-      </a>
+        <a
+          class="bf-partner bf-partner--rider"
+          :href="deliveryCompanyUrl"
+          aria-label="Become a BIM Rider"
+        >
+          <div class="bf-partner-media">
+            <img src="/bim-rider-card-image.svg" alt="" aria-hidden="true" />
+          </div>
+          <div class="bf-partner-body">
+            <h3>Become a BIM Rider</h3>
+            <p>Join the delivery team and start earning with BIM.</p>
+            <span class="bf-partner-link">Join now</span>
+          </div>
+        </a>
+      </div>
     </section>
 
-    <div class="footer-inner">
-      <section class="footer-brand">
-        <a class="footer-logo" :href="appBase" aria-label="Buy In Minutes home">
-          <img class="brand-logo" :src="`${appBase}bim.jpeg`" alt="" />
-          <span class="brand-name">BIM</span>
+    <div class="bf-main">
+      <section class="bf-brand">
+        <a class="bf-logo" :href="appBase" aria-label="Buy In Minutes home">
+          <img :src="`${appBase}bim.jpeg`" alt="" />
+          <span>Buy In Minutes</span>
         </a>
         <p>
           Fresh vegetables, fruits, grocery, meat, and fish delivered quickly
           from nearby trusted stores.
         </p>
 
-        <div class="app-downloads" aria-label="Download app links">
-          <a class="store-badge" href="/app-store">
-            <svg
-              class="store-icon"
-              aria-hidden="true"
-              viewBox="0 0 24 24"
-              fill="currentColor"
-            >
+        <div class="bf-apps" aria-label="Download app links">
+          <a class="bf-app" href="/app-store">
+            <svg aria-hidden="true" viewBox="0 0 24 24" fill="currentColor">
               <path d="M16.2 2.2c.1 1.1-.3 2.1-1 2.9-.8.9-1.9 1.5-3 1.4-.1-1.1.4-2.2 1.1-2.9.8-.8 2-1.4 2.9-1.4Z" />
               <path d="M20.6 17.2c-.4.9-.7 1.4-1.3 2.2-.8 1.2-2 2.7-3.5 2.7-1.3 0-1.7-.8-3.5-.8s-2.3.8-3.5.8c-1.5 0-2.7-1.4-3.5-2.6-2.4-3.6-2.7-7.8-1.2-10.1 1-1.6 2.6-2.5 4.2-2.5 1.6 0 2.6.9 3.9.9 1.2 0 2-.9 3.9-.9 1.4 0 2.9.8 3.9 2.1-3.4 1.9-2.8 6.7.6 8.2Z" />
             </svg>
@@ -102,8 +95,10 @@ function openExternalUrl(url) {
             </span>
           </a>
 
-          <a class="store-badge" href="/play-store">
-            <span class="store-icon" aria-hidden="true">▶</span>
+          <a class="bf-app" href="/play-store">
+            <svg aria-hidden="true" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M4 3.5v17a1 1 0 0 0 1.5.9l14.6-8.5a1 1 0 0 0 0-1.8L5.5 2.6A1 1 0 0 0 4 3.5Z" />
+            </svg>
             <span>
               <small>Get it on</small>
               Google Play
@@ -112,7 +107,7 @@ function openExternalUrl(url) {
         </div>
       </section>
 
-      <nav class="footer-links" aria-label="Footer navigation">
+      <nav class="bf-links" aria-label="Footer navigation">
         <div>
           <h2>Shop</h2>
           <a href="/products">Vegetables</a>
@@ -136,9 +131,9 @@ function openExternalUrl(url) {
       </nav>
     </div>
 
-    <div class="footer-bottom">
+    <div class="bf-bottom">
       <span>© 2026 BUY IN MINUTES</span>
-      <span>Fresh market delivery</span>
+      <span class="bf-bottom-tag">Fresh market delivery</span>
     </div>
   </footer>
 </template>
