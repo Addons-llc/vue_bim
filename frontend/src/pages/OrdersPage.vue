@@ -529,14 +529,49 @@ onMounted(loadOrders)
     </template>
 
     <section v-else-if="!isLoadingOrders && !ordersError" class="cart-page-empty">
-      <div class="empty-cart-copy">
-        <p class="empty-cart-kicker">No activity</p>
-        <h2>Your orders and supplier quotations are empty</h2>
-        <p>Orders will appear under Orders, and supplier quotations will appear in their own section.</p>
+      <div class="empty-cart-visual" aria-hidden="true">
+        <svg
+          class="empty-cart-icon"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.75"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <path d="M21 8 12 3 3 8v8l9 5 9-5V8Z" />
+          <path d="m3 8 9 5 9-5" />
+          <path d="M12 13v8" />
+          <path d="m7.5 5.5 9 5" />
+        </svg>
+        <span class="empty-cart-dot is-green"></span>
+        <span class="empty-cart-dot is-blue"></span>
+        <span class="empty-cart-dot is-yellow"></span>
       </div>
-      <RouterLink class="primary-dark-button" :to="{ name: 'home' }">
-        Start shopping
-      </RouterLink>
+
+      <div class="empty-cart-copy">
+        <p class="empty-cart-kicker">No orders yet</p>
+        <h2>Your first order is just minutes away</h2>
+        <p>
+          Once you place an order or request a supplier quotation, you can
+          track it, reorder and leave reviews right here.
+        </p>
+      </div>
+
+      <nav class="empty-cart-suggestions" aria-label="Shopping suggestions">
+        <RouterLink :to="{ name: 'categories' }">Categories</RouterLink>
+        <RouterLink :to="{ name: 'stores' }">Stores</RouterLink>
+        <RouterLink :to="{ name: 'brands' }">Brands</RouterLink>
+      </nav>
+
+      <div class="empty-cart-actions">
+        <RouterLink class="primary-dark-button" :to="{ name: 'home' }">
+          Start shopping
+        </RouterLink>
+        <RouterLink class="empty-cart-secondary" :to="{ name: 'wishlist' }">
+          Wishlist
+        </RouterLink>
+      </div>
     </section>
   </section>
 </template>

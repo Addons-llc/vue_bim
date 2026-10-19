@@ -24,6 +24,10 @@ FREE_DELIVERY_MINIMUM = 60
 SELLING_PRICE_LIST = "Selling Price"
 STRIPE_SETTINGS_DOCTYPE = "Stripe Settings"
 CHECKOUT_RESUME_TOKEN_TTL_SECONDS = 3 * 60 * 60
+# Stripe metadata: at most 50 keys, values capped at 500 characters.
+PENDING_ORDER_METADATA_KEY = "pending_order"
+PENDING_ORDER_METADATA_MAX_PARTS = 45
+STRIPE_METADATA_VALUE_LIMIT = 500
 DELIVERY_CHARGE_TAX_TEMPLATE = "Delivery Charge"
 EARTH_RADIUS_KM = 6371.0088
 SUPPLIER_MINIMUM_ORDER_RULES = (
@@ -78,7 +82,7 @@ def _read_checkout_resume_token(checkout_resume_token):
 	except Exception:
 		payload = {}
 
-	if not payload.get("user") or not payload.get("sales_order"):
+	if not payload.get("user"):
 		frappe.throw(_("Checkout session expired. Please sign in again."), frappe.AuthenticationError)
 
 	frappe.cache.delete_value(cache_key)
@@ -100,7 +104,7 @@ def _get_user_payload(user_name):
 def _restore_checkout_user(user_name, sales_order_name):
 	user_name = _normalize_user_name(user_name)
 	sales_order_name = _clean_text(sales_order_name)
-	if user_name == "Guest" or not sales_order_name:
+	if user_name == "Guest":
 		frappe.throw(_("Unable to restore checkout session."), frappe.AuthenticationError)
 
 	if not frappe.db.exists("User", user_name):
@@ -109,9 +113,11 @@ def _restore_checkout_user(user_name, sales_order_name):
 	if frappe.db.get_value("User", user_name, "enabled") != 1:
 		frappe.throw(_("Checkout user is disabled."), frappe.AuthenticationError)
 
-	sales_order_owner = frappe.db.get_value("Sales Order", sales_order_name, "owner")
-	if sales_order_owner != user_name:
-		frappe.throw(_("Checkout session does not match this order."), frappe.AuthenticationError)
+	# Checkouts paid by card have no Sales Order until payment succeeds.
+	if sales_order_name:
+		sales_order_owner = frappe.db.get_value("Sales Order", sales_order_name, "owner")
+		if sales_order_owner != user_name:
+			frappe.throw(_("Checkout session does not match this order."), frappe.AuthenticationError)
 
 	if _normalize_user_name(frappe.session.user) != user_name:
 		from buy_in_minutes.auth import _login_user
@@ -1726,8 +1732,11 @@ def _upsert_sales_order(
 	delivery_fee=None,
 	customer_pickup=False,
 	use_delivery_charge_tax_template=False,
+	checkout_user=None,
+	po_no=None,
 ):
-	checkout_user = frappe.session.user
+	# Stripe's webhook runs as Guest, so paid orders pass the buyer explicitly.
+	checkout_user = checkout_user or frappe.session.user
 	customer = _get_or_create_customer_for_user(checkout_user)
 	company = _get_default_company()
 	order_date = nowdate()
@@ -1776,6 +1785,8 @@ def _upsert_sales_order(
 			"order_type": "Sales",
 		}
 	)
+	if po_no:
+		sales_order.po_no = po_no
 	_set_doc_value_if_field_exists(
 		sales_order,
 		"custom_delivery_slot",
@@ -1959,6 +1970,131 @@ def _submit_sales_order(sales_order_name):
 # 		"payment_status": session.get("payment_status"),
 # 	}
 
+def _validate_pending_order(
+	sales_order_checkout_items,
+	sales_order_name=None,
+	delivery_address=None,
+	delivery_date=None,
+	customer_pickup=False,
+):
+	"""Run the checks _upsert_sales_order would, before the customer pays,
+	since the Sales Order itself is only created once payment succeeds."""
+	company = _get_default_company()
+	if not customer_pickup:
+		_validate_supplier_delivery_radius(sales_order_checkout_items, delivery_address, company)
+
+	delivery_date = _clean_text(delivery_date) or nowdate()
+	if not _build_sales_order_item_rows(sales_order_checkout_items, company, delivery_date):
+		frappe.throw(_("Cart does not contain orderable items."))
+
+	if sales_order_name and frappe.db.exists("Sales Order", sales_order_name):
+		owner, docstatus = frappe.db.get_value("Sales Order", sales_order_name, ["owner", "docstatus"])
+		if owner != frappe.session.user or docstatus != 0:
+			frappe.throw(_("The linked Sales Order is no longer editable."))
+
+
+def _build_pending_order_metadata(sales_order_checkout_items, order_fields):
+	"""Carry everything needed to create the Sales Order in Stripe's metadata,
+	so an abandoned checkout leaves no draft order behind. The JSON is split
+	across numbered keys because Stripe caps each value at 500 characters."""
+	payload = json.dumps(
+		{
+			"items": [
+				{
+					key: item.get(key)
+					for key in ("item_code", "item_name", "quantity", "rate", "supplier", "size")
+				}
+				for item in sales_order_checkout_items
+			],
+			**order_fields,
+		},
+		separators=(",", ":"),
+		default=str,
+	)
+	parts = [
+		payload[index : index + STRIPE_METADATA_VALUE_LIMIT]
+		for index in range(0, len(payload), STRIPE_METADATA_VALUE_LIMIT)
+	]
+	if len(parts) > PENDING_ORDER_METADATA_MAX_PARTS:
+		frappe.throw(_("This cart is too large to pay online. Please split it into smaller orders."))
+
+	metadata = {f"metadata[{PENDING_ORDER_METADATA_KEY}_parts]": len(parts)}
+	for index, part in enumerate(parts):
+		metadata[f"metadata[{PENDING_ORDER_METADATA_KEY}_{index}]"] = part
+	return metadata
+
+
+def _read_pending_order_metadata(metadata):
+	part_count = cint(metadata.get(f"{PENDING_ORDER_METADATA_KEY}_parts"))
+	if not part_count:
+		frappe.throw(_("Order details are missing from the Stripe payment."))
+
+	return json.loads(
+		"".join(metadata.get(f"{PENDING_ORDER_METADATA_KEY}_{index}") or "" for index in range(part_count))
+	)
+
+
+def _create_paid_sales_order(stripe_reference, metadata):
+	"""Create and submit the Sales Order for a paid Stripe checkout.
+
+	Both the success redirect and the webhook call this, so a lock plus the
+	po_no lookup keep it to one order per payment."""
+	checkout_user = _normalize_user_name(metadata.get("user"))
+	if checkout_user == "Guest" or not frappe.db.exists("User", checkout_user):
+		frappe.throw(_("Checkout user was not found."))
+
+	lock_key = frappe.cache.make_key(f"buy_in_minutes:paid_sales_order:{stripe_reference}")
+	with frappe.cache.lock(lock_key, timeout=120, blocking_timeout=60):
+		existing_sales_order = frappe.db.get_value(
+			"Sales Order",
+			{"po_no": stripe_reference, "docstatus": 1},
+			"name",
+		)
+		if existing_sales_order:
+			return frappe.get_doc("Sales Order", existing_sales_order)
+
+		pending_order = _read_pending_order_metadata(metadata)
+
+		# Reuse the web cart's draft only while it is still this buyer's draft.
+		sales_order_name = pending_order.get("sales_order_name")
+		if sales_order_name and frappe.db.get_value(
+			"Sales Order", sales_order_name, ["owner", "docstatus"]
+		) != (checkout_user, 0):
+			sales_order_name = None
+
+		frappe.db.savepoint("paid_sales_order")
+		try:
+			sales_order = _upsert_sales_order(
+				pending_order.get("items"),
+				sales_order_name=sales_order_name,
+				delivery_address=pending_order.get("delivery_address"),
+				delivery_date=pending_order.get("delivery_date"),
+				delivery_slot=pending_order.get("delivery_slot"),
+				customer_location=pending_order.get("customer_location"),
+				address_display=pending_order.get("address_display"),
+				coupon_code=pending_order.get("coupon_code"),
+				delivery_fee=pending_order.get("delivery_fee"),
+				customer_pickup=pending_order.get("customer_pickup"),
+				use_delivery_charge_tax_template=True,
+				checkout_user=checkout_user,
+				po_no=stripe_reference,
+			)
+			# Submits and commits, so the order is visible before the lock is released.
+			return _submit_sales_order(sales_order.name)
+		except Exception:
+			frappe.db.rollback(save_point="paid_sales_order")
+			raise
+
+
+def _get_paid_sales_order(stripe_reference, metadata):
+	# Checkouts started before orders were deferred already carry a draft.
+	sales_order_name = metadata.get("sales_order")
+	if sales_order_name:
+		return _submit_sales_order(sales_order_name)
+
+	return _create_paid_sales_order(stripe_reference, metadata)
+
+
 def _get_sales_order_item_summary(sales_order):
 	return [
 		{
@@ -1986,16 +2122,7 @@ def finalize_stripe_checkout(session_id=None):
 	if session.get("payment_status") != "paid":
 		frappe.throw(_("Stripe payment is not complete yet."))
 
-	sales_order_name = (
-		session.get("metadata", {}).get("sales_order")
-	)
-
-	if not sales_order_name:
-		frappe.throw(
-			_("Sales Order is missing from Stripe session metadata.")
-		)
-
-	sales_order = _submit_sales_order(sales_order_name)
+	sales_order = _get_paid_sales_order(session_id, session.get("metadata", {}))
 	restored_user = None
 	checkout_user = session.get("metadata", {}).get("user")
 	if frappe.session.user == "Guest" and checkout_user:
@@ -2090,30 +2217,39 @@ def create_checkout_session(
 		include_delivery_fee_item=False,
 	)
 	_validate_supplier_minimum_order(sales_order_checkout_items)
-	sales_order = _upsert_sales_order(
+	# The Sales Order is created only after payment (see _create_paid_sales_order).
+	_validate_pending_order(
 		sales_order_checkout_items,
 		sales_order_name=sales_order_name,
 		delivery_address=delivery_address,
 		delivery_date=delivery_date,
-		delivery_slot=delivery_slot,
-		customer_location=customer_location,
-		address_display=address_display,
-		coupon_code=coupon_code,
-		delivery_fee=delivery_fee,
 		customer_pickup=customer_pickup,
-		use_delivery_charge_tax_template=True,
 	)
-	session = _stripe_request(
-		"/checkout/sessions",
-		_build_checkout_params(checkout_items, sales_order.name, return_origin=return_origin),
+	checkout_params = _build_checkout_params(checkout_items, return_origin=return_origin)
+	checkout_params.update(
+		_build_pending_order_metadata(
+			sales_order_checkout_items,
+			{
+				"sales_order_name": sales_order_name,
+				"delivery_address": delivery_address,
+				"delivery_date": delivery_date,
+				"delivery_slot": delivery_slot,
+				"customer_location": customer_location,
+				"address_display": address_display,
+				"coupon_code": coupon_code,
+				"delivery_fee": delivery_fee,
+				"customer_pickup": customer_pickup,
+			},
+		)
 	)
+	session = _stripe_request("/checkout/sessions", checkout_params)
 
 	return {
 		"success": True,
 		"checkout_url": session.get("url"),
 		"session_id": session.get("id"),
-		"sales_order": sales_order.name,
-		"checkout_resume_token": _create_checkout_resume_token(frappe.session.user, sales_order.name),
+		"sales_order": None,
+		"checkout_resume_token": _create_checkout_resume_token(frappe.session.user, sales_order_name),
 	}
 
 
@@ -2405,10 +2541,9 @@ def stripe_webhook():
 	event = json.loads(payload.decode())
 	if event.get("type") == "checkout.session.completed":
 		session = event.get("data", {}).get("object", {})
-		sales_order_name = session.get("metadata", {}).get("sales_order")
-		if session.get("payment_status") == "paid" and sales_order_name:
+		if session.get("payment_status") == "paid":
 			try:
-				_submit_sales_order(sales_order_name)
+				_get_paid_sales_order(session.get("id"), session.get("metadata", {}))
 			except Exception:
 				frappe.log_error(
 					title="Stripe Checkout Sales Order Submission Failed",

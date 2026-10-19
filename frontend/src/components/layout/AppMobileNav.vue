@@ -1,5 +1,5 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { currentUser } from '../../data/authStore'
 import { cartItemCount } from '../../data/cartStore'
@@ -15,6 +15,12 @@ const isCategoriesActive = computed(() => ['categories', 'category-details'].inc
 const isCartActive = computed(() => route.name === 'cart')
 const isOrdersActive = computed(() => route.name === 'orders')
 const isAccountActive = computed(() => route.name === 'profile')
+// Labels stay hidden until the user taps a tab; after that only the active tab shows its label.
+const hasTappedTab = ref(false)
+
+function markTabTapped() {
+  hasTappedTab.value = true
+}
 
 function goToAccount() {
   if (!isAuthenticated.value) {
@@ -27,7 +33,12 @@ function goToAccount() {
 </script>
 
 <template>
-  <nav class="mobile-nav" aria-label="Primary">
+  <nav
+    class="mobile-nav"
+    :class="{ 'has-tapped-tab': hasTappedTab }"
+    aria-label="Primary"
+    @click="markTabTapped"
+  >
     <RouterLink
       class="mobile-nav-item"
       :class="{ 'is-active': isHomeActive }"

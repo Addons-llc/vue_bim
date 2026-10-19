@@ -1275,7 +1275,15 @@ def get_brands(limit_page_length=24, published=1):
 			"disabled",
 		),
 	)
-	fields = ["name"] + brand_fields
+	# Banners may live in any attach field (custom fields get renamed/added), so pick them up from meta
+	# instead of relying only on the guessed fieldnames above. Kept in form order so banner 1 stays first.
+	banner_fields = [
+		df.fieldname
+		for df in frappe.get_meta("Brand").fields
+		if df.fieldtype in ("Attach Image", "Attach")
+		and any(keyword in df.fieldname for keyword in ("banner", "cover"))
+	]
+	fields = ["name"] + list(dict.fromkeys(brand_fields + banner_fields))
 	filters = {}
 
 	if "disabled" in brand_fields:
@@ -1285,7 +1293,7 @@ def get_brands(limit_page_length=24, published=1):
 		if "custom_published" in brand_fields:
 			filters["custom_published"] = 1
 
-	return frappe.get_all(
+	brands = frappe.get_all(
 		"Brand",
 		fields=fields,
 		filters=filters,
@@ -1293,6 +1301,13 @@ def get_brands(limit_page_length=24, published=1):
 		order_by="modified desc",
 		limit_page_length=limit_page_length,
 	)
+
+	for brand in brands:
+		brand.banner_images = list(
+			dict.fromkeys(brand.get(fieldname) for fieldname in banner_fields if brand.get(fieldname))
+		)
+
+	return brands
 
 
 @frappe.whitelist()
@@ -1444,6 +1459,7 @@ def get_items(
 	supplier=None,
 	supplier_store=None,
 	published=1,
+	item_codes=None,
 ):
 	limit_page_length = frappe.utils.cint(limit_page_length) or 20
 	limit_start = frappe.utils.cint(limit_start) or 0
@@ -1462,6 +1478,12 @@ def get_items(
 
 	if item:
 		filters["name"] = item
+
+	# Internal-only filter (used by get_product_bundles); ignore values coming in from the query string.
+	if isinstance(item_codes, (list, tuple)):
+		if not item_codes:
+			return []
+		filters["name"] = ["in", list(item_codes)]
 
 	if variant_of and item_meta.has_field("variant_of"):
 		filters["variant_of"] = variant_of
@@ -1546,6 +1568,92 @@ def get_items(
 
 	if _is_truthy_flag(published) and (publish_fields or should_filter_after_loading):
 		items = items[limit_start:limit_start + limit_page_length]
+
+	return items
+
+
+def _get_product_bundle_components(bundle_names):
+	if not bundle_names:
+		return {}
+
+	component_rows = frappe.get_all(
+		"Product Bundle Item",
+		fields=["parent", "item_code", "qty", "uom", "rate"],
+		filters={"parent": ["in", bundle_names], "parenttype": "Product Bundle"},
+		order_by="idx asc",
+		ignore_permissions=True,
+		limit_page_length=0,
+	)
+	component_codes = list({row.item_code for row in component_rows if row.item_code})
+	component_items = {
+		item.name: item
+		for item in frappe.get_all(
+			"Item",
+			fields=["name", "item_name", "image", "stock_uom"],
+			filters={"name": ["in", component_codes]},
+			ignore_permissions=True,
+			limit_page_length=0,
+		)
+	} if component_codes else {}
+	component_prices = _get_selling_prices(component_codes)
+
+	components_by_bundle = {}
+	for row in component_rows:
+		component_item = component_items.get(row.item_code) or frappe._dict()
+		price_record = component_prices.get(row.item_code)
+		unit_price = flt(price_record.price_list_rate) if price_record else flt(row.rate)
+
+		components_by_bundle.setdefault(row.parent, []).append(
+			{
+				"item_code": row.item_code,
+				"item_name": component_item.get("item_name") or row.item_code,
+				"image": component_item.get("image"),
+				"qty": flt(row.qty),
+				"uom": row.uom or component_item.get("stock_uom"),
+				"unit_price": unit_price,
+			}
+		)
+
+	return components_by_bundle
+
+
+@frappe.whitelist(allow_guest=True)
+def get_product_bundles(limit_page_length=12, item_group=None, published=1):
+	limit_page_length = frappe.utils.cint(limit_page_length) or 12
+
+	bundles = frappe.get_all(
+		"Product Bundle",
+		fields=["name", "new_item_code", "description"],
+		filters={"disabled": 0},
+		order_by="modified desc",
+		ignore_permissions=True,
+		limit_page_length=0,
+	)
+	if not bundles:
+		return []
+
+	bundles_by_item_code = {bundle.new_item_code: bundle for bundle in bundles}
+	# The bundle's parent Item carries the price, image, supplier and publish flag, so reuse get_items for it.
+	items = get_items(
+		limit_page_length=len(bundles_by_item_code),
+		item_group=item_group,
+		published=published,
+		item_codes=list(bundles_by_item_code),
+	)
+	items = items[:limit_page_length]
+	components_by_bundle = _get_product_bundle_components(
+		[bundles_by_item_code[item.name].name for item in items]
+	)
+
+	for item in items:
+		bundle = bundles_by_item_code[item.name]
+		components = components_by_bundle.get(bundle.name, [])
+		item.product_bundle = bundle.name
+		item.bundle_description = bundle.description
+		item.bundle_items = components
+		item.bundle_items_value = sum(
+			component["unit_price"] * component["qty"] for component in components
+		)
 
 	return items
 

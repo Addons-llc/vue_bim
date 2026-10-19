@@ -20,8 +20,10 @@ export const wishlistProducts = wishlistItems
 
 export const wishlistItemCount = computed(() => wishlistItems.value.length)
 
+const wishlistIds = computed(() => new Set(wishlistItems.value.map((item) => item.id)))
+
 export function isProductWishlisted(productId) {
-  return wishlistItems.value.some((item) => item.id === productId)
+  return wishlistIds.value.has(productId)
 }
 
 export function toggleProductWishlist(product) {

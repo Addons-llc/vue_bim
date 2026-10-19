@@ -2,10 +2,12 @@
 @import './styles/header.css';
 @import './styles/home.css';
 @import './styles/category-rail.css';
+@import './styles/bundles.css';
 @import './styles/products.css';
 @import './styles/category-detail.css';
 @import './styles/cart-payment.css';
 @import './styles/auth.css';
+@import './styles/account.css';
 @import './styles/supplier-location-footer.css';
 @import './styles/responsive.css';
 @import './styles/footer.css';

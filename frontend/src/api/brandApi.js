@@ -72,6 +72,7 @@ function getBrandBannerImages(brand = {}) {
     'custom_brand_banner_3',
   ]
     .map((fieldName) => getImageUrl(brand[fieldName]))
+    .concat((brand.banner_images || []).map(getImageUrl))
     .filter(Boolean)
     .filter((imagePath, index, imagePaths) => imagePaths.indexOf(imagePath) === index)
 }

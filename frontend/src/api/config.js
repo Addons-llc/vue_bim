@@ -26,3 +26,6 @@ export const SELLING_PRICE_LIST =
   import.meta.env.VITE_SELLING_PRICE_LIST || 'Selling Price'
 
 export const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || ''
+
+export const PRODUCT_BUNDLE_API_PATH =
+  import.meta.env.VITE_PRODUCT_BUNDLE_API_PATH || '/method/buy_in_minutes.api.get_product_bundles'

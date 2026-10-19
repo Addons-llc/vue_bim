@@ -516,6 +516,18 @@
     font-weight: 700;
   }
 
+  /* Labels are hidden until a tab is tapped, then only the active tab shows its label.
+     Hidden labels stay readable by screen readers. */
+  .mobile-nav:not(.has-tapped-tab) .mobile-nav-label,
+  .mobile-nav-item:not(.is-active) .mobile-nav-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+
   .dashboard-hero {
     min-height: 0;
   }

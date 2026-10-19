@@ -2,17 +2,18 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import CategoryRail from '../components/product/CategoryRail.vue'
+import ProductBundleSection from '../components/product/ProductBundleSection.vue'
 import ProductSections from '../components/product/ProductSections.vue'
 import { getBrands } from '../api/brandApi'
+import { getProductBundles } from '../api/productBundleApi'
 import { getSupplierStores } from '../api/supplierStoreApi'
 import { useProducts } from '../composables/useProducts'
 import { saveSelectedProduct } from '../data/productSelectionStore'
 import { saveSelectedSupplier } from '../data/supplierSelectionStore'
 import { openCategoryOrProduct } from '../utils/categoryNavigation'
-import bannerImageOne from '../assets/images/Banner-1 (1).png'
-import bannerImageTwo from '../assets/images/Banner-2.png'
-import bannerImageThree from '../assets/images/Banner-3 (1).png'
-import bannerImageFour from '@app-root/meesakaran.png'
+import bannerImageOne from '../assets/images/banner_1.png'
+import bannerImageTwo from '../assets/images/banner_2.png'
+import bannerImageThree from '../assets/images/banner_3.png'
 
 const props = defineProps({
   category: {
@@ -31,6 +32,7 @@ const initialCategory = computed(() => props.category)
 const activeHeroSlide = ref(0)
 const brands = ref([])
 const stores = ref([])
+const productBundles = ref([])
 const heroImageFallback = `${import.meta.env.BASE_URL}grocery-card-image-v3.svg?v=3`
 let heroSlideTimer = null
 
@@ -46,10 +48,6 @@ const heroSlides = [
   {
     title: 'Fresh cuts',
     image: bannerImageThree,
-  },
-  {
-    title: 'Meesakaran',
-    image: bannerImageFour,
   },
 ]
 
@@ -149,6 +147,16 @@ async function loadStores() {
   }
 }
 
+async function loadProductBundles() {
+  try {
+    productBundles.value = await getProductBundles({
+      limit_page_length: 12,
+    })
+  } catch {
+    productBundles.value = []
+  }
+}
+
 function selectHeroSlide(index) {
   activeHeroSlide.value = index
 }
@@ -183,6 +191,7 @@ function syncHeroAutoplay() {
 onMounted(() => {
   loadBrands()
   loadStores()
+  loadProductBundles()
   syncHeroAutoplay()
 })
 
@@ -267,6 +276,12 @@ onUnmounted(() => {
     :active-category="activeCategory"
     :categories="discoveryCategories"
     @select="openCategoryItem"
+  />
+
+  <ProductBundleSection
+    v-if="productBundles.length"
+    :bundles="productBundles"
+    @select="openProductDetails"
   />
 
   <ProductSections

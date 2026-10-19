@@ -29,20 +29,23 @@ const brandDetails = computed(() => ({
 }))
 const brandDisplayName = computed(() => brandDetails.value.displayName || brandName.value)
 const brandBannerImages = computed(() => {
-  const images = [
+  const primaryImages = [
     brandDetails.value.primaryBannerImage,
     brandDetails.value.secondaryBannerImage,
     brandDetails.value.tertiaryBannerImage,
   ]
     .filter(Boolean)
+    .filter((image) => !failedBrandBannerImages.value.includes(image))
 
-  const sliderImages = images.length
-    ? images
-    : (brandDetails.value.bannerImages.length
-      ? brandDetails.value.bannerImages
-      : [brandDetails.value.bannerImage].filter(Boolean))
+  if (primaryImages.length) {
+    return primaryImages
+  }
 
-  return sliderImages.filter((image) => !failedBrandBannerImages.value.includes(image))
+  // Fall back to any other banner field when the primary banners are missing or fail to load.
+  return [...brandDetails.value.bannerImages, brandDetails.value.bannerImage]
+    .filter(Boolean)
+    .filter((image, index, images) => images.indexOf(image) === index)
+    .filter((image) => !failedBrandBannerImages.value.includes(image))
 })
 const brandDescription = computed(() => brandDetails.value.description || '')
 const brandInitials = computed(() => brandDisplayName.value.slice(0, 2).toUpperCase())

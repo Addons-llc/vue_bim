@@ -455,6 +455,21 @@
   color: #991b1b;
 }
 
+.product-card-stock.is-low {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.product-card.is-out-of-stock .product-image img {
+  filter: grayscale(0.6);
+  opacity: 0.7;
+}
+
+.product-quantity-control button:disabled {
+  color: #9ca3af;
+  cursor: not-allowed;
+}
+
 .product-footer {
   display: flex;
   align-items: center;

@@ -1045,7 +1045,8 @@
   gap: 8px;
 }
 
-.empty-cart-suggestions span {
+.empty-cart-suggestions span,
+.empty-cart-suggestions a {
   border: 1px solid #e5e7eb;
   border-radius: 999px;
   padding: 7px 10px;
@@ -1081,6 +1082,20 @@
   color: #111827;
   cursor: pointer;
   font-weight: 900;
+}
+
+a.primary-dark-button,
+a.empty-cart-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+}
+
+.orders-page .cart-page-empty .primary-dark-button {
+  border: 1px solid #111827;
+  background: #ffffff;
+  color: #111827;
 }
 
 .payment-result-page {

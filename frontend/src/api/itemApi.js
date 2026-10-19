@@ -211,7 +211,7 @@ function isPublishedItem(item) {
   ].some(isTruthyFlag)
 }
 
-function getImageUrl(imagePath) {
+export function getImageUrl(imagePath) {
   if (!imagePath) {
     return ''
   }
@@ -349,7 +349,7 @@ function getItemGalleryImages(item) {
   return images.slice(0, 3)
 }
 
-async function mapItemToProduct(item) {
+export async function mapItemToProduct(item) {
   const itemGroup = item.item_group || ''
   const categoryImage = getItemGroupImage(item)
   const bannerImage = getItemBannerImage(item)

@@ -1,3 +1,4 @@
+import { ref, watch } from 'vue'
 import { customerAddresses } from '../data/addressStore'
 import { loadGoogleMaps } from './googleMaps'
 
@@ -10,6 +11,20 @@ const GEOCODE_CACHE = new Map()
 const ROUTE_METRICS_CACHE = new Map()
 
 export const LOCATION_UPDATED_EVENT = 'buy-in-minutes:location-updated'
+
+// Bumped whenever the customer location may have changed. Components watch this
+// instead of each registering their own window listener / address watcher.
+export const deliveryLocationVersion = ref(0)
+
+function bumpDeliveryLocationVersion() {
+  deliveryLocationVersion.value += 1
+}
+
+if (typeof window !== 'undefined') {
+  window.addEventListener(LOCATION_UPDATED_EVENT, bumpDeliveryLocationVersion)
+}
+
+watch(customerAddresses, bumpDeliveryLocationVersion, { deep: true })
 
 function toFiniteNumber(value) {
   const numberValue = Number(value)

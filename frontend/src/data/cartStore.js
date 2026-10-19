@@ -51,6 +51,10 @@ export const cartProducts = cartItems
 
 export const cartItemCount = computed(() => cartItems.value.length)
 
+export const cartQuantityById = computed(() =>
+  new Map(cartItems.value.map((item) => [item.id, item.quantity])),
+)
+
 export const cartTotal = computed(() =>
   cartItems.value.reduce((total, item) => total + item.price * item.quantity, 0),
 )

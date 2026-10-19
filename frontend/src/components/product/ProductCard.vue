@@ -1,10 +1,9 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { LOCATION_UPDATED_EVENT, getEstimatedDeliveryTimeLabel } from '../../api/deliveryEta'
-import { customerAddresses } from '../../data/addressStore'
+import { computed, ref, watch } from 'vue'
+import { deliveryLocationVersion, getEstimatedDeliveryTimeLabel } from '../../api/deliveryEta'
 import {
   addProductToCart,
-  cartProducts,
+  cartQuantityById,
   updateCartProductQuantity,
 } from '../../data/cartStore'
 import {
@@ -24,10 +23,15 @@ const props = defineProps({
 })
 const emit = defineEmits(['select'])
 
-const cartItem = computed(() => cartProducts.value.find((item) => item.id === props.product.id))
-const cartQuantity = computed(() => cartItem.value?.quantity || 0)
-const isWishlisted = computed(() => isProductWishlisted(props.product.id))
+const LOW_STOCK_THRESHOLD = 5
 const productPlaceholderImage = `${import.meta.env.BASE_URL}grocery-card-image-v3.svg?v=3`
+const priceFormatter = new Intl.NumberFormat('en-AE', {
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 2,
+})
+
+const cartQuantity = computed(() => cartQuantityById.value.get(props.product.id) || 0)
+const isWishlisted = computed(() => isProductWishlisted(props.product.id))
 const isRfqOnly = computed(() => props.product.customRfqOnly === true)
 const availableQuantity = computed(() => {
   const quantity = Number(props.product.customAvailableQty ?? props.product.stockQuantity ?? 0)
@@ -35,10 +39,36 @@ const availableQuantity = computed(() => {
   return Number.isFinite(quantity) ? quantity : 0
 })
 const isOutOfStock = computed(() => props.product.inStock === false)
-const stockLabel = computed(() => (isOutOfStock.value ? 'Out of stock' : `${availableQuantity.value} in stock`))
+const isLowStock = computed(() =>
+  !isOutOfStock.value && availableQuantity.value > 0 && availableQuantity.value <= LOW_STOCK_THRESHOLD,
+)
+const stockLabel = computed(() => {
+  if (isOutOfStock.value) {
+    return 'Out of stock'
+  }
+
+  if (isLowStock.value) {
+    return `Only ${availableQuantity.value} left`
+  }
+
+  return availableQuantity.value > 0 ? `${availableQuantity.value} in stock` : 'In stock'
+})
+// Only cap the quantity when the stock is actually tracked; RFQ items are never capped.
+const canIncreaseQuantity = computed(() =>
+  isRfqOnly.value || availableQuantity.value <= 0 || cartQuantity.value < availableQuantity.value,
+)
+const formattedPrice = computed(() => {
+  const price = Number(props.product.price)
+
+  return Number.isFinite(price) ? priceFormatter.format(price) : props.product.price
+})
 const supplierName = computed(() =>
   props.product.supplierName || props.product.supplier || '',
 )
+const rating = computed(() => Number(props.product.rating) || 0)
+const reviewCount = computed(() => Number(props.product.reviewCount) || 0)
+const hasRating = computed(() => rating.value > 0 || reviewCount.value > 0)
+const reviewLabel = computed(() => (reviewCount.value === 1 ? '1 review' : `${reviewCount.value} reviews`))
 const defaultProductSize = computed(() => {
   const rawSize = props.product.selectedSize || props.product.size || props.product.customSize || props.product.custom_size || ''
 
@@ -51,22 +81,35 @@ const defaultProductSize = computed(() => {
     .map((size) => size.trim())
     .find(Boolean) || String(rawSize).trim()
 })
-const reviewLabel = computed(() => {
-  const reviewCount = props.product.reviewCount || 0
-
-  return reviewCount === 1 ? '1 review' : `${reviewCount} reviews`
-})
 const deliveryTimeLabel = ref(props.product.deliveryTime || '')
 
+let deliveryRequestId = 0
+
 async function updateDeliveryTimeLabel() {
-  deliveryTimeLabel.value = await getEstimatedDeliveryTimeLabel(props.product)
+  // Ignore responses from older requests so a slow lookup can't overwrite a newer one.
+  const requestId = ++deliveryRequestId
+  const label = await getEstimatedDeliveryTimeLabel(props.product)
+
+  if (requestId === deliveryRequestId) {
+    deliveryTimeLabel.value = label
+  }
 }
 
 function handleAddToCart() {
+  if (isOutOfStock.value && !isRfqOnly.value) {
+    return
+  }
+
   addProductToCart({
     ...props.product,
     selectedSize: defaultProductSize.value,
   })
+}
+
+function increaseCartQuantity() {
+  if (canIncreaseQuantity.value) {
+    handleAddToCart()
+  }
 }
 
 function decreaseCartQuantity() {
@@ -75,10 +118,6 @@ function decreaseCartQuantity() {
 
 function handleWishlistToggle() {
   toggleProductWishlist(props.product)
-}
-
-function handleRequestQuotation() {
-  handleAddToCart()
 }
 
 function selectProduct() {
@@ -93,15 +132,6 @@ function showPlaceholderImage(event) {
   event.target.src = productPlaceholderImage
 }
 
-onMounted(() => {
-  updateDeliveryTimeLabel()
-  window.addEventListener(LOCATION_UPDATED_EVENT, updateDeliveryTimeLabel)
-})
-
-onBeforeUnmount(() => {
-  window.removeEventListener(LOCATION_UPDATED_EVENT, updateDeliveryTimeLabel)
-})
-
 watch(
   () => [
     props.product.id,
@@ -109,27 +139,17 @@ watch(
     props.product.supplierAddress,
     props.product.supplierDetails?.customGoogleAddress,
     props.product.supplierDetails?.custom_google_address,
+    deliveryLocationVersion.value,
   ],
-  () => {
-    updateDeliveryTimeLabel()
-  },
+  updateDeliveryTimeLabel,
   { immediate: true },
 )
-
-watch(
-  customerAddresses,
-  () => {
-    updateDeliveryTimeLabel()
-  },
-  { deep: true },
-)
-
 </script>
 
 <template>
   <article
     class="product-card"
-    :class="{ 'is-compact': compact }"
+    :class="{ 'is-compact': compact, 'is-out-of-stock': isOutOfStock }"
   >
     <button
       class="product-wishlist-button"
@@ -157,16 +177,17 @@ watch(
 
     <div
       class="product-image product-select-area"
-      tabindex="0"
-      role="button"
-      :aria-label="`View ${product.name} details`"
+      tabindex="-1"
+      aria-hidden="true"
       @click="selectProduct"
-      @keydown.enter="selectProduct"
-      @keydown.space.prevent="selectProduct"
     >
       <img
         :src="product.image || productPlaceholderImage"
-        :alt="product.name"
+        alt=""
+        loading="lazy"
+        decoding="async"
+        width="252"
+        height="160"
         @error="showPlaceholderImage"
       />
       <span v-if="deliveryTimeLabel" class="product-badge">{{ deliveryTimeLabel }}</span>
@@ -182,20 +203,22 @@ watch(
         @keydown.enter="selectProduct"
         @keydown.space.prevent="selectProduct"
       >
-        <div class="product-meta">
+        <div v-if="product.category" class="product-meta">
           <p class="product-category">{{ product.category }}</p>
-          <span class="product-rating">★ {{ product.rating }}</span>
         </div>
-        <h2 class="product-name">{{ product.name }}</h2>
-        <p v-if="supplierName" class="product-supplier">
+        <h2 class="product-name" :title="product.name">{{ product.name }}</h2>
+        <p v-if="supplierName" class="product-supplier" :title="supplierName">
           {{ supplierName }}
         </p>
         <div class="product-card-details">
-          <span class="product-card-rating">★ {{ product.rating }}</span>
-          <span class="product-card-reviews">{{ reviewLabel }}</span>
+          <template v-if="hasRating">
+            <span class="product-card-rating" :aria-label="`Rated ${rating} out of 5`">★ {{ rating }}</span>
+            <span class="product-card-reviews">{{ reviewLabel }}</span>
+          </template>
           <span
+            v-if="!isRfqOnly"
             class="product-card-stock"
-            :class="{ 'is-out': isOutOfStock }"
+            :class="{ 'is-out': isOutOfStock, 'is-low': isLowStock }"
           >
             {{ stockLabel }}
           </span>
@@ -204,73 +227,52 @@ watch(
 
       <div class="product-footer">
         <span class="product-price">
-          AED {{ product.price }}
+          AED {{ formattedPrice }}
         </span>
-        <div v-if="isRfqOnly" class="product-rfq-actions">
-          <div
-            v-if="cartQuantity"
-            class="product-quantity-control"
-            :aria-label="`${product.name} quantity`"
-          >
-            <button
-              type="button"
-              :aria-label="`Decrease ${product.name} quantity`"
-              @click.stop="decreaseCartQuantity"
-            >
-              -
-            </button>
-            <span>{{ cartQuantity }}</span>
-            <button
-              type="button"
-              :aria-label="`Increase ${product.name} quantity`"
-              @click.stop="handleAddToCart"
-            >
-              +
-            </button>
-          </div>
+
+        <div
+          v-if="cartQuantity"
+          class="product-quantity-control"
+          role="group"
+          :aria-label="`${product.name} quantity`"
+        >
           <button
-            v-else
-            class="add-cart-button is-rfq"
             type="button"
-            :aria-label="`Request quotation for ${product.name}`"
-            @click.stop="handleRequestQuotation"
+            :aria-label="cartQuantity === 1 ? `Remove ${product.name} from cart` : `Decrease ${product.name} quantity`"
+            @click.stop="decreaseCartQuantity"
           >
-            <span>Request Quotation</span>
+            −
+          </button>
+          <span aria-live="polite">{{ cartQuantity }}</span>
+          <button
+            type="button"
+            :aria-label="`Increase ${product.name} quantity`"
+            :disabled="!canIncreaseQuantity"
+            :title="canIncreaseQuantity ? '' : 'No more stock available'"
+            @click.stop="increaseCartQuantity"
+          >
+            +
           </button>
         </div>
-        <template v-else>
-          <div
-            v-if="cartQuantity"
-            class="product-quantity-control"
-            :aria-label="`${product.name} quantity`"
-          >
-            <button
-              type="button"
-              :aria-label="`Decrease ${product.name} quantity`"
-              @click.stop="decreaseCartQuantity"
-            >
-              -
-            </button>
-            <span>{{ cartQuantity }}</span>
-            <button
-              type="button"
-              :aria-label="`Increase ${product.name} quantity`"
-              @click.stop="handleAddToCart"
-            >
-              +
-            </button>
-          </div>
-          <button
-            v-else
-            class="add-cart-button"
-            type="button"
-            :aria-label="`Add ${product.name} to cart`"
-            :disabled="isOutOfStock"
-            @click.stop="handleAddToCart"
-          >
-            ADD TO CART
-          </button>
-        </template>
+        <button
+          v-else-if="isRfqOnly"
+          class="add-cart-button is-rfq"
+          type="button"
+          :aria-label="`Request quotation for ${product.name}`"
+          @click.stop="handleAddToCart"
+        >
+          <span>Request Quotation</span>
+        </button>
+        <button
+          v-else
+          class="add-cart-button"
+          type="button"
+          :aria-label="isOutOfStock ? `${product.name} is out of stock` : `Add ${product.name} to cart`"
+          :disabled="isOutOfStock"
+          @click.stop="handleAddToCart"
+        >
+          {{ isOutOfStock ? 'SOLD OUT' : 'ADD TO CART' }}
+        </button>
       </div>
     </div>
   </article>
