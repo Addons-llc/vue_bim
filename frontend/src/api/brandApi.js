@@ -100,6 +100,15 @@ function getBrandProductCount(brand = {}) {
   return Number.isFinite(Number(count)) ? Number(count) : null
 }
 
+function isPublishedBrand(brand = {}) {
+  const publishFlags = ['custom_published', 'published']
+    .filter((field) => Object.hasOwn(brand, field))
+    .map((field) => brand[field])
+
+  return !publishFlags.length
+    || publishFlags.some((value) => value === true || value === 1 || value === '1')
+}
+
 function mapBrand(brand = {}) {
   const brandName = brand.brand || brand.name
   const primaryBannerImage = getImageUrl(brand.custom_brand_banner_image || '')
@@ -145,6 +154,7 @@ function mapBrand(brand = {}) {
     bannerImages: bannerImages.length ? bannerImages : (bannerImage ? [bannerImage] : []),
     rating: brand.rating || brand.average_rating || brand.review_rating || '',
     productCount: getBrandProductCount(brand),
+    isPublished: isPublishedBrand(brand),
     offerBadge: brand.offer_badge
       || brand.offer
       || brand.discount_label

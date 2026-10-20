@@ -45,8 +45,13 @@
   box-shadow: 0 16px 34px rgba(17, 24, 39, 0.06);
 }
 
-.page-shell:has(> .dashboard-hero) > .product-section {
+.page-shell:has(> .dashboard-hero) > .bundle-section {
   order: 5;
+  margin-top: 18px;
+}
+
+.page-shell:has(> .dashboard-hero) > .product-section {
+  order: 6;
 }
 
 .hero-slider {

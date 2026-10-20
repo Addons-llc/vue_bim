@@ -95,7 +95,12 @@ function openExternalUrl(url) {
             </span>
           </a>
 
-          <a class="bf-app" href="/play-store">
+          <a
+            class="bf-app"
+            href="https://play.google.com/store/apps/details?id=com.addons.buyinminutes"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
             <svg aria-hidden="true" viewBox="0 0 24 24" fill="currentColor">
               <path d="M4 3.5v17a1 1 0 0 0 1.5.9l14.6-8.5a1 1 0 0 0 0-1.8L5.5 2.6A1 1 0 0 0 4 3.5Z" />
             </svg>

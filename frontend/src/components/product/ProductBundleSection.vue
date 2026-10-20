@@ -174,7 +174,7 @@ function showPlaceholderImage(event) {
               :aria-label="bundle.inStock === false ? `${bundle.name} is out of stock` : `Add ${bundle.name} to cart`"
               @click="addBundleToCart(bundle)"
             >
-              {{ bundle.inStock === false ? 'SOLD OUT' : 'ADD KIT' }}
+              {{ bundle.inStock === false ? 'SOLD OUT' : 'ADD TO CART' }}
             </button>
           </div>
         </div>

@@ -1292,6 +1292,8 @@ def get_brands(limit_page_length=24, published=1):
 	if _is_truthy_flag(published):
 		if "custom_published" in brand_fields:
 			filters["custom_published"] = 1
+		elif "published" in brand_fields:
+			filters["published"] = 1
 
 	brands = frappe.get_all(
 		"Brand",

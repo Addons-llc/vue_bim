@@ -66,10 +66,15 @@ const {
   selectProductSection,
 } = useProducts(searchText, initialCategory)
 
-const discoveryBrands = computed(() => brands.value.slice(0, 12))
-const discoveryStores = computed(() => stores.value.slice(0, 12))
+const isPublished = (item) => item.isPublished !== false
+const publishedBrands = computed(() => brands.value.filter(isPublished))
+const publishedStores = computed(() => stores.value.filter(isPublished))
+const publishedBundles = computed(() => productBundles.value.filter(isPublished))
+const discoveryBrands = computed(() => publishedBrands.value.slice(0, 12))
+const discoveryStores = computed(() => publishedStores.value.slice(0, 12))
 const discoveryCategories = computed(() =>
   categories.value
+    .filter(isPublished)
     .filter((category) => {
       const parentItemGroup = String(category.parentItemGroup || '').trim()
 
@@ -238,13 +243,14 @@ onUnmounted(() => {
   </section>
 
   <CategoryRail
-    v-if="brands.length"
+    v-if="discoveryBrands.length"
     class="home-rail-section home-rail-brands"
     section-id="brands"
     title="Brands"
     horizontal
     item-type="brand"
     stacked-tile
+    fit-to-row
     show-brand-detail-fallbacks
     :view-all-to="brandsTabRoute"
     :categories="discoveryBrands"
@@ -252,26 +258,28 @@ onUnmounted(() => {
   />
 
   <CategoryRail
-    v-if="stores.length"
+    v-if="discoveryStores.length"
     class="home-rail-section home-rail-store"
     section-id="shops"
     title="Store"
     horizontal
     item-type="store"
     stacked-tile
+    fit-to-row
     :view-all-to="storesTabRoute"
     :categories="discoveryStores"
     @select="openStoreItem"
   />
 
   <CategoryRail
-    v-if="categories.length"
+    v-if="discoveryCategories.length"
     class="home-rail-section home-rail-categories"
     section-id="categories"
     title="Categories"
     horizontal
     item-type="category"
     stacked-tile
+    fit-to-row
     :view-all-to="categoriesTabRoute"
     :active-category="activeCategory"
     :categories="discoveryCategories"
@@ -279,8 +287,8 @@ onUnmounted(() => {
   />
 
   <ProductBundleSection
-    v-if="productBundles.length"
-    :bundles="productBundles"
+    v-if="publishedBundles.length"
+    :bundles="publishedBundles"
     @select="openProductDetails"
   />
 

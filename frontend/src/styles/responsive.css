@@ -1247,24 +1247,28 @@
     font-size: 12px;
   }
 
-  .product-card.is-compact .add-cart-button {
+  .product-card.is-compact .add-cart-button,
+  .bundle-card .bundle-card-footer .add-cart-button {
     min-width: 66px;
     min-height: 28px;
     padding: 0 6px;
     font-size: 9px;
   }
 
-  .product-card.is-compact .product-quantity-control {
+  .product-card.is-compact .product-quantity-control,
+  .bundle-card .bundle-card-footer .product-quantity-control {
     min-width: 66px;
     min-height: 28px;
   }
 
-  .product-card.is-compact .product-quantity-control button {
+  .product-card.is-compact .product-quantity-control button,
+  .bundle-card .bundle-card-footer .product-quantity-control button {
     width: 23px;
     height: 28px;
   }
 
-  .product-card.is-compact .product-quantity-control span {
+  .product-card.is-compact .product-quantity-control span,
+  .bundle-card .bundle-card-footer .product-quantity-control span {
     min-width: 20px;
   }
 

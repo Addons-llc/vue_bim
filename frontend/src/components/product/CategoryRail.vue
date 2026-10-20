@@ -1,5 +1,5 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 
 const props = defineProps({
   activeCategory: {
@@ -50,15 +50,71 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  // Show only the tiles that fully fit in one row (no horizontal scroll); "View all" leads to the rest.
+  fitToRow: {
+    type: Boolean,
+    default: false,
+  },
 })
 
 const emit = defineEmits(['select', 'view-all'])
 
 const categoryPlaceholderImage = `${import.meta.env.BASE_URL}grocery-card-image-v3.svg?v=3`
+const gridElement = ref(null)
+const fittingCount = ref(null)
+let gridResizeObserver = null
 
 const visibleCategories = computed(() => {
-  return props.categories
+  if (!props.fitToRow || fittingCount.value === null) {
+    return props.categories
+  }
+
+  return props.categories.slice(0, fittingCount.value)
 })
+
+async function measureFittingCount() {
+  if (!props.fitToRow || !gridElement.value) {
+    return
+  }
+
+  // Render every tile first so the measurement reflects the current tile widths for this breakpoint.
+  fittingCount.value = null
+  await nextTick()
+
+  const grid = gridElement.value
+  if (!grid) {
+    return
+  }
+
+  const gridRight = grid.getBoundingClientRect().right
+  const tiles = Array.from(grid.children)
+  const fittingTiles = tiles.filter((tile) => tile.getBoundingClientRect().right <= gridRight + 1)
+
+  fittingCount.value = Math.max(fittingTiles.length, 1)
+}
+
+onMounted(() => {
+  if (!props.fitToRow || typeof ResizeObserver === 'undefined') {
+    return
+  }
+
+  let lastWidth = 0
+  gridResizeObserver = new ResizeObserver(([entry]) => {
+    const width = Math.round(entry.contentRect.width)
+
+    if (width !== lastWidth) {
+      lastWidth = width
+      measureFittingCount()
+    }
+  })
+  gridResizeObserver.observe(gridElement.value)
+})
+
+onUnmounted(() => {
+  gridResizeObserver?.disconnect()
+})
+
+watch(() => props.categories, measureFittingCount)
 
 function showPlaceholderImage(event) {
   if (event.target.src.includes('/grocery-card-image-v3.svg')) {
@@ -105,7 +161,11 @@ function viewAll() {
         {{ viewAllLabel }}
       </button>
     </div>
-    <div class="category-grid" :class="{ 'is-manual-scroll': horizontal }">
+    <div
+      ref="gridElement"
+      class="category-grid"
+      :class="{ 'is-manual-scroll': horizontal }"
+    >
       <button
         v-for="category in visibleCategories"
         :key="category.id"
