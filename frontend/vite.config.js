@@ -68,6 +68,8 @@ export default defineConfig(({ command, mode }) => {
     server: {
       host: true,
       https,
+      // Let phones reach the dev server through an ngrok tunnel.
+      allowedHosts: ['.ngrok-free.app', '.ngrok-free.dev', '.ngrok.app'],
       fs: {
         allow: [appRoot],
       },

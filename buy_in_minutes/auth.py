@@ -35,7 +35,12 @@ GOOGLE_USERINFO_URL = "https://openidconnect.googleapis.com/v1/userinfo"
 # OAuth "web" client the mobile app requests ID tokens for. Override (or add
 # more, e.g. an iOS/web app's client) with `google_oauth_client_ids` in
 # site_config.json.
-DEFAULT_GOOGLE_OAUTH_CLIENT_IDS = ["408596288649-1dv8u1abgrjlug0f5cm7buskl6ci2olu.apps.googleusercontent.com"]
+DEFAULT_GOOGLE_OAUTH_CLIENT_IDS = [
+	# Firebase project buy-in-minutes-c3e76 (mobile app).
+	"1094722769176-0sosifsshtq8v2dvmcet630a6jie99bi.apps.googleusercontent.com",
+	# Earlier project, still accepted while clients move over.
+	"408596288649-1dv8u1abgrjlug0f5cm7buskl6ci2olu.apps.googleusercontent.com",
+]
 
 
 def _error(message, status_code=400):
