@@ -28,6 +28,7 @@ OTP_RATE_LIMIT_CACHE_VERSION = "v2"
 PROFILE_TOKEN_TTL_SECONDS = 10 * 60
 WEBSITE_LOGIN_TOKEN_TTL_SECONDS = 30 * 24 * 60 * 60
 PHONE_AUTH_FLOW_TOKEN_TTL_SECONDS = 10 * 60
+GOOGLE_SIGNUP_TOKEN_TTL_SECONDS = 30 * 60
 GOOGLE_TOKENINFO_URL = "https://oauth2.googleapis.com/tokeninfo"
 GOOGLE_TOKEN_ISSUERS = {"accounts.google.com", "https://accounts.google.com"}
 GOOGLE_USERINFO_URL = "https://openidconnect.googleapis.com/v1/userinfo"
@@ -156,6 +157,10 @@ def _get_website_login_token_key(login_token):
 
 def _get_phone_auth_flow_token_key(flow_token):
 	return frappe.cache.make_key(f"phone-auth-flow:{OTP_RATE_LIMIT_CACHE_VERSION}:{flow_token}")
+
+
+def _get_google_signup_token_key(signup_token):
+	return frappe.cache.make_key(f"google-signup-token:{OTP_RATE_LIMIT_CACHE_VERSION}:{signup_token}")
 
 
 def _check_otp_request_cooldown(phone_number):
@@ -948,7 +953,7 @@ def _verify_google_credential(id_token=None, access_token=None):
 	return _verify_google_id_token(id_token)
 
 
-def _create_google_website_user(email, full_name):
+def _create_google_website_user(email, full_name, phone_number=None):
 	first_name, last_name = _split_full_name(full_name or email.split("@")[0])
 	user = frappe.get_doc(
 		{
@@ -956,6 +961,8 @@ def _create_google_website_user(email, full_name):
 			"email": email,
 			"first_name": first_name,
 			"last_name": last_name,
+			"mobile_no": phone_number,
+			"phone": phone_number,
 			"enabled": 1,
 			"user_type": "Website User",
 			"send_welcome_email": 0,
@@ -970,13 +977,61 @@ def _create_google_website_user(email, full_name):
 	return user
 
 
+def _create_google_signup_token(email, full_name):
+	signup_token = frappe.generate_hash(length=32)
+	frappe.cache.setex(
+		_get_google_signup_token_key(signup_token),
+		GOOGLE_SIGNUP_TOKEN_TTL_SECONDS,
+		json.dumps({"email": email, "full_name": full_name}),
+	)
+	return signup_token
+
+
+def _read_google_signup_token(signup_token):
+	payload = frappe.cache.get(_get_google_signup_token_key((signup_token or "").strip()))
+	if isinstance(payload, bytes):
+		payload = payload.decode()
+
+	try:
+		payload = json.loads(payload or "{}")
+	except Exception:
+		payload = {}
+
+	if not payload.get("email"):
+		frappe.throw(_("Your Google sign-up has expired. Please sign in with Google again."), frappe.AuthenticationError)
+
+	return payload
+
+
 @frappe.whitelist(allow_guest=True, methods=["POST"])
-def google_login(id_token=None, access_token=None):
+def google_login(id_token=None, access_token=None, defer_signup=None):
+	"""Signs in with Google. With `defer_signup`, a new email gets no account
+	yet: the response carries a `signup_token`, and the Website User is created
+	by verify_link_phone_otp once a phone number has been OTP-verified."""
 	claims = _verify_google_credential(id_token, access_token)
 	email = validate_email_address(claims["email"].strip().lower(), throw=True)
 
 	user_name = frappe.db.get_value("User", {"email": email}, "name")
 	is_new_user = not user_name
+	if is_new_user and frappe.utils.sbool(defer_signup):
+		full_name = (claims.get("name") or "").strip() or email.split("@")[0]
+		return {
+			"success": True,
+			"is_new_user": True,
+			"website_user_created": False,
+			"website_user_exists": False,
+			"needs_phone": True,
+			"signup_token": _create_google_signup_token(email, full_name),
+			"user": {
+				"name": email,
+				"email": email,
+				"mobile_no": None,
+				"full_name": full_name,
+				"user_image": claims.get("picture"),
+			},
+			"message": _("Verify your phone number to finish signing up."),
+		}
+
 	if is_new_user:
 		user = _create_google_website_user(email, claims.get("name"))
 	else:
@@ -1034,11 +1089,20 @@ def restore_login_session(session_token=None):
 	}
 
 
-def _get_session_website_user():
-	if _is_guest_session_user():
+def _get_session_website_user(session_token=None):
+	"""The website user to link a phone to. The mobile app authenticates every
+	request with a shared API key, so it identifies the customer with the
+	`session_token` from google_login instead; the web app uses its session."""
+	if (session_token or "").strip():
+		user_name = _read_website_login_token(session_token)
+		if not user_name or not frappe.db.exists("User", user_name):
+			frappe.throw(_("Your sign-in has expired. Please sign in again."), frappe.AuthenticationError)
+	elif _is_guest_session_user():
 		frappe.throw(_("Please sign in first."), frappe.AuthenticationError)
+	else:
+		user_name = frappe.session.user
 
-	user = frappe.get_doc("User", frappe.session.user)
+	user = frappe.get_doc("User", user_name)
 	if user.user_type != "Website User":
 		frappe.throw(_("Only website users can add a phone number."), frappe.PermissionError)
 
@@ -1046,14 +1110,21 @@ def _get_session_website_user():
 
 
 @frappe.whitelist(methods=["POST"])
-def request_link_phone_otp(phone_number=None, phoneNumber=None):
+def request_link_phone_otp(phone_number=None, phoneNumber=None, session_token=None, signup_token=None):
 	"""Sends an OTP to attach a phone number to the signed-in account, e.g.
-	after a Google sign-in, instead of signing in or up by phone."""
-	user = _get_session_website_user()
+	after a Google sign-in, instead of signing in or up by phone. With a
+	`signup_token` (deferred Google sign-up) the account doesn't exist yet;
+	it is created when the OTP is verified."""
+	if (signup_token or "").strip():
+		owner_name = _read_google_signup_token(signup_token)["email"]
+		mode = "google_signup"
+	else:
+		owner_name = _get_session_website_user(session_token).name
+		mode = "link_phone"
 	phone_number = _normalize_phone(phone_number or phoneNumber)
 
 	existing_user = _get_existing_user_by_phone(phone_number)
-	if existing_user and existing_user.name != user.name:
+	if existing_user and existing_user.name != owner_name:
 		return _error(_("This phone number is already linked to another account."), 409)
 
 	cooldown_response = _check_otp_request_cooldown(phone_number)
@@ -1084,29 +1155,40 @@ def request_link_phone_otp(phone_number=None, phoneNumber=None):
 	response = {
 		"success": True,
 		"status": status,
-		"auth_flow_token": _create_phone_auth_flow_token(phone_number, "link_phone", user.name),
-		"auth_mode": "link_phone",
+		"auth_flow_token": _create_phone_auth_flow_token(phone_number, mode, owner_name),
+		"auth_mode": mode,
 		"message": _("OTP sent successfully."),
 	}
 	_log_phone_auth_response(
 		"request_link_phone_otp",
 		phone_number,
-		{"success": True, "status": status, "user_name": user.name},
+		{"success": True, "status": status, "user_name": owner_name},
 	)
 	return response
 
 
 @frappe.whitelist(methods=["POST"])
-def verify_link_phone_otp(phone_number=None, otp=None, phoneNumber=None, auth_flow_token=None):
-	user = _get_session_website_user()
+def verify_link_phone_otp(
+	phone_number=None, otp=None, phoneNumber=None, auth_flow_token=None, session_token=None, signup_token=None
+):
+	signup = None
+	user = None
+	if (signup_token or "").strip():
+		signup = _read_google_signup_token(signup_token)
+		owner_name = signup["email"]
+		mode = "google_signup"
+	else:
+		user = _get_session_website_user(session_token)
+		owner_name = user.name
+		mode = "link_phone"
 	phone_number = _normalize_phone(phone_number or phoneNumber)
 	rate_limit_response = _check_otp_rate_limit("verify_phone_otp", phone_number, _get_otp_verify_limit())
 	if rate_limit_response:
 		return rate_limit_response
 
 	otp = (otp or "").strip()
-	auth_flow = _read_phone_auth_flow_token(auth_flow_token, phone_number, allowed_modes=("link_phone",))
-	if auth_flow.get("user_name") != user.name:
+	auth_flow = _read_phone_auth_flow_token(auth_flow_token, phone_number, allowed_modes=(mode,))
+	if auth_flow.get("user_name") != owner_name:
 		frappe.throw(_("Phone verification session does not match this account."), frappe.AuthenticationError)
 
 	if not OTP_PATTERN.match(otp):
@@ -1134,18 +1216,33 @@ def verify_link_phone_otp(phone_number=None, otp=None, phoneNumber=None, auth_fl
 
 	# Re-check: the number may have been claimed while the OTP was pending.
 	existing_user = _get_existing_user_by_phone(phone_number)
-	if existing_user and existing_user.name != user.name:
+	if existing_user and existing_user.name != owner_name:
 		return _error(_("This phone number is already linked to another account."), 409)
 
-	user.mobile_no = phone_number
-	user.phone = phone_number
-	user.save(ignore_permissions=True)
-	frappe.db.commit()
+	if signup:
+		# The email may have signed up another way while the OTP was pending.
+		if frappe.db.exists("User", {"email": owner_name}):
+			return _error(_("An account with this email already exists. Please sign in with Google again."), 409)
+
+		# Only now, with the phone verified, does the account get created.
+		user = _create_google_website_user(owner_name, signup.get("full_name"), phone_number)
+		frappe.cache.delete_value(_get_google_signup_token_key(signup_token.strip()), make_keys=False)
+		_login_user(user.name)
+	else:
+		user.mobile_no = phone_number
+		user.phone = phone_number
+		user.save(ignore_permissions=True)
+		frappe.db.commit()
 	frappe.cache.delete_value(_get_phone_auth_flow_token_key(auth_flow_token.strip()), make_keys=False)
 
 	_log_phone_auth_response("verify_link_phone_otp", phone_number, {"success": True, "user_name": user.name})
+	# A fresh token is issued below; retire the one used here.
+	if session_token:
+		revoke_login_session(session_token)
 	return {
 		**_get_login_response_payload(user),
+		"is_new_user": bool(signup),
+		"website_user_created": bool(signup),
 		"message": _("Phone number verified."),
 	}
 
