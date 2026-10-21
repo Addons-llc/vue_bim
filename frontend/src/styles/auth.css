@@ -694,7 +694,8 @@
   font-weight: 750;
 }
 
-.signin-phone {
+.signin-phone,
+.signin-field {
   display: flex;
   align-items: stretch;
   height: 54px;
@@ -705,7 +706,8 @@
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
-.signin-phone:focus-within {
+.signin-phone:focus-within,
+.signin-field:focus-within {
   border-color: var(--brand-green);
   box-shadow: 0 0 0 4px rgba(7, 139, 32, 0.12);
 }
@@ -824,7 +826,17 @@
   content: "";
 }
 
-.signin-skip {
+.signin-social {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.signin-social-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
   width: 100%;
   min-height: 50px;
   border: 1.5px solid #d1d5db;
@@ -836,9 +848,46 @@
   cursor: pointer;
 }
 
-.signin-skip:hover {
+.signin-social-button svg {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 20px;
+}
+
+.signin-social-button:disabled {
+  cursor: wait;
+  opacity: 0.7;
+}
+
+.signin-social-button.is-google:hover:not(:disabled) {
   border-color: #9ca3af;
   background: #f9fafb;
+}
+
+.signin-social-button.is-apple {
+  border-color: #000000;
+  background: #000000;
+  color: #ffffff;
+}
+
+.signin-social-button.is-apple:hover {
+  background: #1f2937;
+}
+
+.signin-skip {
+  width: 100%;
+  min-height: 44px;
+  border: 0;
+  border-radius: 14px;
+  background: transparent;
+  color: var(--brand-green);
+  font-size: 15px;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.signin-skip:hover {
+  background: #f0fdf4;
 }
 
 .signin-note {
@@ -856,6 +905,164 @@
   width: 14px;
   height: 14px;
   flex: 0 0 14px;
+}
+
+.signin-profile-google {
+  margin: 22px 0 0;
+}
+
+.signin-profile-form {
+  margin-top: 0;
+}
+
+.signin-hero.is-compact {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 60px;
+}
+
+.signin-otp-badge {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  flex: 0 0 52px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.18);
+  color: #ffffff;
+}
+
+.signin-otp-badge svg {
+  width: 26px;
+  height: 26px;
+}
+
+.signin-otp-number {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+  border-radius: 999px;
+  padding: 6px 6px 6px 14px;
+  background: #f3f6f4;
+  color: var(--text-strong);
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+}
+
+.signin-otp-number button {
+  border: 0;
+  border-radius: 999px;
+  padding: 6px 12px;
+  background: #ffffff;
+  color: var(--brand-green);
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+}
+
+.signin-otp-number button:hover {
+  background: #f0fdf4;
+}
+
+.signin-otp-boxes {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.signin-otp-box {
+  width: 100%;
+  min-width: 0;
+  height: 58px;
+  border: 1.5px solid #d1d5db;
+  border-radius: 14px;
+  background: #ffffff;
+  color: var(--text-strong);
+  font-size: 24px;
+  font-weight: 850;
+  text-align: center;
+  caret-color: var(--brand-green);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
+}
+
+.signin-otp-box:focus {
+  border-color: var(--brand-green);
+  outline: none;
+  box-shadow: 0 0 0 4px rgba(7, 139, 32, 0.14);
+}
+
+.signin-otp-box.is-filled {
+  border-color: var(--brand-green);
+  background: #f0fdf4;
+}
+
+.signin-otp-box:disabled {
+  opacity: 0.6;
+}
+
+.signin-otp-boxes.has-error .signin-otp-box {
+  border-color: #ef4444;
+  background: #fef2f2;
+}
+
+.signin-otp-boxes.has-error {
+  animation: signin-otp-shake 0.35s ease;
+}
+
+@keyframes signin-otp-shake {
+  20%,
+  60% {
+    transform: translateX(-6px);
+  }
+
+  40%,
+  80% {
+    transform: translateX(6px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .signin-otp-boxes.has-error {
+    animation: none;
+  }
+}
+
+.signin-otp-resend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  margin-top: 18px;
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+.signin-otp-resend button {
+  border: 0;
+  border-radius: 10px;
+  padding: 6px 8px;
+  background: transparent;
+  color: var(--brand-green);
+  font-size: 14px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.signin-otp-resend button:hover:not(:disabled) {
+  background: #f0fdf4;
+}
+
+.signin-otp-resend button:disabled {
+  color: #9ca3af;
+  cursor: default;
 }
 
 @media (max-width: 520px) {
@@ -887,5 +1094,14 @@
   .signin-card {
     flex: 1;
     padding: 26px 22px calc(24px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .signin-otp-boxes {
+    gap: 8px;
+  }
+
+  .signin-otp-box {
+    height: 52px;
+    font-size: 22px;
   }
 }

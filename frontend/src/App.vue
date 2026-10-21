@@ -1,7 +1,7 @@
 <script setup>
 import { onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { getCurrentUser, hasPersistedPhoneAuthState, logout, restoreLoginSession } from './api/authApi'
+import { getCurrentUser, hasPersistedPhoneAuthState, logout, reloadToLogin, restoreLoginSession } from './api/authApi'
 import { resumeCheckoutSession } from './api/paymentApi'
 import { clearCurrentUser, currentUser, setCurrentUser } from './data/authStore'
 import DefaultLayout from './layouts/DefaultLayout.vue'
@@ -66,7 +66,7 @@ async function handleLogout() {
   try {
     await logout()
   } finally {
-    navigateToLogin()
+    reloadToLogin()
   }
 }
 

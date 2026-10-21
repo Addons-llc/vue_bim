@@ -1,7 +1,13 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { AUTH_FLOW_TOKEN_STORAGE_KEY, requestPhoneOtp, verifyPhoneOtp } from '../api/authApi'
+import {
+  AUTH_FLOW_TOKEN_STORAGE_KEY,
+  requestLinkPhoneOtp,
+  requestPhoneOtp,
+  verifyLinkPhoneOtp,
+  verifyPhoneOtp,
+} from '../api/authApi'
 import { setCurrentUser } from '../data/authStore'
 
 const OTP_LENGTH = 6
@@ -31,6 +37,25 @@ const authFlowToken = computed(() => {
   return localStorage.getItem(AUTH_FLOW_TOKEN_STORAGE_KEY) || ''
 })
 
+// Adding a phone to an already signed-in account (e.g. after Google sign-in).
+const isLinkMode = computed(() => route.query.purpose === 'link')
+
+const formattedPhoneNumber = computed(() => {
+  const match = phoneNumber.value.match(/^\+971(\d{2})(\d{3})(\d{4})$/)
+  return match ? `+971 ${match[1]} ${match[2]} ${match[3]}` : phoneNumber.value
+})
+const resendCountdown = computed(() => {
+  const seconds = resendSecondsRemaining.value
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`
+})
+const submitLabel = computed(() => {
+  if (isSubmitting.value) {
+    return 'Verifying...'
+  }
+
+  return isLinkMode.value ? 'Verify number' : 'Verify and continue'
+})
+
 const canResendOtp = computed(() => resendSecondsRemaining.value === 0 && !isSubmitting.value)
 const AUTO_PROMPT_LOCATION_KEY = 'buyInMinutesPromptLocationOnHome'
 
@@ -57,7 +82,7 @@ function startResendTimer() {
 
 onMounted(() => {
   if (!phoneNumber.value || !authFlowToken.value) {
-    router.replace({ name: 'login' })
+    router.replace({ name: isLinkMode.value ? 'verify-phone' : 'login' })
     return
   }
 
@@ -207,7 +232,9 @@ async function handleOtpVerification() {
       phoneNumber: phoneNumber.value,
       authFlowToken: authFlowToken.value,
     })
-    const response = await verifyPhoneOtp(phoneNumber.value, otp.value, authFlowToken.value)
+    const response = isLinkMode.value
+      ? await verifyLinkPhoneOtp(phoneNumber.value, otp.value, authFlowToken.value)
+      : await verifyPhoneOtp(phoneNumber.value, otp.value, authFlowToken.value)
     console.log('Phone OTP verify response', response)
     const otpResult = getOtpResult(response)
 
@@ -215,11 +242,20 @@ async function handleOtpVerification() {
       throw new Error(otpResult.message || 'Unable to verify OTP.')
     }
 
+    if (isLinkMode.value) {
+      successMessage.value = 'Phone number verified.'
+      setCurrentUser(otpResult.user || null)
+      sessionStorage.setItem(AUTO_PROMPT_LOCATION_KEY, '1')
+      await router.push({ name: 'home' })
+      return
+    }
+
     const profileCompleted = getProfileCompletedFromResponse(response)
 
     successMessage.value = 'Signed in successfully.'
 
     if (profileCompleted) {
+      // Existing website user for this number: straight to the dashboard.
       setCurrentUser(otpResult.user || null)
       sessionStorage.setItem(AUTO_PROMPT_LOCATION_KEY, '1')
       await router.push({ name: 'home' })
@@ -255,7 +291,9 @@ async function resendOtp() {
     console.log('Phone OTP resend payload', {
       phoneNumber: phoneNumber.value,
     })
-    const response = await requestPhoneOtp(phoneNumber.value)
+    const response = isLinkMode.value
+      ? await requestLinkPhoneOtp(phoneNumber.value)
+      : await requestPhoneOtp(phoneNumber.value)
     console.log('Phone OTP resend response', response)
     resetOtpDigits()
     successMessage.value = 'OTP sent to your phone number.'
@@ -279,44 +317,65 @@ async function resendOtp() {
 }
 
 function changePhoneNumber() {
-  router.push({ name: 'login' })
+  router.push({ name: isLinkMode.value ? 'verify-phone' : 'login' })
 }
 </script>
 
 <template>
-  <main class="auth-page">
-    <section class="login-panel">
-      <a class="auth-brand" :href="appBase" aria-label="Buy In Minutes home">
-        <img class="brand-logo" :src="`${appBase}bim.jpeg`" alt="" />
-        <span class="brand-name">BIM</span>
-      </a>
+  <main class="auth-page signin-page">
+    <section class="signin-shell">
+      <header class="signin-hero is-compact">
+        <a class="signin-brand" :href="appBase" aria-label="Buy In Minutes home">
+          <img class="signin-logo" :src="`${appBase}bim.jpeg`" alt="" />
+          <span class="signin-brand-name">Buy In Minutes</span>
+        </a>
+        <span class="signin-otp-badge" aria-hidden="true">
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <rect x="6" y="2" width="12" height="20" rx="3" />
+            <path d="M10 6h4" />
+            <path d="M9.5 14.5l1.8 1.8 3.4-3.6" />
+          </svg>
+        </span>
+      </header>
 
-      <div class="login-heading otp-heading">
-        <p class="section-label">Verification</p>
-        <h1>Enter OTP</h1>
-        <p class="login-copy">
-          We've sent a 6-digit code to
-          <strong>{{ phoneNumber }}</strong>
-        </p>
-        <button class="otp-change-number" type="button" @click="changePhoneNumber">
-          Not your number? Change
-        </button>
-      </div>
+      <section class="signin-card">
+        <div class="signin-heading">
+          <h1>{{ isLinkMode ? 'Verify your number' : 'Enter verification code' }}</h1>
+          <p>We sent a 6-digit code by SMS to</p>
+        </div>
 
-      <section class="auth-section otp-section">
-        <form class="login-form otp-form" @submit.prevent="handleOtpVerification">
-          <div class="otp-boxes" role="group" aria-label="Verification code">
+        <div class="signin-otp-number">
+          <span>{{ formattedPhoneNumber }}</span>
+          <button type="button" @click="changePhoneNumber">Edit</button>
+        </div>
+
+        <form class="signin-form" @submit.prevent="handleOtpVerification">
+          <div
+            class="signin-otp-boxes"
+            :class="{ 'has-error': errorMessage }"
+            role="group"
+            aria-label="Verification code"
+          >
             <input
               v-for="(digit, index) in otpDigits"
               :id="`otp-${index}`"
               :key="index"
               :ref="(el) => setDigitInputRef(el, index)"
-              class="otp-box"
+              class="signin-otp-box"
               :class="{ 'is-filled': digit }"
               type="text"
               inputmode="numeric"
               autocomplete="one-time-code"
               maxlength="1"
+              :aria-label="`Digit ${index + 1}`"
+              :disabled="isSubmitting"
               :value="digit"
               @input="handleDigitInput(index, $event)"
               @keydown="handleDigitKeydown(index, $event)"
@@ -324,31 +383,58 @@ function changePhoneNumber() {
             />
           </div>
 
-          <button class="login-button" type="submit" :disabled="isSubmitting || otp.length !== OTP_LENGTH">
-            {{ isSubmitting ? 'Verifying...' : 'Verify and sign in' }}
-          </button>
-
-          <button
-            class="resend-button"
-            type="button"
-            :disabled="!canResendOtp"
-            @click="resendOtp"
-          >
-            {{
-              resendSecondsRemaining
-                ? `Resend OTP in ${resendSecondsRemaining}s`
-                : 'Resend OTP'
-            }}
+          <button class="signin-submit" type="submit" :disabled="isSubmitting || otp.length !== OTP_LENGTH">
+            <span>{{ submitLabel }}</span>
+            <svg
+              v-if="!isSubmitting"
+              aria-hidden="true"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.4"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M5 12h14" />
+              <path d="M13 6l6 6-6 6" />
+            </svg>
           </button>
         </form>
-      </section>
 
-      <p v-if="successMessage" class="form-message success-message">
-        {{ successMessage }}
-      </p>
-      <p v-if="errorMessage" class="form-message error-message">
-        {{ errorMessage }}
-      </p>
+        <p v-if="errorMessage" class="signin-message is-error" role="alert">
+          {{ errorMessage }}
+        </p>
+
+        <p v-if="successMessage" class="signin-message is-success" role="status">
+          {{ successMessage }}
+        </p>
+
+        <div class="signin-otp-resend">
+          <span>Didn't get the code?</span>
+          <button v-if="resendSecondsRemaining" type="button" disabled>
+            Resend in {{ resendCountdown }}
+          </button>
+          <button v-else type="button" :disabled="!canResendOtp" @click="resendOtp">
+            Resend code
+          </button>
+        </div>
+
+        <p class="signin-note">
+          <svg
+            aria-hidden="true"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <rect x="5" y="11" width="14" height="10" rx="2" />
+            <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+          </svg>
+          Never share this code with anyone.
+        </p>
+      </section>
     </section>
   </main>
 </template>

@@ -10,8 +10,11 @@ const route = useRoute()
 const router = useRouter()
 const brandName = computed(() => String(route.params.brandName || 'Brand'))
 const brandRecord = ref(null)
+const BRAND_PRODUCT_PAGE_SIZE = 48
 const loadedProducts = ref([])
 const isLoadingBrandProducts = ref(false)
+const isLoadingMoreBrandProducts = ref(false)
+const hasMoreBrandProducts = ref(false)
 const failedBrandBannerImages = ref([])
 const activeBrandBannerSlide = ref(0)
 let brandBannerSlideTimer = null
@@ -123,13 +126,14 @@ async function loadBrandProducts() {
     const [brand, products] = await Promise.all([
       getBrand(brandName.value).catch(() => null),
       getProducts({
-        limit_page_length: 5000,
+        limit_page_length: BRAND_PRODUCT_PAGE_SIZE,
         brand: brandName.value,
       }),
     ])
 
     brandRecord.value = brand
     loadedProducts.value = products
+    hasMoreBrandProducts.value = products.length === BRAND_PRODUCT_PAGE_SIZE
     console.log('Brand details page state', {
       brandName: brandName.value,
       brand,
@@ -142,8 +146,37 @@ async function loadBrandProducts() {
   } catch {
     brandRecord.value = null
     loadedProducts.value = []
+    hasMoreBrandProducts.value = false
   } finally {
     isLoadingBrandProducts.value = false
+  }
+}
+
+async function loadMoreBrandProducts() {
+  if (isLoadingMoreBrandProducts.value || !hasMoreBrandProducts.value) {
+    return
+  }
+
+  const requestedBrandName = brandName.value
+  isLoadingMoreBrandProducts.value = true
+
+  try {
+    const products = await getProducts({
+      limit_page_length: BRAND_PRODUCT_PAGE_SIZE,
+      limit_start: loadedProducts.value.length,
+      brand: requestedBrandName,
+    })
+
+    if (requestedBrandName !== brandName.value) {
+      return
+    }
+
+    loadedProducts.value = [...loadedProducts.value, ...products]
+    hasMoreBrandProducts.value = products.length === BRAND_PRODUCT_PAGE_SIZE
+  } catch {
+    hasMoreBrandProducts.value = false
+  } finally {
+    isLoadingMoreBrandProducts.value = false
   }
 }
 
@@ -158,6 +191,7 @@ onUnmounted(() => {
 watch(brandName, () => {
   brandRecord.value = null
   loadedProducts.value = []
+  hasMoreBrandProducts.value = false
   failedBrandBannerImages.value = []
   activeBrandBannerSlide.value = 0
   isBrandDescriptionExpanded.value = false
@@ -272,6 +306,16 @@ watch(brandBannerImages, (images) => {
           />
         </div>
         <p v-else class="dashboard-message">No published products found for this brand.</p>
+        <div v-if="hasMoreBrandProducts" class="product-load-more">
+          <button
+            class="product-load-more-button"
+            type="button"
+            :disabled="isLoadingMoreBrandProducts"
+            @click="loadMoreBrandProducts"
+          >
+            {{ isLoadingMoreBrandProducts ? 'Loading more...' : 'Load more products' }}
+          </button>
+        </div>
       </section>
     </main>
   </section>

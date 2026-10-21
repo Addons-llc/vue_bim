@@ -84,6 +84,10 @@ home_page = "buy-in-minutes"
 
 # before_install = "buy_in_minutes.install.before_install"
 # after_install = "buy_in_minutes.install.after_install"
+after_migrate = [
+	"buy_in_minutes.indexes.ensure_catalog_indexes",
+	"buy_in_minutes.catalog_cache.clear_catalog_cache",
+]
 
 # Uninstallation
 # ------------
@@ -145,10 +149,33 @@ home_page = "buy-in-minutes"
 # 	}
 # }
 
+_catalog_cache_events = {
+	"on_update": "buy_in_minutes.catalog_cache.clear_catalog_cache",
+	"on_trash": "buy_in_minutes.catalog_cache.clear_catalog_cache",
+	"after_rename": "buy_in_minutes.catalog_cache.clear_catalog_cache",
+}
+
 doc_events = {
 	"Sales Order": {
 		"on_submit": "buy_in_minutes.payment.on_sales_order_submit",
-	}
+	},
+	**{
+		doctype: _catalog_cache_events
+		for doctype in (
+			"Item",
+			"Item Price",
+			"Item Group",
+			"Brand",
+			"Supplier",
+			"Supplier Store",
+			"Product Bundle",
+			"Price List",
+		)
+	},
+	"File": {
+		"after_insert": "buy_in_minutes.catalog_cache.clear_catalog_cache_for_file",
+		"on_trash": "buy_in_minutes.catalog_cache.clear_catalog_cache_for_file",
+	},
 }
 
 # Fixtures

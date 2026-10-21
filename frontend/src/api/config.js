@@ -1,7 +1,7 @@
 function getCurrentOrigin() {
   return typeof window !== 'undefined' && window.location?.origin
     ? window.location.origin
-    : 'https://addons-bim.m.frappe.cloud'
+    : 'https://buyinminutes.u.frappe.cloud'
 }
 
 export const SITE_BASE_URL =
@@ -19,8 +19,14 @@ export const ITEM_GROUP_API_PATH =
 export const BRAND_API_PATH =
   import.meta.env.VITE_BRAND_API_PATH || '/method/buy_in_minutes.api.get_brands'
 
+export const BRAND_DETAIL_API_PATH =
+  import.meta.env.VITE_BRAND_DETAIL_API_PATH || '/method/buy_in_minutes.api.get_brand'
+
 export const SUPPLIER_STORE_API_PATH =
   import.meta.env.VITE_SUPPLIER_STORE_API_PATH || '/method/buy_in_minutes.api.get_supplier_stores'
+
+export const SUPPLIER_STORE_DETAIL_API_PATH =
+  import.meta.env.VITE_SUPPLIER_STORE_DETAIL_API_PATH || '/method/buy_in_minutes.api.get_supplier_store'
 
 export const SELLING_PRICE_LIST =
   import.meta.env.VITE_SELLING_PRICE_LIST || 'Selling Price'
@@ -29,3 +35,6 @@ export const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '
 
 export const PRODUCT_BUNDLE_API_PATH =
   import.meta.env.VITE_PRODUCT_BUNDLE_API_PATH || '/method/buy_in_minutes.api.get_product_bundles'
+
+export const GOOGLE_CLIENT_ID =
+  import.meta.env.VITE_GOOGLE_CLIENT_ID || '408596288649-1dv8u1abgrjlug0f5cm7buskl6ci2olu.apps.googleusercontent.com'

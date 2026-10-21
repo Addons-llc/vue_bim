@@ -123,6 +123,14 @@ const routes = [
     },
   },
   {
+    path: '/login/verify-phone',
+    name: 'verify-phone',
+    component: LoginPage,
+    meta: {
+      layout: 'blank',
+    },
+  },
+  {
     path: '/login/profile',
     name: 'complete-profile',
     component: ProfilePage,

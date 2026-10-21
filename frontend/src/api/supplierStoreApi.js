@@ -1,6 +1,7 @@
 import {
   SITE_BASE_URL,
   SUPPLIER_STORE_API_PATH,
+  SUPPLIER_STORE_DETAIL_API_PATH,
 } from './config'
 import { apiRequest } from './http'
 
@@ -41,14 +42,6 @@ function normalizeWebsiteUrl(url) {
   }
 
   return `https://${value}`
-}
-
-function normalizeIdentifier(value) {
-  return String(value || '')
-    .trim()
-    .toLowerCase()
-    .replace(/&/g, 'and')
-    .replace(/[^a-z0-9]+/g, '')
 }
 
 function getStoreProductIds(store = {}) {
@@ -161,19 +154,13 @@ export async function getSupplierStores(params = {}) {
 }
 
 export async function getSupplierStore(identifier) {
-  const stores = await getSupplierStores({
-    limit_page_length: 5000,
+  const query = new URLSearchParams({
+    supplier_store: String(identifier || '').trim(),
+    published: 1,
   })
-  const normalizedIdentifier = normalizeIdentifier(identifier)
+  const response = await apiRequest(`${SUPPLIER_STORE_DETAIL_API_PATH}?${query.toString()}`)
 
-  return stores.find((store) =>
-    [
-      store.id,
-      store.name,
-      store.supplier,
-      store.storeCode,
-    ].some((value) => normalizeIdentifier(value) === normalizedIdentifier),
-  ) || null
+  return response.message ? mapSupplierStoreToBrand(response.message) : null
 }
 
 async function getSupplierWebsiteProfileUrlByStoreValue(supplierStore) {

@@ -1,4 +1,5 @@
 import { apiRequest, clearStoredCsrfToken } from './http'
+import { CHECKOUT_RESUME_TOKEN_STORAGE_KEY } from './paymentApi'
 import { clearCurrentUser } from '../data/authStore'
 
 export const AUTH_TOKEN_STORAGE_KEY = 'authToken'
@@ -54,6 +55,28 @@ export async function verifyPhoneOtp(phoneNumber, otp, authFlowToken = '') {
   return response
 }
 
+// Attaches a phone number to the signed-in account (e.g. after Google sign-in).
+export function requestLinkPhoneOtp(phoneNumber) {
+  return apiRequest('/method/buy_in_minutes.auth.request_link_phone_otp', {
+    method: 'POST',
+    body: JSON.stringify({ phone_number: phoneNumber }),
+  })
+}
+
+export async function verifyLinkPhoneOtp(phoneNumber, otp, authFlowToken) {
+  const response = await apiRequest('/method/buy_in_minutes.auth.verify_link_phone_otp', {
+    method: 'POST',
+    body: JSON.stringify({ phone_number: phoneNumber, otp, auth_flow_token: authFlowToken }),
+  })
+
+  if (response?.message?.success) {
+    storeAuthToken(response)
+    clearStoredCsrfToken()
+  }
+
+  return response
+}
+
 export async function createWebsiteUser({ email, fullName, phoneNumber, profileToken }) {
   const response = await apiRequest('/method/buy_in_minutes.auth.complete_phone_profile', {
     method: 'POST',
@@ -73,7 +96,42 @@ export async function createWebsiteUser({ email, fullName, phoneNumber, profileT
   return response
 }
 
-export async function restoreLoginSession() {
+// Finishes a phone sign-up with the name and email from a Google account.
+export async function completeProfileWithGoogle({ accessToken, fullName, phoneNumber, profileToken }) {
+  const response = await apiRequest('/method/buy_in_minutes.auth.complete_phone_profile_with_google', {
+    method: 'POST',
+    body: JSON.stringify({
+      access_token: accessToken,
+      full_name: fullName.trim(),
+      phone_number: phoneNumber,
+      profile_token: profileToken,
+    }),
+  })
+
+  if (response?.message?.success) {
+    storeAuthToken(response)
+    clearStoredCsrfToken()
+  }
+
+  return response
+}
+
+let restoreLoginSessionRequest = null
+
+// Each restore token is single-use (the server issues a fresh one), so
+// callers that start at the same time — App.vue and the cart/orders pages on
+// load — must share one request; a second call would present a spent token.
+export function restoreLoginSession() {
+  if (!restoreLoginSessionRequest) {
+    restoreLoginSessionRequest = requestLoginSessionRestore().finally(() => {
+      restoreLoginSessionRequest = null
+    })
+  }
+
+  return restoreLoginSessionRequest
+}
+
+async function requestLoginSessionRestore() {
   const sessionToken = localStorage.getItem(AUTH_TOKEN_STORAGE_KEY)
 
   if (!sessionToken) {
@@ -99,18 +157,52 @@ export function getCurrentUser() {
   return apiRequest('/method/buy_in_minutes.auth.get_current_user')
 }
 
-export function signInWithProvider(provider) {
-  return apiRequest(`/auth/${provider}/start`)
-}
-
-export function logout() {
-  const request = apiRequest('/method/logout', {
+export async function googleLogin(accessToken) {
+  const response = await apiRequest('/method/buy_in_minutes.auth.google_login', {
     method: 'POST',
+    body: JSON.stringify({ access_token: accessToken }),
   })
 
+  if (response?.message?.success) {
+    storeAuthToken(response)
+    clearStoredCsrfToken()
+  }
+
+  return response
+}
+
+// Session and account data only. Cart, wishlist, saved addresses and the
+// delivery location stay: they live only in this browser, so clearing them
+// would lose them for good.
+function clearLocalCredentials() {
   localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY)
   localStorage.removeItem(AUTH_FLOW_TOKEN_STORAGE_KEY)
+  sessionStorage.removeItem(CHECKOUT_RESUME_TOKEN_STORAGE_KEY)
+  sessionStorage.removeItem('buyInMinutesLastCodOrderItems')
   clearStoredCsrfToken()
   clearCurrentUser()
-  return request
+}
+
+export async function logout() {
+  const sessionToken = localStorage.getItem(AUTH_TOKEN_STORAGE_KEY)
+
+  try {
+    // Revoke the 30-day restore token too, or it could sign this user in again.
+    if (sessionToken) {
+      await apiRequest('/method/buy_in_minutes.auth.revoke_login_session', {
+        method: 'POST',
+        body: JSON.stringify({ session_token: sessionToken }),
+      }).catch((error) => console.error('Session token revoke failed', error))
+    }
+
+    await apiRequest('/method/logout', { method: 'POST' })
+  } finally {
+    clearLocalCredentials()
+  }
+}
+
+/** Full reload onto the login page so no signed-in state survives in memory. */
+export function reloadToLogin() {
+  window.location.hash = '#/login'
+  window.location.reload()
 }

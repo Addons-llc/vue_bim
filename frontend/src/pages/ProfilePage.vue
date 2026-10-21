@@ -1,7 +1,8 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { createWebsiteUser, logout } from '../api/authApi'
+import { completeProfileWithGoogle, createWebsiteUser, logout, reloadToLogin } from '../api/authApi'
+import { fetchGoogleProfile, prepareGoogleSignIn, requestGoogleAccessToken } from '../api/googleIdentity'
 import { getOrderHistory } from '../api/orderHistoryApi'
 import { cartItemCount } from '../data/cartStore'
 import { wishlistItemCount } from '../data/wishlistStore'
@@ -25,6 +26,9 @@ const email = ref('')
 const errorMessage = ref('')
 const successMessage = ref('')
 const isSubmitting = ref(false)
+const isGoogleSubmitting = ref(false)
+// Set once the form is filled from Google; lets the backend trust the email.
+const googleProfile = ref(null)
 const isAddressFormOpen = ref(false)
 const isAddressLocationEditedManually = ref(false)
 const editingAddressId = ref('')
@@ -219,7 +223,7 @@ async function confirmLogout() {
   } finally {
     isLoggingOut.value = false
     isLogoutSheetOpen.value = false
-    router.push({ name: 'login' })
+    reloadToLogin()
   }
 }
 
@@ -280,8 +284,43 @@ onMounted(() => {
 
   if (!isCompletingProfile.value) {
     loadOrders()
+  } else {
+    prepareGoogleSignIn().catch((error) => console.error('Google sign-in setup failed', error))
   }
 })
+
+function finishProfile(user) {
+  setCurrentUser(user)
+  sessionStorage.setItem(AUTO_PROMPT_LOCATION_KEY, '1')
+  return router.push({ name: 'home' })
+}
+
+async function handleGoogleSignIn() {
+  if (isGoogleSubmitting.value) {
+    return
+  }
+
+  errorMessage.value = ''
+  successMessage.value = ''
+  isGoogleSubmitting.value = true
+
+  try {
+    const accessToken = await requestGoogleAccessToken()
+    const profile = await fetchGoogleProfile(accessToken)
+
+    fullName.value = profile.fullName || fullName.value
+    email.value = profile.email
+    googleProfile.value = { ...profile, accessToken }
+    successMessage.value = 'Details filled from Google. Check them and tap Continue shopping.'
+  } catch (error) {
+    if (!error.cancelled) {
+      console.error('Google profile fetch failed', error)
+      errorMessage.value = error.message
+    }
+  } finally {
+    isGoogleSubmitting.value = false
+  }
+}
 
 async function completeProfile() {
   errorMessage.value = ''
@@ -296,8 +335,15 @@ async function completeProfile() {
       profileToken: profileToken.value,
     }
 
+    // Email still as Google gave it: use the verified path, which also
+    // attaches this phone if that Google account is already registered.
+    const isGoogleEmail = googleProfile.value
+      && email.value.trim().toLowerCase() === googleProfile.value.email.toLowerCase()
+
     console.log('Website user profile payload', payload)
-    const response = await createWebsiteUser(payload)
+    const response = isGoogleEmail
+      ? await completeProfileWithGoogle({ ...payload, accessToken: googleProfile.value.accessToken })
+      : await createWebsiteUser(payload)
     console.log('Website user profile response', response)
 
     if (!response?.message?.success) {
@@ -305,7 +351,6 @@ async function completeProfile() {
     }
 
     const user = response.message.user || {}
-    setCurrentUser(user)
 
     localStorage.setItem(
       'customerProfile',
@@ -317,8 +362,7 @@ async function completeProfile() {
     )
 
     successMessage.value = 'Profile created successfully.'
-    sessionStorage.setItem(AUTO_PROMPT_LOCATION_KEY, '1')
-    await router.push({ name: 'home' })
+    await finishProfile(user)
   } catch (error) {
     console.error('Website user creation failed', error)
     errorMessage.value = error.message
@@ -658,53 +702,93 @@ function saveAddress() {
     </Teleport>
   </section>
 
-  <main v-else class="auth-page">
-    <section class="login-panel">
-      <a class="auth-brand" :href="appBase" aria-label="Buy In Minutes home">
-        <img class="brand-logo" :src="`${appBase}bim.jpeg`" alt="" />
-        <span class="brand-name">BIM</span>
-      </a>
+  <main v-else class="auth-page signin-page">
+    <section class="signin-shell">
+      <header class="signin-hero is-compact">
+        <a class="signin-brand" :href="appBase" aria-label="Buy In Minutes home">
+          <img class="signin-logo" :src="`${appBase}bim.jpeg`" alt="" />
+          <span class="signin-brand-name">Buy In Minutes</span>
+        </a>
+        <span class="signin-otp-badge" aria-hidden="true">
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <circle cx="12" cy="8" r="4" />
+            <path d="M4 21a8 8 0 0 1 16 0" />
+          </svg>
+        </span>
+      </header>
 
-      <div class="login-heading">
-        <p class="section-label">Profile</p>
-        <h1>Complete your details</h1>
-        <p class="login-copy">Add your name and email for faster checkout.</p>
-      </div>
+      <section class="signin-card">
+        <div class="signin-heading">
+          <h1>Confirm your details</h1>
+          <p>Your number is verified. Fill in your name and email with Google, or enter them below.</p>
+        </div>
 
-      <form class="login-form" @submit.prevent="completeProfile">
-        <label class="field-label" for="full-name">Full name</label>
-        <input
-          id="full-name"
-          v-model="fullName"
-          class="form-input"
-          type="text"
-          autocomplete="name"
-          placeholder="Enter full name"
-          required
-        />
+        <div class="signin-social signin-profile-google">
+          <button
+            class="signin-social-button is-google"
+            type="button"
+            :disabled="isGoogleSubmitting || isSubmitting"
+            @click="handleGoogleSignIn"
+          >
+            <svg aria-hidden="true" viewBox="0 0 24 24">
+              <path fill="#4285F4" d="M23.52 12.27c0-.85-.08-1.67-.22-2.45H12v4.64h6.46a5.52 5.52 0 0 1-2.4 3.62v3h3.88c2.27-2.09 3.58-5.17 3.58-8.81z" />
+              <path fill="#34A853" d="M12 24c3.24 0 5.96-1.07 7.94-2.9l-3.88-3.02c-1.07.72-2.45 1.15-4.06 1.15-3.13 0-5.78-2.11-6.72-4.95H1.27v3.11A12 12 0 0 0 12 24z" />
+              <path fill="#FBBC05" d="M5.28 14.28a7.2 7.2 0 0 1 0-4.56V6.61H1.27a12 12 0 0 0 0 10.78l4.01-3.11z" />
+              <path fill="#EA4335" d="M12 4.77c1.76 0 3.34.61 4.59 1.8l3.44-3.44A11.97 11.97 0 0 0 1.27 6.61l4.01 3.11C6.22 6.88 8.87 4.77 12 4.77z" />
+            </svg>
+            <span>{{ isGoogleSubmitting ? 'Connecting...' : 'Fill with Google' }}</span>
+          </button>
+        </div>
 
-        <label class="field-label" for="email">Email address</label>
-        <input
-          id="email"
-          v-model="email"
-          class="form-input"
-          type="email"
-          autocomplete="email"
-          placeholder="name@example.com"
-          required
-        />
+        <div class="signin-divider"><span>or enter them manually</span></div>
 
-        <button class="login-button" type="submit" :disabled="isSubmitting">
-          {{ isSubmitting ? 'Creating account...' : 'Continue shopping' }}
-        </button>
-      </form>
+        <form class="signin-form signin-profile-form" @submit.prevent="completeProfile">
+          <label class="signin-label" for="full-name">Full name</label>
+          <div class="signin-field">
+            <input
+              id="full-name"
+              v-model="fullName"
+              class="signin-input"
+              type="text"
+              autocomplete="name"
+              placeholder="Enter full name"
+              required
+            />
+          </div>
 
-      <p v-if="successMessage" class="form-message success-message">
-        {{ successMessage }}
-      </p>
-      <p v-if="errorMessage" class="form-message error-message">
-        {{ errorMessage }}
-      </p>
+          <label class="signin-label" for="email">Email address</label>
+          <div class="signin-field">
+            <input
+              id="email"
+              v-model="email"
+              class="signin-input"
+              type="email"
+              autocomplete="email"
+              placeholder="name@example.com"
+              required
+            />
+          </div>
+
+          <button class="signin-submit" type="submit" :disabled="isSubmitting || isGoogleSubmitting">
+            <span>{{ isSubmitting ? 'Creating account...' : 'Continue shopping' }}</span>
+          </button>
+        </form>
+
+        <p v-if="errorMessage" class="signin-message is-error" role="alert">
+          {{ errorMessage }}
+        </p>
+
+        <p v-if="successMessage" class="signin-message is-success" role="status">
+          {{ successMessage }}
+        </p>
+      </section>
     </section>
   </main>
 </template>

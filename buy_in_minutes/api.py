@@ -1,7 +1,10 @@
 import frappe
 from frappe import _
+from frappe.query_builder import Criterion, Order
+from frappe.query_builder.functions import Coalesce, NullIf
 from frappe.utils import flt, getdate, today
 
+from buy_in_minutes.catalog_cache import get_cached_catalog_value
 from buy_in_minutes.payment import (
 	_build_delivery_address_display,
 	_get_or_create_customer_address,
@@ -85,36 +88,32 @@ def _get_item_supplier_portal_publish_fields():
 	]
 
 
-def _record_has_publish_flag(record, publish_fields):
-	if not publish_fields:
-		return True
+def _get_publish_criterion(table, doctype, publish_fields):
+	# A record counts as published when any of its publish fields is set (same rule as _is_truthy_flag).
+	meta = frappe.get_meta(doctype)
+	conditions = []
+	for fieldname in publish_fields:
+		df = meta.get_field(fieldname)
+		if df and df.fieldtype == "Check":
+			conditions.append(table[fieldname] == 1)
+		else:
+			conditions.append(table[fieldname].isin(["1", "Yes"]))
 
-	return any(_is_truthy_flag(record.get(fieldname)) for fieldname in publish_fields)
-
-
-def _filter_published_records(records, publish_fields):
-	if not publish_fields:
-		return records
-
-	return [
-		record
-		for record in records
-		if _record_has_publish_flag(record, publish_fields)
-	]
+	return Criterion.any(conditions)
 
 
 def _get_item_group_order_fields():
 	return _get_existing_fields("Item Group", ("lft", "idx"))
 
 
-def _get_item_group_order_by(order_fields):
+def _get_item_group_order_field(order_fields):
 	if "lft" in order_fields:
-		return "lft asc"
+		return "lft"
 
 	if "idx" in order_fields:
-		return "idx asc"
+		return "idx"
 
-	return "name asc"
+	return "name"
 
 
 def _get_item_group_publish_fields():
@@ -654,32 +653,42 @@ def _get_supplier_store_item_codes(supplier_store_record):
 	return list(dict.fromkeys(item_codes))
 
 
-def _filter_items_by_supplier(items, supplier):
+def _get_supplier_match_values(supplier):
+	supplier = str(supplier or "").strip()
 	if not supplier:
-		return items
+		return []
 
-	return [
-		item
-		for item in items
-		if supplier in (
-			item.get("supplier"),
-			item.get("default_supplier"),
-			item.get("supplier_name"),
-			item.get("supplier_display_name"),
+	# The filter accepts either the Supplier ID or its display name.
+	supplier_ids = frappe.get_all(
+		"Supplier",
+		filters={"supplier_name": supplier},
+		pluck="name",
+		ignore_permissions=True,
+	)
+
+	return list(dict.fromkeys([supplier, *supplier_ids]))
+
+
+def _get_item_effective_supplier_term(item_table, item_supplier_fields):
+	# Mirrors _apply_supplier_details: the first filled supplier field on the Item wins,
+	# otherwise the first Item Supplier row.
+	supplier_terms = [NullIf(item_table[fieldname], "") for fieldname in item_supplier_fields]
+
+	if frappe.db.exists("DocType", "Item Supplier"):
+		item_supplier_table = frappe.qb.DocType("Item Supplier")
+		supplier_terms.append(
+			frappe.qb.from_(item_supplier_table)
+			.select(item_supplier_table.supplier)
+			.where(item_supplier_table.parent == item_table.name)
+			.where(Coalesce(item_supplier_table.supplier, "") != "")
+			.orderby(item_supplier_table.idx)
+			.limit(1)
 		)
-	]
 
+	if not supplier_terms:
+		return None
 
-def _filter_items_by_item_codes(items, item_codes):
-	item_codes = set(item_codes or [])
-	if not item_codes:
-		return items
-
-	return [
-		item
-		for item in items
-		if item.get("name") in item_codes or item.get("item_code") in item_codes
-	]
+	return Coalesce(*supplier_terms)
 
 
 def _get_supplier_detail_record(supplier):
@@ -1219,8 +1228,31 @@ def create_request_for_quotation_from_cart(
 
 @frappe.whitelist(allow_guest=True)
 def get_brands(limit_page_length=24, published=1):
-	limit_page_length = frappe.utils.cint(limit_page_length) or 24
+	params = {
+		"limit_page_length": frappe.utils.cint(limit_page_length) or 24,
+		"published": 1 if _is_truthy_flag(published) else 0,
+	}
 
+	return get_cached_catalog_value("brands", params, lambda: _get_brands(**params))
+
+
+@frappe.whitelist(allow_guest=True)
+def get_brand(brand=None, published=1):
+	brand = str(brand or "").strip()
+	if not brand:
+		return None
+
+	params = {"published": 1 if _is_truthy_flag(published) else 0, "brand": brand}
+	brands = get_cached_catalog_value(
+		"brand",
+		params,
+		lambda: _get_brands(limit_page_length=1, **params),
+	)
+
+	return brands[0] if brands else None
+
+
+def _get_brands(limit_page_length, published, brand=None):
 	if not frappe.db.exists("DocType", "Brand"):
 		return []
 
@@ -1289,11 +1321,14 @@ def get_brands(limit_page_length=24, published=1):
 	if "disabled" in brand_fields:
 		filters["disabled"] = 0
 
-	if _is_truthy_flag(published):
+	if published:
 		if "custom_published" in brand_fields:
 			filters["custom_published"] = 1
 		elif "published" in brand_fields:
 			filters["published"] = 1
+
+	if brand:
+		filters["name"] = brand
 
 	brands = frappe.get_all(
 		"Brand",
@@ -1369,8 +1404,31 @@ def get_supplier_details(supplier):
 
 @frappe.whitelist(allow_guest=True)
 def get_supplier_stores(limit_page_length=24, published=1):
-	limit_page_length = frappe.utils.cint(limit_page_length) or 24
+	params = {
+		"limit_page_length": frappe.utils.cint(limit_page_length) or 24,
+		"published": 1 if _is_truthy_flag(published) else 0,
+	}
 
+	return get_cached_catalog_value("supplier_stores", params, lambda: _get_supplier_stores(**params))
+
+
+@frappe.whitelist(allow_guest=True)
+def get_supplier_store(supplier_store=None, published=1):
+	supplier_store = str(supplier_store or "").strip()
+	if not supplier_store:
+		return None
+
+	params = {"published": 1 if _is_truthy_flag(published) else 0, "supplier_store": supplier_store}
+	stores = get_cached_catalog_value(
+		"supplier_store",
+		params,
+		lambda: _get_supplier_stores(limit_page_length=1, **params),
+	)
+
+	return stores[0] if stores else None
+
+
+def _get_supplier_stores(limit_page_length, published, supplier_store=None):
 	if not frappe.db.exists("DocType", "Supplier Store"):
 		return []
 
@@ -1436,13 +1494,23 @@ def get_supplier_stores(limit_page_length=24, published=1):
 	if "store_status" in store_fields:
 		filters["store_status"] = "Active"
 
-	if _is_truthy_flag(published) and "published" in store_fields:
+	if published and "published" in store_fields:
 		filters["published"] = 1
+
+	# A single store can be looked up by its ID, store code, store name or supplier.
+	or_filters = None
+	if supplier_store:
+		or_filters = [["name", "=", supplier_store]] + [
+			[fieldname, "=", supplier_store]
+			for fieldname in ("store_code", "store_name", "supplier")
+			if fieldname in store_fields
+		]
 
 	return frappe.get_all(
 		"Supplier Store",
 		fields=fields,
 		filters=filters,
+		or_filters=or_filters,
 		ignore_permissions=True,
 		order_by="modified desc",
 		limit_page_length=limit_page_length,
@@ -1463,8 +1531,42 @@ def get_items(
 	published=1,
 	item_codes=None,
 ):
-	limit_page_length = frappe.utils.cint(limit_page_length) or 20
-	limit_start = frappe.utils.cint(limit_start) or 0
+	# Internal-only filter (used by get_product_bundles); ignore values coming in from the query string.
+	item_codes = list(item_codes) if isinstance(item_codes, (list, tuple)) else None
+	params = {
+		"limit_page_length": frappe.utils.cint(limit_page_length) or 20,
+		"limit_start": frappe.utils.cint(limit_start) or 0,
+		"search": search or None,
+		"item_group": item_group or None,
+		"item": item or None,
+		"variant_of": variant_of or None,
+		"brand": brand or None,
+		"supplier": supplier or None,
+		"supplier_store": supplier_store or None,
+		"published": 1 if _is_truthy_flag(published) else 0,
+		"item_codes": item_codes,
+	}
+
+	return get_cached_catalog_value(
+		"items",
+		{**params, "price_list": _get_selling_price_list()},
+		lambda: _get_items(**params),
+	)
+
+
+def _get_items(
+	limit_page_length,
+	limit_start,
+	search,
+	item_group,
+	item,
+	variant_of,
+	brand,
+	supplier,
+	supplier_store,
+	published,
+	item_codes,
+):
 	supplier_store_record = _get_supplier_store_record(supplier_store)
 	supplier_store_item_codes = _get_supplier_store_item_codes(supplier_store_record)
 
@@ -1474,42 +1576,21 @@ def get_items(
 	if supplier_store_record and not supplier:
 		supplier = supplier_store_record.get("supplier")
 
+	if item_codes is not None and not item_codes:
+		return []
+
 	item_meta = frappe.get_meta("Item")
-	filters = {"disabled": 0}
-	or_filters = None
 
-	if item:
-		filters["name"] = item
-
-	# Internal-only filter (used by get_product_bundles); ignore values coming in from the query string.
-	if isinstance(item_codes, (list, tuple)):
-		if not item_codes:
-			return []
-		filters["name"] = ["in", list(item_codes)]
-
-	if variant_of and item_meta.has_field("variant_of"):
-		filters["variant_of"] = variant_of
-
-	if item_group:
-		filters["item_group"] = item_group
-
-	if brand:
-		if not item_meta.has_field("brand"):
-			return []
-		filters["brand"] = brand
-
-	if search:
-		search_text = f"%{search}%"
-		or_filters = [
-			["item_name", "like", search_text],
-			["item_code", "like", search_text],
-			["description", "like", search_text],
-		]
+	if brand and not item_meta.has_field("brand"):
+		return []
 
 	publish_fields = _get_item_supplier_portal_publish_fields()
+	item_supplier_fields = [
+		fieldname for fieldname in ITEM_SUPPLIER_FIELDS if item_meta.has_field(fieldname)
+	]
 	optional_fields = [
 		fieldname
-	for fieldname in (
+		for fieldname in (
 			"image",
 			"website_image",
 			"thumbnail",
@@ -1526,50 +1607,90 @@ def get_items(
 			"custom_available_qty",
 			"custom_out_of_stock",
 			"standard_rate",
-			*ITEM_SUPPLIER_FIELDS,
 		)
 		if item_meta.has_field(fieldname)
 	]
-	fields = [
-		"name",
-		"item_code",
-		"item_name",
-		"item_group",
-		"description",
-		"disabled",
-	] + optional_fields + publish_fields
-	get_all_kwargs = {
-		"fields": fields,
-		"filters": filters,
-		"or_filters": or_filters,
-		"order_by": "modified desc",
-	}
-	should_filter_after_loading = bool(supplier or supplier_store_item_codes)
-
-	if _is_truthy_flag(published) and (publish_fields or should_filter_after_loading):
-		get_all_kwargs["limit_page_length"] = 0
-	else:
-		get_all_kwargs["limit_start"] = limit_start
-		get_all_kwargs["limit_page_length"] = limit_page_length
-
-	items = frappe.get_all(
-		"Item",
-		**get_all_kwargs,
+	fields = list(
+		dict.fromkeys(
+			[
+				"name",
+				"item_code",
+				"item_name",
+				"item_group",
+				"description",
+				"disabled",
+			]
+			+ optional_fields
+			+ item_supplier_fields
+			+ publish_fields
+		)
 	)
 
-	if _is_truthy_flag(published):
-		items = _filter_published_records(items, publish_fields)
+	item_table = frappe.qb.DocType("Item")
+	query = (
+		frappe.qb.from_(item_table)
+		.select(*[item_table[fieldname] for fieldname in fields])
+		.where(item_table.disabled == 0)
+	)
+
+	if item:
+		query = query.where(item_table.name == item)
+
+	if item_codes is not None:
+		query = query.where(item_table.name.isin(item_codes))
+
+	if variant_of and item_meta.has_field("variant_of"):
+		query = query.where(item_table.variant_of == variant_of)
+
+	if item_group:
+		query = query.where(item_table.item_group == item_group)
+
+	if brand:
+		query = query.where(item_table.brand == brand)
+
+	if search:
+		search_text = f"%{search}%"
+		query = query.where(
+			Criterion.any(
+				[
+					item_table.item_name.like(search_text),
+					item_table.item_code.like(search_text),
+					item_table.description.like(search_text),
+				]
+			)
+		)
+
+	if published and publish_fields:
+		query = query.where(_get_publish_criterion(item_table, "Item", publish_fields))
+
+	if supplier_store_item_codes:
+		query = query.where(
+			Criterion.any(
+				[
+					item_table.name.isin(supplier_store_item_codes),
+					item_table.item_code.isin(supplier_store_item_codes),
+				]
+			)
+		)
+
+	if supplier:
+		effective_supplier = _get_item_effective_supplier_term(item_table, item_supplier_fields)
+		if effective_supplier is None:
+			return []
+		query = query.where(effective_supplier.isin(_get_supplier_match_values(supplier)))
+
+	items = (
+		query.orderby(item_table.modified, order=Order.desc)
+		.limit(limit_page_length)
+		.offset(limit_start)
+		.run(as_dict=True)
+	)
 
 	_apply_selling_prices(items)
 	_apply_item_group_images(items)
 	_apply_item_attachments(items)
 	_apply_item_variant_metadata(items)
 	_apply_supplier_details(items)
-	items = _filter_items_by_item_codes(items, supplier_store_item_codes)
-	items = _filter_items_by_supplier(items, supplier)
-
-	if _is_truthy_flag(published) and (publish_fields or should_filter_after_loading):
-		items = items[limit_start:limit_start + limit_page_length]
 
 	return items
 
@@ -1621,8 +1742,20 @@ def _get_product_bundle_components(bundle_names):
 
 @frappe.whitelist(allow_guest=True)
 def get_product_bundles(limit_page_length=12, item_group=None, published=1):
-	limit_page_length = frappe.utils.cint(limit_page_length) or 12
+	params = {
+		"limit_page_length": frappe.utils.cint(limit_page_length) or 12,
+		"item_group": item_group or None,
+		"published": 1 if _is_truthy_flag(published) else 0,
+	}
 
+	return get_cached_catalog_value(
+		"product_bundles",
+		{**params, "price_list": _get_selling_price_list()},
+		lambda: _get_product_bundles(**params),
+	)
+
+
+def _get_product_bundles(limit_page_length, item_group, published):
 	bundles = frappe.get_all(
 		"Product Bundle",
 		fields=["name", "new_item_code", "description"],
@@ -1636,13 +1769,19 @@ def get_product_bundles(limit_page_length=12, item_group=None, published=1):
 
 	bundles_by_item_code = {bundle.new_item_code: bundle for bundle in bundles}
 	# The bundle's parent Item carries the price, image, supplier and publish flag, so reuse get_items for it.
-	items = get_items(
-		limit_page_length=len(bundles_by_item_code),
+	items = _get_items(
+		limit_page_length=limit_page_length,
+		limit_start=0,
+		search=None,
 		item_group=item_group,
+		item=None,
+		variant_of=None,
+		brand=None,
+		supplier=None,
+		supplier_store=None,
 		published=published,
 		item_codes=list(bundles_by_item_code),
 	)
-	items = items[:limit_page_length]
 	components_by_bundle = _get_product_bundle_components(
 		[bundles_by_item_code[item.name].name for item in items]
 	)
@@ -1662,7 +1801,15 @@ def get_product_bundles(limit_page_length=12, item_group=None, published=1):
 
 @frappe.whitelist(allow_guest=True)
 def get_item_groups(limit_page_length=5000, published=1):
-	limit_page_length = frappe.utils.cint(limit_page_length) or 5000
+	params = {
+		"limit_page_length": frappe.utils.cint(limit_page_length) or 5000,
+		"published": 1 if _is_truthy_flag(published) else 0,
+	}
+
+	return get_cached_catalog_value("item_groups", params, lambda: _get_item_groups(**params))
+
+
+def _get_item_groups(limit_page_length, published):
 	optional_fields = _get_existing_fields(
 		"Item Group",
 		(
@@ -1681,22 +1828,23 @@ def get_item_groups(limit_page_length=5000, published=1):
 	order_fields = _get_item_group_order_fields()
 	publish_fields = _get_item_group_publish_fields()
 
-	item_groups = frappe.get_all(
-		"Item Group",
-		fields=["name"] + optional_fields + order_fields + publish_fields,
-		ignore_permissions=True,
-		order_by=_get_item_group_order_by(order_fields),
-		limit_page_length=limit_page_length,
+	item_group_table = frappe.qb.DocType("Item Group")
+	query = (
+		frappe.qb.from_(item_group_table)
+		.select(
+			*[
+				item_group_table[fieldname]
+				for fieldname in dict.fromkeys(["name"] + optional_fields + order_fields + publish_fields)
+			]
+		)
+		.where(item_group_table.name != "All Item Groups")
+		.limit(limit_page_length)
 	)
 
-	if _is_truthy_flag(published):
-		item_groups = _filter_published_records(item_groups, publish_fields)
+	if published and publish_fields:
+		query = query.where(_get_publish_criterion(item_group_table, "Item Group", publish_fields))
 
-	return [
-		item_group
-		for item_group in item_groups
-		if item_group.name != "All Item Groups"
-	]
+	return query.orderby(item_group_table[_get_item_group_order_field(order_fields)]).run(as_dict=True)
 
 
 def _can_view_sales_order(sales_order):

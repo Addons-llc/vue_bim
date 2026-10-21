@@ -1,5 +1,6 @@
 import {
   BRAND_API_PATH,
+  BRAND_DETAIL_API_PATH,
   SITE_BASE_URL,
 } from './config'
 import { apiRequest } from './http'
@@ -176,17 +177,12 @@ export async function getBrands(params = {}) {
 }
 
 export async function getBrand(identifier) {
-  const brands = await getBrands({
-    limit_page_length: 5000,
+  const query = new URLSearchParams({
+    brand: String(identifier || ''),
+    published: 1,
   })
-  const normalizedIdentifier = String(identifier || '').toLowerCase()
-  const matchedBrand = brands.find((brand) =>
-    [
-      brand.id,
-      brand.name,
-      brand.brand,
-    ].some((value) => String(value || '').toLowerCase() === normalizedIdentifier),
-  ) || null
+  const response = await apiRequest(`${BRAND_DETAIL_API_PATH}?${query.toString()}`)
+  const matchedBrand = response.message ? mapBrand(response.message) : null
 
   console.log('Brand banner fetch response', {
     identifier,

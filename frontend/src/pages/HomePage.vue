@@ -26,6 +26,7 @@ const props = defineProps({
   },
 })
 
+const HOME_RAIL_SIZE = 12
 const router = useRouter()
 const searchText = computed(() => props.searchText)
 const initialCategory = computed(() => props.category)
@@ -70,8 +71,8 @@ const isPublished = (item) => item.isPublished !== false
 const publishedBrands = computed(() => brands.value.filter(isPublished))
 const publishedStores = computed(() => stores.value.filter(isPublished))
 const publishedBundles = computed(() => productBundles.value.filter(isPublished))
-const discoveryBrands = computed(() => publishedBrands.value.slice(0, 12))
-const discoveryStores = computed(() => publishedStores.value.slice(0, 12))
+const discoveryBrands = computed(() => publishedBrands.value.slice(0, HOME_RAIL_SIZE))
+const discoveryStores = computed(() => publishedStores.value.slice(0, HOME_RAIL_SIZE))
 const discoveryCategories = computed(() =>
   categories.value
     .filter(isPublished)
@@ -80,7 +81,7 @@ const discoveryCategories = computed(() =>
 
       return !parentItemGroup || parentItemGroup === 'All Item Groups'
     })
-    .slice(0, 12),
+    .slice(0, HOME_RAIL_SIZE),
 )
 const brandsTabRoute = { name: 'categories', query: { tab: 'brands' } }
 const storesTabRoute = { name: 'categories', query: { tab: 'stores' } }
@@ -135,7 +136,7 @@ async function openCategoryItem(category) {
 async function loadBrands() {
   try {
     brands.value = await getBrands({
-      limit_page_length: 5000,
+      limit_page_length: HOME_RAIL_SIZE,
     })
   } catch {
     brands.value = []
@@ -145,7 +146,7 @@ async function loadBrands() {
 async function loadStores() {
   try {
     stores.value = await getSupplierStores({
-      limit_page_length: 5000,
+      limit_page_length: HOME_RAIL_SIZE,
     })
   } catch {
     stores.value = []
@@ -155,7 +156,7 @@ async function loadStores() {
 async function loadProductBundles() {
   try {
     productBundles.value = await getProductBundles({
-      limit_page_length: 12,
+      limit_page_length: HOME_RAIL_SIZE,
     })
   } catch {
     productBundles.value = []
