@@ -147,4 +147,16 @@ const routes = [
 export const router = createRouter({
   history: createWebHashHistory(),
   routes,
+  scrollBehavior(to, from, savedPosition) {
+    if (savedPosition) {
+      return savedPosition
+    }
+
+    // Query-only changes (e.g. home filters) keep the current scroll position.
+    if (to.path === from.path) {
+      return false
+    }
+
+    return { top: 0 }
+  },
 })

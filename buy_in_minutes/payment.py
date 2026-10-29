@@ -564,7 +564,18 @@ def _is_guest_user(user_name=None):
 	return _normalize_user_name(user_name) == "Guest"
 
 
-def _require_checkout_user():
+def _require_checkout_user(checkout_user=None):
+	# The mobile app signs every request with one shared API key, so it names
+	# the signed-in buyer explicitly. Only a System User session may act for
+	# another user; website users can only ever check out as themselves.
+	checkout_user = _normalize_user_name(checkout_user, default=None)
+	if checkout_user and checkout_user != frappe.session.user:
+		if frappe.db.get_value("User", frappe.session.user, "user_type") != "System User":
+			frappe.throw(_("Not permitted to check out for another user."), frappe.PermissionError)
+		if frappe.db.get_value("User", checkout_user, "enabled") != 1:
+			frappe.throw(_("Checkout user was not found."), frappe.AuthenticationError)
+		frappe.set_user(checkout_user)
+
 	if _is_guest_user():
 		frappe.throw(_("Please sign in before checkout."), frappe.AuthenticationError)
 
@@ -1077,6 +1088,31 @@ def _apply_delivery_address_to_sales_order(
 	if address_display:
 		_set_doc_value_if_field_exists(sales_order, "address_display", address_display)
 		_set_doc_value_if_field_exists(sales_order, "shipping_address", address_display)
+
+
+def _apply_user_contact_to_sales_order(sales_order, customer, user_name):
+	"""Fill the order's contact name/phone/email from the buyer's User when no
+	delivery address contact was given."""
+	user = frappe.db.get_value(
+		"User", user_name, ["full_name", "email", "mobile_no"], as_dict=True
+	)
+	if not user:
+		return
+
+	contact_person = _get_or_create_customer_contact(
+		customer,
+		{
+			"contact_name": user.full_name,
+			"phone": user.mobile_no,
+			"email": user.email,
+		},
+	)
+	if contact_person:
+		sales_order.contact_person = contact_person
+	_set_doc_value_if_field_exists(sales_order, "contact_display", user.full_name)
+	_set_doc_value_if_field_exists(sales_order, "contact_mobile", user.mobile_no)
+	_set_doc_value_if_field_exists(sales_order, "contact_phone", user.mobile_no)
+	_set_doc_value_if_field_exists(sales_order, "contact_email", user.email)
 
 
 def _get_checkout_items(cart_items, delivery_fee=None, include_delivery_fee_item=True):
@@ -1834,6 +1870,8 @@ def _upsert_sales_order(
 		delivery_address,
 		address_display=address_display,
 	)
+	if not sales_order.contact_person:
+		_apply_user_contact_to_sales_order(sales_order, customer, checkout_user)
 	address_display = _clean_text(address_display) or _build_delivery_address_display(
 		delivery_address
 	)
@@ -2207,8 +2245,9 @@ def create_checkout_session(
 	delivery_fee=None,
 	coupon_code=None,
 	customer_pickup=False,
+	checkout_user=None,
 ):
-	_require_checkout_user()
+	_require_checkout_user(checkout_user)
 
 	checkout_items = _get_checkout_items(cart_items, delivery_fee=delivery_fee)
 	sales_order_checkout_items = _get_checkout_items(
@@ -2265,13 +2304,14 @@ def create_payment_intent(
 	delivery_fee=None,
 	coupon_code=None,
 	customer_pickup=False,
+	checkout_user=None,
 ):
 	"""In-app PaymentSheet counterpart of create_checkout_session — same
 	Sales Order upsert, but returns a PaymentIntent client_secret instead of
 	a hosted Checkout Session URL, so the mobile app can collect card
 	details with Stripe's native PaymentSheet instead of a browser redirect.
 	"""
-	_require_checkout_user()
+	_require_checkout_user(checkout_user)
 
 	checkout_items = _get_checkout_items(cart_items, delivery_fee=delivery_fee)
 	sales_order_checkout_items = _get_checkout_items(
@@ -2365,8 +2405,9 @@ def create_cash_on_delivery_order(
 	delivery_fee=None,
 	coupon_code=None,
 	customer_pickup=False,
+	checkout_user=None,
 ):
-	_require_checkout_user()
+	_require_checkout_user(checkout_user)
 
 	checkout_items = _get_checkout_items(
 		cart_items,
