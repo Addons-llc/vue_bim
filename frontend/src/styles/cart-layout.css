@@ -1,0 +1,313 @@
+/* Cart page layout: items and details on the left, bill and payment on the right. */
+.cart-page {
+  gap: 18px;
+}
+
+.cart-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  animation: cart-rise 0.4s ease both;
+}
+
+.cart-heading h1 {
+  margin: 0;
+  color: #111827;
+  font-size: 28px;
+  font-weight: 900;
+  line-height: 1.15;
+}
+
+.cart-heading p {
+  margin: 4px 0 0;
+  color: #6b7280;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.cart-heading-link {
+  flex: 0 0 auto;
+  border: 0;
+  padding: 4px 0;
+  background: transparent;
+  color: #078b20;
+  cursor: pointer;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.cart-heading-link:hover {
+  color: #056a19;
+  text-decoration: underline;
+}
+
+.cart-heading-link:focus-visible {
+  border-radius: 4px;
+  outline: 2px solid #078b20;
+  outline-offset: 2px;
+}
+
+.cart-page-grid {
+  grid-template-columns: minmax(0, 1fr) 380px;
+  gap: 20px;
+}
+
+.cart-main-column {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+
+.cart-items-panel,
+.cart-panel,
+.cart-summary-card,
+.cart-policy-card {
+  border: 1px solid #e5e7eb;
+  border-radius: 16px;
+  background: #ffffff;
+  box-shadow: 0 1px 4px rgba(17, 24, 39, 0.05);
+}
+
+.cart-panel,
+.cart-summary-card {
+  padding: 18px;
+  animation: cart-rise 0.4s 0.08s ease both;
+}
+
+.cart-panel-title,
+.cart-summary-card .cart-panel-title {
+  margin: 0 0 14px;
+  color: #111827;
+  font-size: 17px;
+  font-weight: 900;
+  line-height: 1.25;
+}
+
+/* Items */
+.cart-page-item {
+  grid-template-columns: 76px minmax(0, 1fr) auto;
+  gap: 14px;
+  padding: 14px 18px;
+}
+
+.cart-page-item + .cart-page-item {
+  border-top-color: #eef0f3;
+}
+
+.cart-page-item-image {
+  width: 76px;
+  height: 76px;
+}
+
+.cart-page-item-info {
+  gap: 6px;
+}
+
+.cart-page-item-info h2 {
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.cart-page .cart-quantity {
+  border-color: #d1d5db;
+  background: #ffffff;
+}
+
+.cart-page .cart-quantity button {
+  width: 34px;
+  height: 34px;
+}
+
+/* Details */
+.cart-panel .cart-delivery-options {
+  gap: 14px;
+  margin-top: 0;
+  border-top: 0;
+  padding-top: 0;
+}
+
+.cart-panel .cart-address-card {
+  margin-top: 0;
+  border-top: 1px solid #eef0f3;
+  padding-top: 14px;
+}
+
+.cart-panel .cart-date-picker {
+  border-top: 1px solid #eef0f3;
+  padding-top: 14px;
+}
+
+.cart-panel .cart-date-picker:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.cart-panel .cart-slot-prompt,
+.cart-panel .cart-delivery-selection {
+  margin-left: 0;
+}
+
+.cart-fulfillment-options {
+  gap: 10px;
+}
+
+/* Bill */
+.cart-summary-panel {
+  top: 92px;
+}
+
+.cart-summary-card .cart-summary-row:first-of-type {
+  margin-top: 0;
+}
+
+.cart-summary-saving,
+.cart-summary-saving strong {
+  color: #166534;
+}
+
+.cart-summary-total {
+  align-items: baseline;
+  font-size: 15px;
+}
+
+.cart-summary-total strong {
+  font-size: 20px;
+}
+
+.cart-pay-total {
+  display: none;
+}
+
+.cart-payment-actions.is-single {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.cart-page .cart-secondary-button,
+.cart-page .cart-login-button {
+  min-height: 48px;
+  font-size: 14px;
+  letter-spacing: 0;
+  white-space: nowrap;
+}
+
+.cart-policy-card {
+  padding: 14px 18px;
+}
+
+.cart-policy-card h2 {
+  font-size: 14px;
+}
+
+.cart-policy-card p {
+  font-size: 12px;
+}
+
+@media (max-width: 860px) {
+  .cart-page-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 14px;
+  }
+
+  .cart-summary-panel {
+    top: auto;
+  }
+
+  .cart-page-item {
+    grid-template-columns: 72px minmax(0, 1fr);
+    grid-template-areas:
+      "image info"
+      "image actions";
+    gap: 8px 12px;
+    padding: 14px;
+  }
+
+  .cart-page-item-image {
+    grid-area: image;
+    width: 72px;
+    height: 72px;
+  }
+
+  .cart-page-item-info {
+    grid-area: info;
+  }
+
+  .cart-page-item-actions {
+    display: flex;
+    grid-area: actions;
+    justify-content: flex-end;
+    margin: 0;
+  }
+}
+
+@media (max-width: 520px) {
+  .cart-heading h1 {
+    font-size: 24px;
+  }
+
+  .cart-panel,
+  .cart-summary-card {
+    padding: 14px;
+  }
+
+  .cart-policy-card {
+    padding: 12px 14px;
+  }
+
+  .cart-page .cart-quantity button {
+    width: 34px;
+    height: 34px;
+  }
+
+  /* A finished entrance animation still traps fixed children, so the bar's card can't animate. */
+  .cart-summary-card {
+    animation: none;
+  }
+
+  /* Keeps the total and payment buttons on screen above the bottom tabs. */
+  .cart-page .cart-payment-actions:not(.is-rfq-cart) {
+    position: fixed;
+    right: 0;
+    bottom: calc(64px + env(safe-area-inset-bottom, 0px));
+    left: 0;
+    z-index: 35;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 8px;
+    margin: 0;
+    border-top: 1px solid #e5e7eb;
+    padding: 8px 12px 10px;
+    background: #ffffff;
+    box-shadow: 0 -8px 20px rgba(17, 24, 39, 0.08);
+  }
+
+  .cart-page .cart-payment-actions.is-single:not(.is-rfq-cart) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .cart-pay-total {
+    display: flex;
+    grid-column: 1 / -1;
+    align-items: baseline;
+    justify-content: space-between;
+    color: #4b5563;
+    font-size: 13px;
+    font-weight: 700;
+  }
+
+  .cart-pay-total strong {
+    color: #111827;
+    font-size: 17px;
+    font-weight: 900;
+  }
+
+  .cart-page .cart-secondary-button,
+  .cart-page .cart-login-button {
+    min-height: 44px;
+    font-size: 13px;
+  }
+
+  body:has(.cart-payment-actions:not(.is-rfq-cart)) .page-shell {
+    padding-bottom: calc(170px + env(safe-area-inset-bottom, 0px));
+  }
+}

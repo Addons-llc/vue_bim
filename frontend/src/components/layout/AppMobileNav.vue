@@ -1,44 +1,17 @@
 <script setup>
-import { computed, ref } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
-import { currentUser } from '../../data/authStore'
-import { cartItemCount } from '../../data/cartStore'
-
-const emit = defineEmits(['login'])
+import { computed } from 'vue'
+import { useRoute } from 'vue-router'
 
 const route = useRoute()
-const router = useRouter()
 
-const isAuthenticated = computed(() => Boolean(currentUser.value))
 const isHomeActive = computed(() => route.name === 'home')
 const isCategoriesActive = computed(() => ['categories', 'category-details'].includes(route.name))
-const isCartActive = computed(() => route.name === 'cart')
-const isOrdersActive = computed(() => route.name === 'orders')
-const isAccountActive = computed(() => route.name === 'profile')
-// Labels stay hidden until the user taps a tab; after that only the active tab shows its label.
-const hasTappedTab = ref(false)
-
-function markTabTapped() {
-  hasTappedTab.value = true
-}
-
-function goToAccount() {
-  if (!isAuthenticated.value) {
-    emit('login')
-    return
-  }
-
-  router.push({ name: 'profile' })
-}
+const isExploreActive = computed(() => ['stores', 'store-details'].includes(route.name))
+const isServicesActive = computed(() => route.name === 'services')
 </script>
 
 <template>
-  <nav
-    class="mobile-nav"
-    :class="{ 'has-tapped-tab': hasTappedTab }"
-    aria-label="Primary"
-    @click="markTabTapped"
-  >
+  <nav class="mobile-nav" aria-label="Primary">
     <RouterLink
       class="mobile-nav-item"
       :class="{ 'is-active': isHomeActive }"
@@ -85,39 +58,30 @@ function goToAccount() {
 
     <RouterLink
       class="mobile-nav-item"
-      :class="{ 'is-active': isCartActive }"
-      :to="{ name: 'cart' }"
+      :class="{ 'is-active': isExploreActive }"
+      :to="{ name: 'stores' }"
     >
-      <span class="mobile-nav-icon-wrap">
-        <svg
-          class="mobile-nav-icon"
-          aria-hidden="true"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-        >
-          <circle cx="8" cy="21" r="1" />
-          <circle cx="19" cy="21" r="1" />
-          <path d="M2 2h3l3 13h10l3-8H7" />
-        </svg>
-        <span
-          v-if="cartItemCount"
-          class="mobile-nav-badge"
-          :aria-label="`${cartItemCount} items in cart`"
-        >
-          {{ cartItemCount }}
-        </span>
-      </span>
-      <span class="mobile-nav-label">Cart</span>
+      <svg
+        class="mobile-nav-icon"
+        aria-hidden="true"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
+        <path d="M9 4L3 6v14l6-2 6 2 6-2V4l-6 2-6-2z" />
+        <path d="M9 4v14" />
+        <path d="M15 6v14" />
+      </svg>
+      <span class="mobile-nav-label">Explore</span>
     </RouterLink>
 
     <RouterLink
       class="mobile-nav-item"
-      :class="{ 'is-active': isOrdersActive }"
-      :to="{ name: 'orders' }"
+      :class="{ 'is-active': isServicesActive }"
+      :to="{ name: 'services' }"
     >
       <svg
         class="mobile-nav-icon"
@@ -129,34 +93,11 @@ function goToAccount() {
         stroke-linecap="round"
         stroke-linejoin="round"
       >
-        <path d="M7 3h10l2 4v14H5V7l2-4Z" />
-        <path d="M7 7h10" />
-        <path d="M9 12h6" />
-        <path d="M9 16h4" />
+        <rect x="2" y="7" width="20" height="14" rx="2" />
+        <path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2" />
+        <path d="M2 13h20" />
       </svg>
-      <span class="mobile-nav-label">Orders</span>
+      <span class="mobile-nav-label">Services</span>
     </RouterLink>
-
-    <button
-      class="mobile-nav-item"
-      type="button"
-      :class="{ 'is-active': isAccountActive }"
-      @click="goToAccount"
-    >
-      <svg
-        class="mobile-nav-icon"
-        aria-hidden="true"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="2"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-      >
-        <circle cx="12" cy="8" r="4" />
-        <path d="M4 21c1.6-4 5-6 8-6s6.4 2 8 6" />
-      </svg>
-      <span class="mobile-nav-label">Account</span>
-    </button>
   </nav>
 </template>

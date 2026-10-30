@@ -70,10 +70,6 @@ async function handleLogout() {
   }
 }
 
-function navigateToCart() {
-  router.push({ name: 'cart' })
-}
-
 function navigateToWishlist() {
   router.push({ name: 'wishlist' })
 }
@@ -95,7 +91,6 @@ function updateProductSearch(searchText) {
 
   <DefaultLayout
     v-else
-    @cart="navigateToCart"
     @login="navigateToLogin"
     @logout="handleLogout"
     @search="updateProductSearch"

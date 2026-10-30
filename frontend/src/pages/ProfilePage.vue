@@ -1,5 +1,5 @@
 <script setup>
-import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { completeProfileWithGoogle, createWebsiteUser, logout, reloadToLogin } from '../api/authApi'
 import { fetchGoogleProfile, prepareGoogleSignIn, requestGoogleAccessToken } from '../api/googleIdentity'
@@ -8,16 +8,7 @@ import { cartItemCount } from '../data/cartStore'
 import { wishlistItemCount } from '../data/wishlistStore'
 import { currentUser } from '../data/authStore'
 import { setCurrentUser } from '../data/authStore'
-import {
-  addCustomerAddress,
-  customerAddresses,
-  removeCustomerAddress,
-  setDefaultCustomerAddress,
-  updateCustomerAddress,
-} from '../data/addressStore'
-import AddressCard from '../components/profile/AddressCard.vue'
-import AddressForm from '../components/profile/AddressForm.vue'
-import { useAddressLocation } from '../composables/useAddressLocation'
+import { customerAddresses } from '../data/addressStore'
 
 const route = useRoute()
 const router = useRouter()
@@ -29,10 +20,6 @@ const isSubmitting = ref(false)
 const isGoogleSubmitting = ref(false)
 // Set once the form is filled from Google; lets the backend trust the email.
 const googleProfile = ref(null)
-const isAddressFormOpen = ref(false)
-const isAddressLocationEditedManually = ref(false)
-const editingAddressId = ref('')
-const { addressLocationError, fillAddressFromCurrentLocation, isDetectingAddressLocation } = useAddressLocation()
 const appBase = import.meta.env.BASE_URL
 const isCompletingProfile = computed(() => route.name === 'complete-profile')
 const profileName = computed(() =>
@@ -64,11 +51,9 @@ const SUPPLIER_QUOTATION_HISTORY_TYPE = 'supplier_quotation'
 const orders = ref([])
 const isLoadingOrders = ref(false)
 const hasOrdersError = ref(false)
-const isAddressSectionOpen = ref(false)
 const isLogoutSheetOpen = ref(false)
 const isLoggingOut = ref(false)
 const toast = ref({ message: '', tone: 'success', id: 0 })
-const addressSectionRef = ref(null)
 let toastTimer = null
 
 const profileInitials = computed(() => {
@@ -172,12 +157,6 @@ function getStatusTone(status) {
   return 'pending'
 }
 
-async function openAddressSection() {
-  isAddressSectionOpen.value = true
-  await nextTick()
-  addressSectionRef.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-}
-
 function handleStatTap(key) {
   if (key === 'orders') {
     router.push({ name: 'orders' })
@@ -186,7 +165,7 @@ function handleStatTap(key) {
   } else if (key === 'cart') {
     router.push({ name: 'cart' })
   } else {
-    openAddressSection()
+    router.push({ name: 'addresses' })
   }
 }
 
@@ -201,16 +180,6 @@ async function copyToClipboard(value, label) {
   } catch {
     showToast(`Unable to copy ${label.toLowerCase()}`, 'error')
   }
-}
-
-function handleSetDefaultAddress(addressId) {
-  setDefaultCustomerAddress(addressId)
-  showToast('Default address updated')
-}
-
-function handleDeleteAddress(addressId) {
-  removeCustomerAddress(addressId)
-  showToast('Address deleted')
 }
 
 async function confirmLogout() {
@@ -231,40 +200,6 @@ onBeforeUnmount(() => {
   clearTimeout(toastTimer)
 })
 
-function createAddressForm(overrides = {}) {
-  return {
-    label: 'Home',
-    contactName: '',
-    phone: '',
-    email: '',
-    area: '',
-    apartmentOfficeName: '',
-    apartmentOfficeNo: '',
-    building: '',
-    street: '',
-    landmark: '',
-    emirate: '',
-    latitude: '',
-    longitude: '',
-    isDefault: false,
-    ...overrides,
-  }
-}
-
-const addressForm = ref(createAddressForm())
-
-function resetAddressForm() {
-  addressForm.value = createAddressForm({
-    contactName: profileName.value === 'Customer' ? '' : profileName.value,
-    phone: profilePhone.value,
-    email: profileEmail.value,
-    isDefault: !customerAddresses.value.length,
-  })
-  editingAddressId.value = ''
-  isAddressLocationEditedManually.value = false
-  addressLocationError.value = ''
-}
-
 onMounted(() => {
   if (isCompletingProfile.value && !phoneNumber.value) {
     router.replace({ name: 'login' })
@@ -273,13 +208,6 @@ onMounted(() => {
 
   if (!isCompletingProfile.value && !currentUser.value) {
     router.replace({ name: 'login' })
-  }
-
-  resetAddressForm()
-
-  if (route.query.openAddress === '1') {
-    isAddressFormOpen.value = true
-    isAddressSectionOpen.value = true
   }
 
   if (!isCompletingProfile.value) {
@@ -374,74 +302,6 @@ async function completeProfile() {
 function continueShopping() {
   sessionStorage.setItem(AUTO_PROMPT_LOCATION_KEY, '1')
   router.push({ name: 'home' })
-}
-
-function openAddressForm() {
-  resetAddressForm()
-  isAddressFormOpen.value = true
-  isAddressSectionOpen.value = true
-}
-
-function editAddress(address) {
-  addressForm.value = createAddressForm({
-    label: address.label,
-    contactName: address.contactName,
-    phone: address.phone,
-    email: address.email || '',
-    area: address.area,
-    apartmentOfficeName: address.apartmentOfficeName || '',
-    apartmentOfficeNo: address.apartmentOfficeNo || '',
-    building: address.building,
-    street: address.street || '',
-    landmark: address.landmark,
-    emirate: address.emirate || '',
-    latitude: address.latitude || '',
-    longitude: address.longitude || '',
-    isDefault: address.isDefault,
-  })
-  editingAddressId.value = address.id
-  isAddressLocationEditedManually.value = false
-  isAddressFormOpen.value = true
-  isAddressSectionOpen.value = true
-  addressLocationError.value = ''
-}
-
-function cancelAddressForm() {
-  isAddressFormOpen.value = false
-  resetAddressForm()
-}
-
-function markAddressEditedManually() {
-  if (!addressForm.value.latitude && !addressForm.value.longitude) {
-    return
-  }
-
-  addressForm.value = {
-    ...addressForm.value,
-    latitude: '',
-    longitude: '',
-  }
-  isAddressLocationEditedManually.value = true
-}
-
-function handleUseCurrentLocation() {
-  fillAddressFromCurrentLocation(addressForm)
-}
-
-function saveAddress() {
-  successMessage.value = ''
-  errorMessage.value = ''
-
-  if (editingAddressId.value) {
-    updateCustomerAddress(editingAddressId.value, addressForm.value)
-    showToast('Address updated')
-  } else {
-    addCustomerAddress(addressForm.value)
-    showToast('Address added')
-  }
-
-  isAddressFormOpen.value = false
-  resetAddressForm()
 }
 </script>
 
@@ -571,70 +431,24 @@ function saveAddress() {
         </svg>
       </RouterLink>
 
-      <div ref="addressSectionRef" class="account-links-group" :class="{ 'is-open': isAddressSectionOpen }">
-        <button
-          class="account-links-row"
-          type="button"
-          :aria-expanded="isAddressSectionOpen"
-          @click="isAddressSectionOpen = !isAddressSectionOpen"
-        >
-          <span class="account-links-icon is-green" aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M12 21s-7-6.2-7-12a7 7 0 0 1 14 0c0 5.8-7 12-7 12Z" />
-              <circle cx="12" cy="9" r="2.5" />
-            </svg>
-          </span>
-          <span class="account-links-text">
-            <strong>Saved addresses</strong>
-            <small>
-              {{ defaultAddress ? `Default: ${defaultAddress.label}${defaultAddress.area ? ` · ${defaultAddress.area}` : ''}` : 'Add a delivery address' }}
-            </small>
-          </span>
-          <span class="account-count-pill">{{ customerAddresses.length }}</span>
-          <svg class="account-chevron" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
-            <path d="m6 9 6 6 6-6" />
+      <RouterLink class="account-links-row" :to="{ name: 'addresses' }">
+        <span class="account-links-icon is-green" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 21s-7-6.2-7-12a7 7 0 0 1 14 0c0 5.8-7 12-7 12Z" />
+            <circle cx="12" cy="9" r="2.5" />
           </svg>
-        </button>
-
-        <div class="account-collapse" :class="{ 'is-open': isAddressSectionOpen }">
-          <div class="account-collapse-inner">
-            <div class="account-address-panel">
-              <TransitionGroup v-if="customerAddresses.length" name="account-list" tag="div" class="account-address-list">
-                <AddressCard
-                  v-for="address in customerAddresses"
-                  :key="address.id"
-                  :address="address"
-                  @set-default="handleSetDefaultAddress"
-                  @edit="editAddress"
-                  @delete="handleDeleteAddress"
-                />
-              </TransitionGroup>
-
-              <p v-else-if="!isAddressFormOpen" class="account-empty">
-                No saved addresses yet. Add one for faster checkout.
-              </p>
-
-              <AddressForm
-                v-if="isAddressFormOpen"
-                v-model:form="addressForm"
-                :address-location-error="addressLocationError"
-                :is-address-location-edited-manually="isAddressLocationEditedManually"
-                :is-detecting-address-location="isDetectingAddressLocation"
-                :is-editing="Boolean(editingAddressId)"
-                @cancel="cancelAddressForm"
-                @edited="markAddressEditedManually"
-                @submit="saveAddress"
-                @use-current-location="handleUseCurrentLocation"
-              />
-
-              <button v-else class="account-add-address" type="button" @click="openAddressForm">
-                <span aria-hidden="true">+</span>
-                Add new address
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
+        </span>
+        <span class="account-links-text">
+          <strong>Saved addresses</strong>
+          <small>
+            {{ defaultAddress ? `Default: ${defaultAddress.label}${defaultAddress.area ? ` · ${defaultAddress.area}` : ''}` : 'Add a delivery address' }}
+          </small>
+        </span>
+        <span class="account-count-pill">{{ customerAddresses.length }}</span>
+        <svg class="account-chevron is-right" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+          <path d="m9 6 6 6-6 6" />
+        </svg>
+      </RouterLink>
 
       <RouterLink class="account-links-row" :to="{ name: 'cart' }">
         <span class="account-links-icon is-amber" aria-hidden="true">

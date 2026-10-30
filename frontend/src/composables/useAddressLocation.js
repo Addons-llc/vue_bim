@@ -348,13 +348,14 @@ export function useAddressLocation() {
       return
     }
 
+    isDetectingAddressLocation.value = true
+
     const servicesReady = await initializeAddressLocationServices(addressLocationError)
 
     if (!servicesReady) {
+      isDetectingAddressLocation.value = false
       return
     }
-
-    isDetectingAddressLocation.value = true
 
     navigator.geolocation.getCurrentPosition(
       (position) => {

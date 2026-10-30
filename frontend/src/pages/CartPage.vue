@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { getCurrentUser, hasPersistedPhoneAuthState, restoreLoginSession } from '../api/authApi'
 import { getCustomerToSupplierDistanceKm, LOCATION_UPDATED_EVENT } from '../api/deliveryEta'
@@ -7,7 +7,6 @@ import {
   createCashOnDeliveryOrder,
   createStripeCheckoutSession,
   resumeCheckoutSession,
-  syncCartSalesOrder,
   storeCheckoutResumeToken,
 } from '../api/paymentApi'
 import { createRequestForQuotationFromCart } from '../api/rfqApi'
@@ -25,28 +24,17 @@ const router = useRouter()
 const totalDeliveryDistanceKm = ref(null)
 const isDeliveryDistanceLoading = ref(false)
 const deliveryFee = computed(() => calculateDeliveryFee(totalDeliveryDistanceKm.value))
-const salesOrderName = ref('')
-const couponCodeInput = ref('')
-const appliedCouponCode = ref('')
-const couponDiscountAmount = ref(0)
-const couponItemPricing = ref([])
-const couponFeedback = ref('')
-const couponError = ref('')
-const isApplyingCoupon = ref(false)
-const originalItemsTotal = computed(() =>
+const itemsTotal = computed(() =>
   cartProducts.value.reduce((total, item) => total + getItemLineTotal(item), 0),
 )
-const discountedItemsTotal = computed(() =>
-  cartProducts.value.reduce((total, item, index) => total + getDisplayItemLineTotal(item, index), 0),
-)
-const hasCouponDiscount = computed(() => couponDiscountAmount.value > 0)
 const payableTotal = computed(() =>
-  Math.max(discountedItemsTotal.value + deliveryFee.value, 0),
+  Math.max(itemsTotal.value + deliveryFee.value, 0),
 )
 const isStartingCheckout = ref(false)
 const isPlacingCodOrder = ref(false)
 const isSubmittingRfq = ref(false)
 const checkoutError = ref('')
+const checkoutMessageRef = ref(null)
 const rfqSuccessMessage = ref('')
 const rfqErrorMessage = ref('')
 const rfqEmail = ref('')
@@ -111,6 +99,17 @@ const orderSlotDescription = computed(() =>
 )
 
 const canCheckout = computed(() => isAuthReady.value && Boolean(currentUser.value))
+
+// The pay buttons stay fixed on phones, so bring the error into view when one appears.
+watch(checkoutError, async (message) => {
+  if (!message) {
+    return
+  }
+
+  await nextTick()
+  checkoutMessageRef.value?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+})
+
 const checkoutButtonLabel = computed(() => {
   if (!isAuthReady.value) {
     return 'Checking session...'
@@ -196,15 +195,7 @@ const cartDistanceRefreshKey = computed(() =>
     .join('|'),
 )
 const itemSavings = computed(() =>
-  cartProducts.value.reduce((total, item, index) => {
-    const displayUnitPrice = getDisplayItemUnitPrice(item, index)
-
-    if (!item.oldPrice || item.oldPrice <= displayUnitPrice) {
-      return total
-    }
-
-    return total + (item.oldPrice - displayUnitPrice) * item.quantity
-  }, 0),
+  cartProducts.value.reduce((total, item) => total + getItemLineSavings(item), 0),
 )
 
 function formatDistanceValue(distanceKm) {
@@ -364,148 +355,18 @@ function getDeliveryRadiusError() {
   return ''
 }
 
-function getCouponItemPricing(index) {
-  return couponItemPricing.value[index] || null
-}
+function getItemLineSavings(item) {
+  const unitPrice = Number(item?.price || 0)
 
-function getDisplayItemUnitPrice(item, index) {
-  const discountedRate = Number(getCouponItemPricing(index)?.discounted_rate)
-
-  return Number.isFinite(discountedRate) && discountedRate >= 0
-    ? discountedRate
-    : Number(item?.price || 0)
-}
-
-function getDisplayItemLineTotal(item, index) {
-  const discountedAmount = Number(getCouponItemPricing(index)?.discounted_amount)
-
-  return Number.isFinite(discountedAmount) && discountedAmount >= 0
-    ? discountedAmount
-    : getItemLineTotal(item)
-}
-
-function getItemCouponDiscount(item, index) {
-  const discountAmount = Number(getCouponItemPricing(index)?.discount_amount)
-
-  return Number.isFinite(discountAmount) && discountAmount > 0 ? discountAmount : 0
-}
-
-function getItemLineSavings(item, index) {
-  const displayUnitPrice = getDisplayItemUnitPrice(item, index)
-
-  if (!item?.oldPrice || Number(item.oldPrice) <= displayUnitPrice) {
+  if (!item?.oldPrice || Number(item.oldPrice) <= unitPrice) {
     return 0
   }
 
-  return (Number(item.oldPrice) - displayUnitPrice) * Number(item.quantity || 0)
+  return (Number(item.oldPrice) - unitPrice) * Number(item.quantity || 0)
 }
 
 function removeCartItem(itemId) {
   updateCartProductQuantity(itemId, 0)
-}
-
-function resetCouponState() {
-  salesOrderName.value = ''
-  appliedCouponCode.value = ''
-  couponDiscountAmount.value = 0
-  couponItemPricing.value = []
-  couponFeedback.value = ''
-  couponError.value = ''
-}
-
-function updateCouponSummary(syncResponse) {
-  salesOrderName.value = syncResponse?.message?.sales_order || salesOrderName.value
-  appliedCouponCode.value = syncResponse?.message?.totals?.coupon_code || ''
-  couponDiscountAmount.value = Number(syncResponse?.message?.totals?.discount_amount || 0)
-  couponItemPricing.value = Array.isArray(syncResponse?.message?.item_pricing)
-    ? syncResponse.message.item_pricing
-    : []
-}
-
-async function syncCouponPreview(couponCode = appliedCouponCode.value, options = {}) {
-  if (!canCheckout.value || !cartProducts.value.length) {
-    if (!cartProducts.value.length) {
-      resetCouponState()
-    }
-    return null
-  }
-
-  const response = await syncCartSalesOrder(
-    cartProducts.value,
-    salesOrderName.value,
-    selectedDeliveryAddress.value,
-    selectedDeliveryDate.value,
-    effectiveDeliverySlot.value,
-    deliveryFee.value,
-    couponCode,
-    isCustomerPickup.value,
-  )
-
-  updateCouponSummary(response)
-
-  if (!couponCode) {
-    couponFeedback.value = ''
-    couponError.value = ''
-    if (!options.keepDraftSalesOrder) {
-      salesOrderName.value = response?.message?.sales_order || salesOrderName.value
-    }
-    return response
-  }
-
-  couponFeedback.value = `Coupon ${appliedCouponCode.value} applied.`
-  couponError.value = ''
-  return response
-}
-
-async function applyCouponCode() {
-  couponFeedback.value = ''
-  couponError.value = ''
-
-  const couponCode = String(couponCodeInput.value || '').trim()
-  if (!couponCode) {
-    couponError.value = 'Enter a coupon code.'
-    return
-  }
-
-  if (!(await ensureCheckoutSession())) {
-    couponError.value = 'Please login to apply a coupon.'
-    return
-  }
-
-  isApplyingCoupon.value = true
-
-  try {
-    await syncCouponPreview(couponCode)
-    couponCodeInput.value = couponCode
-  } catch (error) {
-    couponDiscountAmount.value = 0
-    appliedCouponCode.value = ''
-    couponItemPricing.value = []
-    couponError.value = error.message || 'Unable to apply coupon.'
-  } finally {
-    isApplyingCoupon.value = false
-  }
-}
-
-async function removeCouponCode() {
-  couponFeedback.value = ''
-  couponError.value = ''
-  couponCodeInput.value = ''
-
-  if (!canCheckout.value || !salesOrderName.value) {
-    resetCouponState()
-    return
-  }
-
-  isApplyingCoupon.value = true
-
-  try {
-    await syncCouponPreview('')
-  } catch (error) {
-    couponError.value = error.message || 'Unable to remove coupon.'
-  } finally {
-    isApplyingCoupon.value = false
-  }
 }
 
 function getSupplierDistanceKey(item = {}) {
@@ -776,12 +637,10 @@ async function startStripeCheckout() {
     })
     const response = await createStripeCheckoutSession(
       cartProducts.value,
-      salesOrderName.value,
       selectedDeliveryAddress.value,
       selectedDeliveryDate.value,
       effectiveDeliverySlot.value,
       deliveryFee.value,
-      appliedCouponCode.value,
       isCustomerPickup.value,
     )
     console.log('Pay now checkout response', response)
@@ -868,12 +727,10 @@ async function placeCashOnDeliveryOrder() {
     })
     const response = await createCashOnDeliveryOrder(
       cartProducts.value,
-      salesOrderName.value,
       selectedDeliveryAddress.value,
       selectedDeliveryDate.value,
       effectiveDeliverySlot.value,
       deliveryFee.value,
-      appliedCouponCode.value,
       isCustomerPickup.value,
     )
     console.log('Cash on delivery order response', response)
@@ -987,9 +844,9 @@ async function submitCartRequestForQuotation() {
 
 function goToAddAddress() {
   router.push({
-    name: 'profile',
+    name: 'addresses',
     query: {
-      openAddress: '1',
+      add: '1',
       returnTo: 'cart',
     },
   })
@@ -997,7 +854,7 @@ function goToAddAddress() {
 
 function goToManageAddresses() {
   router.push({
-    name: 'profile',
+    name: 'addresses',
     query: {
       returnTo: 'cart',
     },
@@ -1051,16 +908,6 @@ watch(
 )
 
 watch(
-  canCheckout,
-  (isReady) => {
-    if (!isReady) {
-      couponCodeInput.value = ''
-    }
-  },
-  { immediate: true },
-)
-
-watch(
   selectedDeliveryDate,
   (dateValue) => {
     if (dateValue) {
@@ -1086,48 +933,20 @@ watch(
     isRfqRequiredDatePickerVisible.value = false
   },
 )
-
-watch(
-  () => [
-    cartDistanceRefreshKey.value,
-    selectedDeliveryAddress.value?.id || '',
-    selectedDeliveryDate.value,
-    effectiveDeliverySlot.value,
-    deliveryFee.value,
-    canCheckout.value,
-    appliedCouponCode.value,
-  ],
-  async (_nextValues, _previousValues) => {
-    if (!appliedCouponCode.value || isApplyingCoupon.value) {
-      return
-    }
-
-    try {
-      await syncCouponPreview(appliedCouponCode.value, { keepDraftSalesOrder: true })
-    } catch {
-      couponDiscountAmount.value = 0
-    }
-  },
-)
 </script>
 
 <template>
   <section class="cart-page" @touchstart.passive="() => {}">
-    <header class="cart-page-header">
+    <header class="cart-heading">
       <div>
-        <p class="section-label">Shopping cart</p>
-        <h1>Review your basket</h1>
-        <div v-if="cartProducts.length" class="cart-page-insights" aria-label="Cart overview">
-          <span class="cart-page-pill">{{ totalLines }} {{ totalLines === 1 ? 'item' : 'items' }}</span>
-          <span class="cart-page-pill">{{ totalUnits }} {{ totalUnits === 1 ? 'unit' : 'units' }}</span>
-          <span class="cart-page-pill is-highlight">
-            {{ isDeliveryDistanceLoading ? 'Checking delivery...' : (deliveryFee ? `${formatCurrency(deliveryFee)} delivery` : 'Free delivery') }}
-          </span>
-        </div>
+        <h1>Your cart</h1>
+        <p v-if="cartProducts.length">
+          {{ totalLines }} {{ totalLines === 1 ? 'item' : 'items' }} · {{ totalUnits }} {{ totalUnits === 1 ? 'unit' : 'units' }}
+        </p>
       </div>
       <button
         v-if="cartProducts.length"
-        class="cart-continue-button"
+        class="cart-heading-link"
         type="button"
         @click="$emit('continueShopping')"
       >
@@ -1136,80 +955,327 @@ watch(
     </header>
 
     <div v-if="cartProducts.length" class="cart-page-grid">
-      <section class="cart-items-panel" aria-label="Cart items">
-        <article
-          v-for="(item, index) in cartProducts"
-          :key="item.id"
-          class="cart-page-item"
-        >
-          <img class="cart-page-item-image" :src="item.image" :alt="item.name" />
+      <div class="cart-main-column">
+        <section class="cart-items-panel" aria-label="Cart items">
+          <article
+            v-for="item in cartProducts"
+            :key="item.id"
+            class="cart-page-item"
+          >
+            <img class="cart-page-item-image" :src="item.image" :alt="item.name" />
 
-          <div class="cart-page-item-info">
-            <div class="cart-page-item-head">
-              <div class="cart-page-item-copy">
-                <h2>{{ item.name }}</h2>
-                <p v-if="item.size" class="cart-page-item-size">Size: {{ item.size }}</p>
+            <div class="cart-page-item-info">
+              <div class="cart-page-item-head">
+                <div class="cart-page-item-copy">
+                  <h2>{{ item.name }}</h2>
+                  <p v-if="item.size" class="cart-page-item-size">Size: {{ item.size }}</p>
+                </div>
+              </div>
+              <div class="cart-page-item-price">
+                <strong>{{ formatCurrency(item.price) }}</strong>
+                <span v-if="item.oldPrice && item.oldPrice > item.price">{{ formatCurrency(item.oldPrice) }}</span>
+              </div>
+              <div v-if="getItemLineSavings(item)" class="cart-page-item-meta">
+                <span class="cart-page-item-saving">
+                  Save {{ formatCurrency(getItemLineSavings(item)) }}
+                </span>
               </div>
             </div>
-            <div class="cart-page-item-price">
-              <strong>{{ formatCurrency(getDisplayItemUnitPrice(item, index)) }}</strong>
-              <span v-if="item.oldPrice && item.oldPrice > getDisplayItemUnitPrice(item, index)">{{ formatCurrency(item.oldPrice) }}</span>
-            </div>
-            <div class="cart-page-item-meta">
-              <span v-if="getItemLineTotal(item) > getDisplayItemLineTotal(item, index)" class="cart-page-item-line-total">
-                {{ formatCurrency(getDisplayItemLineTotal(item, index)) }}
-                <span>{{ formatCurrency(getItemLineTotal(item)) }}</span>
-              </span>
-              <span v-if="getItemLineSavings(item, index)" class="cart-page-item-saving">
-                Save {{ formatCurrency(getItemLineSavings(item, index)) }}
-              </span>
-              <span v-if="getItemCouponDiscount(item, index)" class="cart-page-item-saving">
-                Coupon -{{ formatCurrency(getItemCouponDiscount(item, index)) }}
-              </span>
-            </div>
-          </div>
 
-          <div class="cart-page-item-actions">
-            <div class="cart-quantity" :aria-label="`${item.name} quantity`">
-              <button
-                type="button"
-                :aria-label="`Decrease ${item.name} quantity`"
-                @click="updateCartProductQuantity(item.id, item.quantity - 1)"
-              >
-                -
-              </button>
-              <span :key="item.quantity">{{ item.quantity }}</span>
-              <button
-                type="button"
-                :aria-label="`Increase ${item.name} quantity`"
-                @click="updateCartProductQuantity(item.id, item.quantity + 1)"
-              >
-                +
-              </button>
+            <div class="cart-page-item-actions">
+              <div class="cart-quantity" :aria-label="`${item.name} quantity`">
+                <button
+                  type="button"
+                  :aria-label="`Decrease ${item.name} quantity`"
+                  @click="updateCartProductQuantity(item.id, item.quantity - 1)"
+                >
+                  -
+                </button>
+                <span :key="item.quantity">{{ item.quantity }}</span>
+                <button
+                  type="button"
+                  :aria-label="`Increase ${item.name} quantity`"
+                  @click="updateCartProductQuantity(item.id, item.quantity + 1)"
+                >
+                  +
+                </button>
+              </div>
             </div>
-          </div>
-        </article>
-      </section>
+          </article>
+        </section>
+
+        <section v-if="!isRfqCart" class="cart-panel">
+          <h2 class="cart-panel-title">{{ isCustomerPickup ? 'Pickup details' : 'Delivery details' }}</h2>
+          <section class="cart-delivery-options" aria-label="Delivery schedule">
+              <div class="cart-fulfillment-mode" role="group" aria-label="Choose how you would like to receive your order">
+                <p class="cart-fulfillment-title">How would you like to receive your order?</p>
+                <div class="cart-fulfillment-options">
+                  <button
+                    class="cart-fulfillment-option"
+                    :class="{ 'is-selected': fulfillmentMode === 'delivery' }"
+                    type="button"
+                    @click="selectFulfillmentMode('delivery')"
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <circle cx="7.5" cy="18" r="1.5" />
+                      <circle cx="17.5" cy="18" r="1.5" />
+                      <path d="M2.5 4.5h10v9h-10zM12.5 8.5h4l3 3v2h-7zM5 8h3M4 11h2" />
+                    </svg>
+                    <span>Delivery</span>
+                  </button>
+                  <button
+                    class="cart-fulfillment-option"
+                    :class="{ 'is-selected': fulfillmentMode === 'pickup' }"
+                    type="button"
+                    @click="selectFulfillmentMode('pickup')"
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="M5 8.5h14v10H5zM8 8.5V7a4 4 0 0 1 8 0v1.5M9 13h6" />
+                    </svg>
+                    <span>Customer Pickup</span>
+                  </button>
+                </div>
+              </div>
+
+              <section v-if="!isRfqCart" class="cart-address-card" aria-label="Choose Address">
+                <div class="cart-address-header">
+                  <div>
+                    <h3>Choose Address</h3>
+                  </div>
+                  <button
+                    class="cart-address-action"
+                    type="button"
+                    @click="hasDeliveryAddress ? goToManageAddresses() : goToAddAddress()"
+                  >
+                    {{ hasDeliveryAddress ? 'Change' : 'Add address' }}
+                  </button>
+                </div>
+
+                <template v-if="selectedDeliveryAddress">
+                  <div class="cart-address-body">
+                    <div class="cart-address-summary-row">
+                      <div class="cart-address-summary-copy">
+                        <div class="cart-address-badges">
+                          <span class="cart-address-label">{{ selectedDeliveryAddress.label }}</span>
+                          <span v-if="selectedDeliveryAddress.isDefault" class="cart-address-default">Default</span>
+                        </div>
+                        <p class="cart-address-line">
+                          {{ selectedDeliveryAddress.contactName }}<span v-if="selectedDeliveryAddress.phone"> · {{ selectedDeliveryAddress.phone }}</span>
+                        </p>
+                        <p v-if="selectedDeliveryAddressSummary" class="cart-address-line">
+                          {{ selectedDeliveryAddressSummary }}
+                        </p>
+                      </div>
+                      <button
+                        class="cart-address-toggle"
+                        type="button"
+                        :aria-label="isAddressExpanded ? 'Hide full address' : 'Show full address'"
+                        :aria-expanded="isAddressExpanded"
+                        @click="isAddressExpanded = !isAddressExpanded"
+                      >
+                        <svg
+                          viewBox="0 0 20 20"
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-width="1.8"
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                          :class="{ 'is-expanded': isAddressExpanded }"
+                          aria-hidden="true"
+                        >
+                          <path d="M6 8l4 4 4-4" />
+                        </svg>
+                      </button>
+                    </div>
+                    <div v-if="isAddressExpanded" class="cart-address-details">
+                      <p v-if="selectedDeliveryAddress.apartmentOfficeName" class="cart-address-line">
+                        {{ selectedDeliveryAddress.label === 'Office' ? 'Office name' : 'Apartment name' }}:
+                        {{ selectedDeliveryAddress.apartmentOfficeName }}
+                      </p>
+                      <p v-if="selectedDeliveryAddress.apartmentOfficeNo" class="cart-address-line">
+                        {{ selectedDeliveryAddress.label === 'Office' ? 'Office no' : 'Apartment no' }}:
+                        {{ selectedDeliveryAddress.apartmentOfficeNo }}
+                      </p>
+                      <p v-if="selectedDeliveryAddress.building" class="cart-address-line">
+                        Building / villa: {{ selectedDeliveryAddress.building }}
+                      </p>
+                      <p v-if="selectedDeliveryAddress.street" class="cart-address-line">
+                        Street: {{ selectedDeliveryAddress.street }}
+                      </p>
+                      <p v-if="selectedDeliveryAddress.area" class="cart-address-line">
+                        Area: {{ selectedDeliveryAddress.area }}
+                      </p>
+                      <p v-if="selectedDeliveryAddress.landmark" class="cart-address-line">
+                        Landmark: {{ selectedDeliveryAddress.landmark }}
+                      </p>
+                      <p v-if="selectedDeliveryAddress.emirate" class="cart-address-line">
+                        Emirate: {{ selectedDeliveryAddress.emirate }}
+                      </p>
+                    </div>
+                  </div>
+                </template>
+                <p v-else class="cart-address-empty">
+                  No saved delivery address found. Add one before checkout.
+                </p>
+              </section>
+
+
+              <div
+                v-if="isCustomerPickup && pickupLocations.length"
+                class="cart-pickup-location"
+                aria-label="Pickup location"
+              >
+                <div class="cart-pickup-location-header">
+                  <h3>Pickup Location</h3>
+                </div>
+                <div class="cart-pickup-location-list">
+                  <div
+                    v-for="location in pickupLocations"
+                    :key="`${location.supplierName}-${location.supplierAddress}`"
+                    class="cart-pickup-location-item"
+                  >
+                    <strong>{{ location.supplierName }}</strong>
+                    <p>{{ location.supplierAddress }}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div class="cart-date-picker">
+                <label class="cart-date-label" for="cart-delivery-date">{{ orderScheduleLabel }}</label>
+                <div class="cart-date-input-shell" @click="openDeliveryDatePicker">
+                  <div class="cart-date-display">
+                    <span class="cart-date-icon" aria-hidden="true">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="3" y="5" width="18" height="16" rx="3" />
+                        <path d="M16 3v4M8 3v4M3 10h18" />
+                      </svg>
+                    </span>
+                    <div class="cart-date-copy">
+                      <span>{{ selectedDeliveryDateContext }}</span>
+                      <strong>{{ selectedDeliveryDateLabel || deliveryDatePrompt }}</strong>
+                    </div>
+                    <span class="cart-date-action" aria-hidden="true">{{ selectedDeliveryDate ? 'Change' : 'Choose' }}</span>
+                  </div>
+                  <input
+                    v-if="isDeliveryDatePickerVisible"
+                    id="cart-delivery-date"
+                    ref="deliveryDateInput"
+                    v-model="selectedDeliveryDate"
+                    class="cart-date-input"
+                    type="date"
+                    :min="deliveryDateMin"
+                    :max="deliveryDateMax"
+                    @click="openDeliveryDatePicker"
+                  />
+                </div>
+              </div>
+
+              <template v-if="requiresDeliverySlot">
+                <div class="cart-delivery-heading cart-slot-heading">
+                  <span class="cart-delivery-step">1</span>
+                  <div>
+                    <h3>{{ orderSlotTitle }}</h3>
+                    <p>{{ orderSlotDescription }}</p>
+                  </div>
+                </div>
+
+                <div class="cart-slot-options" role="group" :aria-label="orderSlotTitle">
+                  <button
+                    v-for="slot in deliverySlots"
+                    :key="slot"
+                    class="cart-slot-option"
+                    :class="{ 'is-selected': selectedDeliverySlot === slot }"
+                    type="button"
+                    @click="selectDeliverySlot(slot)"
+                  >
+                    {{ slot }}
+                  </button>
+                </div>
+                <p v-if="!selectedDeliverySlot" class="cart-slot-prompt">
+                  Select a {{ isCustomerPickup ? 'pickup' : 'delivery' }} slot to continue.
+                </p>
+              </template>
+
+              <p
+                v-if="selectedDeliveryDate && effectiveDeliverySlot"
+                class="cart-delivery-selection"
+              >
+                {{ isCustomerPickup ? 'Pickup selected for' : 'Delivery selected for' }}
+                <strong>{{ selectedDeliveryDateLabel }}</strong>
+                between <strong>{{ effectiveDeliverySlot }}</strong>.
+              </p>
+              <p
+                v-else-if="selectedDeliveryDate"
+                class="cart-delivery-selection"
+              >
+                {{ isCustomerPickup ? 'Pickup date selected for' : 'Delivery date selected for' }} <strong>{{ selectedDeliveryDateLabel }}</strong>.
+              </p>
+              <label v-if="requiresDeliverySlot" class="visually-hidden" for="cart-delivery-slot">
+                Choose Delivery Slot
+                <select id="cart-delivery-slot" v-model="selectedDeliverySlot" tabindex="-1">
+                  <option value="" disabled>Choose Delivery Slot</option>
+                  <option
+                    v-for="slot in deliverySlots"
+                    :key="`select-${slot}`"
+                    :value="slot"
+                  >
+                    {{ slot }}
+                  </option>
+                </select>
+              </label>
+          </section>
+        </section>
+
+        <section v-if="isRfqCart" class="cart-panel">
+          <h2 class="cart-panel-title">Quotation details</h2>
+          <section class="cart-delivery-options" aria-label="Quotation schedule">
+              <div class="cart-date-picker">
+                <label class="cart-date-label" for="cart-rfq-required-date">Required Date</label>
+                <div class="cart-date-input-shell" @click="openRfqRequiredDatePicker">
+                  <div class="cart-date-display">
+                    <span class="cart-date-icon" aria-hidden="true">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="3" y="5" width="18" height="16" rx="3" />
+                        <path d="M16 3v4M8 3v4M3 10h18" />
+                      </svg>
+                    </span>
+                    <div class="cart-date-copy">
+                      <span>Required Date</span>
+                      <strong>{{ selectedRfqRequiredDateLabel || rfqRequiredDatePrompt }}</strong>
+                    </div>
+                    <span class="cart-date-action" aria-hidden="true">{{ selectedRfqRequiredDate ? 'Change' : 'Choose' }}</span>
+                  </div>
+                  <input
+                    v-if="isRfqRequiredDatePickerVisible"
+                    id="cart-rfq-required-date"
+                    ref="rfqRequiredDateInput"
+                    v-model="selectedRfqRequiredDate"
+                    class="cart-date-input"
+                    type="date"
+                    :min="getTodayDateValue()"
+                    @click="openRfqRequiredDatePicker"
+                  />
+                </div>
+                <p v-if="selectedRfqRequiredDate" class="cart-delivery-selection">
+                  Required date selected for <strong>{{ selectedRfqRequiredDateLabel }}</strong>.
+                </p>
+              </div>
+          </section>
+        </section>
+      </div>
 
       <aside class="cart-summary-panel" aria-label="Order summary">
         <div class="cart-summary-card">
-          <div class="cart-summary-heading">
-            <div>
-              <h2>Order summary</h2>
-              <p>{{ isRfqCart ? 'Review quotation items and submit your request.' : 'Review totals, delivery details, and payment options.' }}</p>
-            </div>
-            <span class="cart-summary-badge">{{ totalUnits }} {{ totalUnits === 1 ? 'unit' : 'units' }}</span>
-          </div>
+          <h2 class="cart-panel-title">{{ isRfqCart ? 'Quotation summary' : 'Bill summary' }}</h2>
+
+
           <div class="cart-summary-row">
             <span>Items total</span>
-            <strong class="cart-summary-amounts">
-              <span v-if="hasCouponDiscount" class="cart-summary-original">{{ formatCurrency(originalItemsTotal) }}</span>
-              <span>{{ formatCurrency(discountedItemsTotal) }}</span>
-            </strong>
+            <strong>{{ formatCurrency(itemsTotal) }}</strong>
           </div>
           <div v-if="itemSavings" class="cart-summary-row cart-summary-saving">
-            <span>Savings</span>
-            <strong>- {{ formatCurrency(itemSavings) }}</strong>
+            <span>You saved</span>
+            <strong>{{ formatCurrency(itemSavings) }}</strong>
           </div>
           <div v-if="!isRfqCart" class="cart-summary-row">
             <span>Delivery charge</span>
@@ -1217,297 +1283,10 @@ watch(
           </div>
           <div class="cart-summary-total">
             <span>{{ isRfqCart ? 'Estimated total' : 'Grand total' }}</span>
-            <strong>{{ formatCurrency(isRfqCart ? discountedItemsTotal : payableTotal) }}</strong>
+            <strong>{{ formatCurrency(isRfqCart ? itemsTotal : payableTotal) }}</strong>
           </div>
 
-          <section v-if="!isRfqCart" class="cart-coupon-card" aria-label="Apply Coupon">
-            <div class="cart-coupon-header">
-              <h3>Apply Coupon</h3>
-            </div>
-            <div class="cart-coupon-form">
-              <input
-                v-model.trim="couponCodeInput"
-                class="cart-coupon-input"
-                type="text"
-                inputmode="text"
-                autocomplete="off"
-                placeholder="Enter coupon code"
-                :disabled="isApplyingCoupon"
-              />
-              <button
-                class="cart-coupon-apply"
-                type="button"
-                :disabled="isApplyingCoupon || !couponCodeInput.trim()"
-                @click="applyCouponCode"
-              >
-                {{ isApplyingCoupon ? 'Applying...' : 'Apply' }}
-              </button>
-            </div>
-            <div v-if="couponDiscountAmount > 0" class="cart-summary-row cart-summary-saving cart-coupon-discount">
-              <span>Coupon discount</span>
-              <strong>- {{ formatCurrency(couponDiscountAmount) }}</strong>
-            </div>
-            <p v-if="couponFeedback" class="cart-coupon-message is-success">
-              {{ couponFeedback }}
-            </p>
-            <p v-if="couponError" class="cart-coupon-message is-error">
-              {{ couponError }}
-            </p>
-          </section>
-
-          <section v-if="!isRfqCart" class="cart-address-card" aria-label="Choose Address">
-            <div class="cart-address-header">
-              <div>
-                <h3>Choose Address</h3>
-              </div>
-              <button
-                class="cart-address-action"
-                type="button"
-                @click="hasDeliveryAddress ? goToManageAddresses() : goToAddAddress()"
-              >
-                {{ hasDeliveryAddress ? 'Change' : 'Add address' }}
-              </button>
-            </div>
-
-            <template v-if="selectedDeliveryAddress">
-              <div class="cart-address-body">
-                <div class="cart-address-summary-row">
-                  <div class="cart-address-summary-copy">
-                    <div class="cart-address-badges">
-                      <span class="cart-address-label">{{ selectedDeliveryAddress.label }}</span>
-                      <span v-if="selectedDeliveryAddress.isDefault" class="cart-address-default">Default</span>
-                    </div>
-                    <p class="cart-address-line">
-                      {{ selectedDeliveryAddress.contactName }}<span v-if="selectedDeliveryAddress.phone"> · {{ selectedDeliveryAddress.phone }}</span>
-                    </p>
-                    <p v-if="selectedDeliveryAddressSummary" class="cart-address-line">
-                      {{ selectedDeliveryAddressSummary }}
-                    </p>
-                  </div>
-                  <button
-                    class="cart-address-toggle"
-                    type="button"
-                    :aria-label="isAddressExpanded ? 'Hide full address' : 'Show full address'"
-                    :aria-expanded="isAddressExpanded"
-                    @click="isAddressExpanded = !isAddressExpanded"
-                  >
-                    <svg
-                      viewBox="0 0 20 20"
-                      fill="none"
-                      stroke="currentColor"
-                      stroke-width="1.8"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      :class="{ 'is-expanded': isAddressExpanded }"
-                      aria-hidden="true"
-                    >
-                      <path d="M6 8l4 4 4-4" />
-                    </svg>
-                  </button>
-                </div>
-                <div v-if="isAddressExpanded" class="cart-address-details">
-                  <p v-if="selectedDeliveryAddress.apartmentOfficeName" class="cart-address-line">
-                    {{ selectedDeliveryAddress.label === 'Office' ? 'Office name' : 'Apartment name' }}:
-                    {{ selectedDeliveryAddress.apartmentOfficeName }}
-                  </p>
-                  <p v-if="selectedDeliveryAddress.apartmentOfficeNo" class="cart-address-line">
-                    {{ selectedDeliveryAddress.label === 'Office' ? 'Office no' : 'Apartment no' }}:
-                    {{ selectedDeliveryAddress.apartmentOfficeNo }}
-                  </p>
-                  <p v-if="selectedDeliveryAddress.building" class="cart-address-line">
-                    Building / villa: {{ selectedDeliveryAddress.building }}
-                  </p>
-                  <p v-if="selectedDeliveryAddress.street" class="cart-address-line">
-                    Street: {{ selectedDeliveryAddress.street }}
-                  </p>
-                  <p v-if="selectedDeliveryAddress.area" class="cart-address-line">
-                    Area: {{ selectedDeliveryAddress.area }}
-                  </p>
-                  <p v-if="selectedDeliveryAddress.landmark" class="cart-address-line">
-                    Landmark: {{ selectedDeliveryAddress.landmark }}
-                  </p>
-                  <p v-if="selectedDeliveryAddress.emirate" class="cart-address-line">
-                    Emirate: {{ selectedDeliveryAddress.emirate }}
-                  </p>
-                </div>
-              </div>
-            </template>
-            <p v-else class="cart-address-empty">
-              No saved delivery address found. Add one before checkout.
-            </p>
-          </section>
-
-          <section v-if="!isRfqCart" class="cart-delivery-options" aria-label="Delivery schedule">
-            <div class="cart-fulfillment-mode" role="group" aria-label="Choose how you would like to receive your order">
-              <p class="cart-fulfillment-title">How would you like to receive your order?</p>
-              <div class="cart-fulfillment-options">
-                <button
-                  class="cart-fulfillment-option"
-                  :class="{ 'is-selected': fulfillmentMode === 'delivery' }"
-                  type="button"
-                  @click="selectFulfillmentMode('delivery')"
-                >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                    <circle cx="7.5" cy="18" r="1.5" />
-                    <circle cx="17.5" cy="18" r="1.5" />
-                    <path d="M2.5 4.5h10v9h-10zM12.5 8.5h4l3 3v2h-7zM5 8h3M4 11h2" />
-                  </svg>
-                  <span>Delivery</span>
-                </button>
-                <button
-                  class="cart-fulfillment-option"
-                  :class="{ 'is-selected': fulfillmentMode === 'pickup' }"
-                  type="button"
-                  @click="selectFulfillmentMode('pickup')"
-                >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                    <path d="M5 8.5h14v10H5zM8 8.5V7a4 4 0 0 1 8 0v1.5M9 13h6" />
-                  </svg>
-                  <span>Customer Pickup</span>
-                </button>
-              </div>
-            </div>
-
-            <div
-              v-if="isCustomerPickup && pickupLocations.length"
-              class="cart-pickup-location"
-              aria-label="Pickup location"
-            >
-              <div class="cart-pickup-location-header">
-                <h3>Pickup Location</h3>
-              </div>
-              <div class="cart-pickup-location-list">
-                <div
-                  v-for="location in pickupLocations"
-                  :key="`${location.supplierName}-${location.supplierAddress}`"
-                  class="cart-pickup-location-item"
-                >
-                  <strong>{{ location.supplierName }}</strong>
-                  <p>{{ location.supplierAddress }}</p>
-                </div>
-              </div>
-            </div>
-
-            <div class="cart-date-picker">
-              <label class="cart-date-label" for="cart-delivery-date">{{ orderScheduleLabel }}</label>
-              <div class="cart-date-input-shell" @click="openDeliveryDatePicker">
-                <div class="cart-date-display">
-                  <span class="cart-date-icon" aria-hidden="true">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                      <rect x="3" y="5" width="18" height="16" rx="3" />
-                      <path d="M16 3v4M8 3v4M3 10h18" />
-                    </svg>
-                  </span>
-                  <div class="cart-date-copy">
-                    <span>{{ selectedDeliveryDateContext }}</span>
-                    <strong>{{ selectedDeliveryDateLabel || deliveryDatePrompt }}</strong>
-                  </div>
-                  <span class="cart-date-action" aria-hidden="true">{{ selectedDeliveryDate ? 'Change' : 'Choose' }}</span>
-                </div>
-                <input
-                  v-if="isDeliveryDatePickerVisible"
-                  id="cart-delivery-date"
-                  ref="deliveryDateInput"
-                  v-model="selectedDeliveryDate"
-                  class="cart-date-input"
-                  type="date"
-                  :min="deliveryDateMin"
-                  :max="deliveryDateMax"
-                  @click="openDeliveryDatePicker"
-                />
-              </div>
-            </div>
-
-            <template v-if="requiresDeliverySlot">
-              <div class="cart-delivery-heading cart-slot-heading">
-                <span class="cart-delivery-step">1</span>
-                <div>
-                  <h3>{{ orderSlotTitle }}</h3>
-                  <p>{{ orderSlotDescription }}</p>
-                </div>
-              </div>
-
-              <div class="cart-slot-options" role="group" :aria-label="orderSlotTitle">
-                <button
-                  v-for="slot in deliverySlots"
-                  :key="slot"
-                  class="cart-slot-option"
-                  :class="{ 'is-selected': selectedDeliverySlot === slot }"
-                  type="button"
-                  @click="selectDeliverySlot(slot)"
-                >
-                  {{ slot }}
-                </button>
-              </div>
-              <p v-if="!selectedDeliverySlot" class="cart-slot-prompt">
-                Select a {{ isCustomerPickup ? 'pickup' : 'delivery' }} slot to continue.
-              </p>
-            </template>
-
-            <p
-              v-if="selectedDeliveryDate && effectiveDeliverySlot"
-              class="cart-delivery-selection"
-            >
-              {{ isCustomerPickup ? 'Pickup selected for' : 'Delivery selected for' }}
-              <strong>{{ selectedDeliveryDateLabel }}</strong>
-              between <strong>{{ effectiveDeliverySlot }}</strong>.
-            </p>
-            <p
-              v-else-if="selectedDeliveryDate"
-              class="cart-delivery-selection"
-            >
-              {{ isCustomerPickup ? 'Pickup date selected for' : 'Delivery date selected for' }} <strong>{{ selectedDeliveryDateLabel }}</strong>.
-            </p>
-            <label v-if="requiresDeliverySlot" class="visually-hidden" for="cart-delivery-slot">
-              Choose Delivery Slot
-              <select id="cart-delivery-slot" v-model="selectedDeliverySlot" tabindex="-1">
-                <option value="" disabled>Choose Delivery Slot</option>
-                <option
-                  v-for="slot in deliverySlots"
-                  :key="`select-${slot}`"
-                  :value="slot"
-                >
-                  {{ slot }}
-                </option>
-              </select>
-            </label>
-          </section>
-
-          <section v-if="isRfqCart" class="cart-delivery-options" aria-label="Quotation schedule">
-            <div class="cart-date-picker">
-              <label class="cart-date-label" for="cart-rfq-required-date">Required Date</label>
-              <div class="cart-date-input-shell" @click="openRfqRequiredDatePicker">
-                <div class="cart-date-display">
-                  <span class="cart-date-icon" aria-hidden="true">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                      <rect x="3" y="5" width="18" height="16" rx="3" />
-                      <path d="M16 3v4M8 3v4M3 10h18" />
-                    </svg>
-                  </span>
-                  <div class="cart-date-copy">
-                    <span>Required Date</span>
-                    <strong>{{ selectedRfqRequiredDateLabel || rfqRequiredDatePrompt }}</strong>
-                  </div>
-                  <span class="cart-date-action" aria-hidden="true">{{ selectedRfqRequiredDate ? 'Change' : 'Choose' }}</span>
-                </div>
-                <input
-                  v-if="isRfqRequiredDatePickerVisible"
-                  id="cart-rfq-required-date"
-                  ref="rfqRequiredDateInput"
-                  v-model="selectedRfqRequiredDate"
-                  class="cart-date-input"
-                  type="date"
-                  :min="getTodayDateValue()"
-                  @click="openRfqRequiredDatePicker"
-                />
-              </div>
-              <p v-if="selectedRfqRequiredDate" class="cart-delivery-selection">
-                Required date selected for <strong>{{ selectedRfqRequiredDateLabel }}</strong>.
-              </p>
-            </div>
-          </section>
-
-          <div v-if="checkoutError" class="cart-checkout-message">
+          <div v-if="checkoutError" ref="checkoutMessageRef" class="cart-checkout-message">
             <p class="form-message error-message">
               {{ checkoutError }}
             </p>
@@ -1547,14 +1326,19 @@ watch(
               <span aria-hidden="true">›</span>
             </button>
           </div>
-          <div v-else class="cart-payment-actions">
+          <div v-else class="cart-payment-actions" :class="{ 'is-single': !canCheckout }">
+            <div class="cart-pay-total">
+              <span>Grand total</span>
+              <strong>{{ formatCurrency(payableTotal) }}</strong>
+            </div>
             <button
+              v-if="canCheckout"
               class="cart-secondary-button"
               type="button"
               :disabled="isPlacingCodOrder || !isAuthReady"
               @click="placeCashOnDeliveryOrder"
             >
-              {{ canCheckout ? (isPlacingCodOrder ? 'PLACING ORDER...' : 'CASH ON DELIVERY') : checkoutButtonLabel }}
+              {{ isPlacingCodOrder ? 'Placing order...' : 'Cash on delivery' }}
             </button>
             <button
               class="cart-login-button"
@@ -1562,7 +1346,7 @@ watch(
               :disabled="isStartingCheckout || !isAuthReady"
               @click="startStripeCheckout"
             >
-              {{ canCheckout ? (isStartingCheckout ? 'PAYING...' : 'PAY NOW') : checkoutButtonLabel }}
+              {{ canCheckout ? (isStartingCheckout ? 'Paying...' : 'Pay now') : checkoutButtonLabel }}
               <span aria-hidden="true">›</span>
             </button>
           </div>

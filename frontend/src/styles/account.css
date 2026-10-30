@@ -413,7 +413,6 @@
   transform: translateX(3px);
 }
 
-.account-links-group.is-open > .account-links-row .account-chevron,
 .account-address-card.is-expanded .account-address-main .account-chevron {
   color: var(--brand-green);
   transform: rotate(180deg);
@@ -433,18 +432,6 @@
 .account-collapse-inner {
   min-height: 0;
   overflow: hidden;
-}
-
-.account-address-panel {
-  display: grid;
-  gap: 12px;
-  padding: 4px 16px 16px;
-}
-
-.account-address-panel .profile-address-form {
-  border-top: 0;
-  margin-top: 0;
-  padding-top: 0;
 }
 
 .account-address-list {

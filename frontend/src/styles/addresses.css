@@ -1,0 +1,379 @@
+.addresses-page {
+  display: grid;
+  gap: 14px;
+  width: min(720px, 100%);
+  margin: 0 auto;
+}
+
+.addresses-back-link {
+  display: inline-flex;
+  align-items: center;
+  justify-self: start;
+  gap: 4px;
+  min-height: 32px;
+  color: #4b5563;
+  font-size: 14px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.addresses-back-link:hover {
+  color: #078b20;
+}
+
+.addresses-back-link svg {
+  width: 18px;
+  height: 18px;
+}
+
+.addresses-heading h1 {
+  margin: 0;
+  color: #111827;
+  font-size: 28px;
+  font-weight: 900;
+  line-height: 1.15;
+}
+
+.addresses-heading p {
+  margin: 4px 0 0;
+  color: #6b7280;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.addresses-page .profile-address-form {
+  gap: 18px;
+  margin-top: 0;
+  border-color: #e5e7eb;
+  border-radius: 16px;
+  padding: 18px;
+  background: #ffffff;
+  box-shadow: 0 1px 4px rgba(17, 24, 39, 0.05);
+}
+
+.address-form-types {
+  min-width: 0;
+  margin: 0;
+  border: 0;
+  padding: 0;
+}
+
+.address-form-types legend {
+  margin-bottom: 8px;
+  padding: 0;
+}
+
+.address-form-type-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.address-form-type {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 46px;
+  border: 1.5px solid #d1d5db;
+  border-radius: 12px;
+  background: #ffffff;
+  color: #374151;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 800;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease,
+    transform 0.12s ease;
+}
+
+.address-form-type:hover {
+  border-color: #078b20;
+}
+
+.address-form-type:active {
+  transform: scale(0.97);
+}
+
+.address-form-type input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.address-form-type svg {
+  width: 18px;
+  height: 18px;
+}
+
+.address-form-type.is-selected {
+  border-color: #078b20;
+  background: #f0fdf4;
+  color: #166534;
+}
+
+.address-form-type:has(input:focus-visible),
+.address-form-default:has(input:focus-visible) {
+  outline: 2px solid #078b20;
+  outline-offset: 2px;
+}
+
+.address-form-section {
+  display: grid;
+  gap: 12px;
+  border-top: 1px solid #eef0f3;
+  padding-top: 16px;
+}
+
+.address-form-section h2 {
+  margin: 0;
+  color: #111827;
+  font-size: 16px;
+  font-weight: 900;
+}
+
+.address-form-field {
+  display: grid;
+  gap: 6px;
+}
+
+.address-form-optional {
+  margin-left: 4px;
+  color: #9ca3af;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* Keeps a focused field clear of the sticky header and save bar. */
+.address-form-field .form-input {
+  scroll-margin: 130px 0 170px;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.address-form-field .form-input:focus {
+  border-color: #078b20;
+  box-shadow: 0 0 0 3px rgba(7, 139, 32, 0.14);
+}
+
+.address-form-field.has-error .form-input {
+  border-color: #dc2626;
+  background: #fef2f2;
+}
+
+.address-form-field.has-error .form-input:focus {
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.14);
+}
+
+.address-form-error {
+  margin: 0;
+  color: #b91c1c;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.address-form-hint {
+  margin: 0;
+  color: #6b7280;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.address-form-location {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 62px;
+  border: 1.5px dashed #93c5fd;
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    transform 0.12s ease;
+}
+
+.address-form-location:hover:not(:disabled) {
+  background: #dbeafe;
+}
+
+.address-form-location:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.address-form-location:disabled {
+  cursor: progress;
+}
+
+.address-form-location.is-captured {
+  border: 1.5px solid #86efac;
+  background: #f0fdf4;
+  color: #166534;
+}
+
+.address-form-location.is-captured:hover:not(:disabled) {
+  background: #dcfce7;
+}
+
+.address-form-location-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+  border-radius: 50%;
+  background: #ffffff;
+}
+
+.address-form-location-icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.address-form-spinner {
+  width: 18px;
+  height: 18px;
+  border: 2.5px solid #bfdbfe;
+  border-top-color: #1d4ed8;
+  border-radius: 50%;
+  animation: address-form-spin 0.8s linear infinite;
+}
+
+@keyframes address-form-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.address-form-location-text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.address-form-location-text strong {
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.address-form-location-text small {
+  overflow: hidden;
+  color: #4b5563;
+  font-size: 12px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.address-form-default {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-top: 1px solid #eef0f3;
+  border-radius: 4px;
+  padding-top: 14px;
+  cursor: pointer;
+}
+
+.address-form-default span:first-child {
+  display: grid;
+  gap: 2px;
+}
+
+.address-form-default strong {
+  color: #111827;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.address-form-default small {
+  color: #6b7280;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.address-form-default input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.address-form-switch {
+  position: relative;
+  width: 44px;
+  height: 26px;
+  flex: 0 0 44px;
+  border-radius: 999px;
+  background: #d1d5db;
+  transition: background-color 0.18s ease;
+}
+
+.address-form-switch::after {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 1px 3px rgba(17, 24, 39, 0.25);
+  content: "";
+  transition: transform 0.18s ease;
+}
+
+.address-form-default.is-on .address-form-switch {
+  background: #078b20;
+}
+
+.address-form-default.is-on .address-form-switch::after {
+  transform: translateX(18px);
+}
+
+@media (max-width: 520px) {
+  .addresses-heading h1 {
+    font-size: 24px;
+  }
+
+  .addresses-page .profile-address-form {
+    padding: 14px;
+  }
+
+  /* Keeps Save in reach above the bottom tabs on a long form. */
+  .addresses-page .profile-address-form-actions {
+    position: sticky;
+    bottom: calc(64px + env(safe-area-inset-bottom, 0px));
+    z-index: 5;
+    margin: 0 -14px -14px;
+    border-top: 1px solid #eef0f3;
+    border-radius: 0 0 16px 16px;
+    padding: 10px 14px;
+    background: #ffffff;
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .addresses-page .profile-address-form-actions .login-button {
+    flex: 1 1 auto;
+    width: auto;
+  }
+
+  .addresses-page .profile-address-cancel-button {
+    flex: 0 0 auto;
+    width: auto;
+    min-height: 46px;
+  }
+}

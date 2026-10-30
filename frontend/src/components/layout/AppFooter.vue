@@ -1,77 +1,9 @@
 <script setup>
 const appBase = import.meta.env.BASE_URL
-const supplierPortalUrl = 'https://buyinminutes.u.frappe.cloud/supplier'
-const supplierRegistrationUrl = 'https://buyinminutes.u.frappe.cloud/become-a-supplier/new'
-const deliveryCompanyUrl = 'https://buyinminutes.u.frappe.cloud/Buy%20In%20Minutes/new'
-
-function openExternalUrl(url) {
-  window.location.assign(url)
-}
 </script>
 
 <template>
   <footer class="bf" @touchstart.passive="() => {}">
-    <section class="bf-partners" aria-label="Partner enrollment">
-      <div class="bf-partners-head">
-        <p class="bf-eyebrow">Partner with BIM</p>
-        <h2>Grow with Buy In Minutes</h2>
-      </div>
-
-      <div class="bf-partner-track">
-        <article class="bf-partner bf-partner--sell" aria-label="SELL WITH US">
-          <div class="bf-partner-media">
-            <img src="/supplier-card-image.svg" alt="" aria-hidden="true" />
-          </div>
-          <div class="bf-partner-body">
-            <h3>Sell with us</h3>
-            <p>Fast onboarding for trusted market partners.</p>
-            <div class="bf-partner-actions">
-              <a
-                class="bf-btn bf-btn--primary"
-                :href="supplierRegistrationUrl"
-                target="_blank"
-                rel="noreferrer"
-                @click.prevent="openExternalUrl(supplierRegistrationUrl)"
-              >
-                Register
-              </a>
-              <a class="bf-btn bf-btn--ghost" :href="supplierPortalUrl">Login</a>
-            </div>
-          </div>
-        </article>
-
-        <a
-          class="bf-partner bf-partner--fleet"
-          :href="deliveryCompanyUrl"
-          aria-label="Enroll a delivery company"
-        >
-          <div class="bf-partner-media">
-            <img src="/delivery-company-card-image.svg" alt="" aria-hidden="true" />
-          </div>
-          <div class="bf-partner-body">
-            <h3>Enrollment of delivery companies</h3>
-            <p>Fast onboarding for fleet and delivery partners.</p>
-            <span class="bf-partner-link">Enroll now</span>
-          </div>
-        </a>
-
-        <a
-          class="bf-partner bf-partner--rider"
-          :href="deliveryCompanyUrl"
-          aria-label="Become a BIM Rider"
-        >
-          <div class="bf-partner-media">
-            <img src="/bim-rider-card-image.svg" alt="" aria-hidden="true" />
-          </div>
-          <div class="bf-partner-body">
-            <h3>Become a BIM Rider</h3>
-            <p>Join the delivery team and start earning with BIM.</p>
-            <span class="bf-partner-link">Join now</span>
-          </div>
-        </a>
-      </div>
-    </section>
-
     <div class="bf-main">
       <section class="bf-brand">
         <a class="bf-logo" :href="appBase" aria-label="Buy In Minutes home">

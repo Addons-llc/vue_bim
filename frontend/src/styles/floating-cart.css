@@ -1,0 +1,104 @@
+/* Sits under the sticky header (z-index 40) so the location dialog stays on top. */
+.floating-cart {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 35;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: min(340px, calc(100vw - 48px));
+  min-height: 58px;
+  border-radius: 14px;
+  padding: 8px 14px;
+  background: #00a878;
+  color: #ffffff;
+  box-shadow: 0 12px 28px rgba(0, 120, 95, 0.32);
+  text-decoration: none;
+}
+
+.floating-cart:hover {
+  background: #008f67;
+}
+
+.floating-cart:active {
+  transform: scale(0.98);
+}
+
+.floating-cart:focus-visible {
+  outline: 2px solid #00785f;
+  outline-offset: 2px;
+}
+
+.floating-cart-icon {
+  width: 22px;
+  height: 22px;
+  flex: 0 0 22px;
+}
+
+.floating-cart-summary {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+.floating-cart-summary strong {
+  font-size: 14px;
+  font-weight: 850;
+}
+
+.floating-cart-summary small {
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.floating-cart-action {
+  margin-inline-start: auto;
+  font-size: 14px;
+  font-weight: 850;
+  white-space: nowrap;
+}
+
+.floating-cart-chevron {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+}
+
+.floating-cart.is-bumping {
+  animation: floating-cart-bump 0.32s ease;
+}
+
+@keyframes floating-cart-bump {
+  40% {
+    transform: scale(1.04);
+  }
+}
+
+.floating-cart-enter-active,
+.floating-cart-leave-active {
+  transition:
+    opacity 0.22s ease,
+    transform 0.22s ease;
+}
+
+.floating-cart-enter-from,
+.floating-cart-leave-to {
+  opacity: 0;
+  transform: translateY(24px);
+}
+
+@media (max-width: 520px) {
+  .floating-cart {
+    right: 12px;
+    bottom: calc(76px + env(safe-area-inset-bottom, 0px));
+    left: 12px;
+    width: auto;
+  }
+
+  /* Keeps the end of the page reachable above the bar and bottom tabs. */
+  body:has(.floating-cart) .page-shell,
+  body:has(.floating-cart) .app-header.is-categories-page + .page-shell {
+    padding-bottom: calc(150px + env(safe-area-inset-bottom, 0px));
+  }
+}

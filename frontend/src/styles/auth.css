@@ -144,8 +144,7 @@
 
 .profile-address-add-button,
 .profile-address-actions button,
-.profile-address-cancel-button,
-.profile-address-location-button {
+.profile-address-cancel-button {
   min-height: 36px;
   border: 1px solid #d1d5db;
   border-radius: 8px;
@@ -160,21 +159,9 @@
 
 .profile-address-add-button:hover,
 .profile-address-actions button:hover,
-.profile-address-cancel-button:hover,
-.profile-address-location-button:hover {
+.profile-address-cancel-button:hover {
   border-color: #2563eb;
   color: #2563eb;
-}
-
-.profile-address-location-button {
-  justify-self: start;
-  background: #eff6ff;
-  color: #1d4ed8;
-}
-
-.profile-address-location-button:disabled {
-  cursor: not-allowed;
-  opacity: 0.68;
 }
 
 .profile-address-list {
@@ -238,21 +225,6 @@
   background: #f8fafc;
 }
 
-.profile-address-default {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  color: #374151;
-  font-size: 13px;
-  font-weight: 800;
-}
-
-.profile-address-default input {
-  width: 16px;
-  height: 16px;
-  margin: 0;
-}
-
 .profile-address-form-actions {
   display: flex;
   align-items: center;
@@ -266,13 +238,6 @@
 .profile-address-location-message {
   margin: 0;
   text-align: left;
-}
-
-.profile-address-location-note {
-  margin: -2px 0 0;
-  color: #166534;
-  font-size: 13px;
-  font-weight: 800;
 }
 
 .auth-section + .auth-section {
@@ -451,6 +416,7 @@
 }
 
 .form-message {
+  overflow-wrap: anywhere;
   width: fit-content;
   max-width: 100%;
   margin: 14px auto 0;

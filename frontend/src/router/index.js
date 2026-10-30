@@ -1,9 +1,11 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
+import AddressesPage from '../pages/AddressesPage.vue'
 import BrandsPage from '../pages/BrandsPage.vue'
 import BrandDetailsPage from '../pages/BrandDetailsPage.vue'
 import CartPage from '../pages/CartPage.vue'
 import CategoryDetailsPage from '../pages/CategoryDetailsPage.vue'
 import CategoriesPage from '../pages/CategoriesPage.vue'
+import ComingSoonPage from '../pages/ComingSoonPage.vue'
 import HomePage from '../pages/HomePage.vue'
 import LoginPage from '../pages/LoginPage.vue'
 import OtpPage from '../pages/OtpPage.vue'
@@ -62,6 +64,33 @@ const routes = [
     component: StoresPage,
   },
   {
+    path: '/services',
+    name: 'services',
+    component: ComingSoonPage,
+    props: {
+      title: 'Services',
+      message: 'Our services are coming soon.',
+    },
+  },
+  {
+    path: '/privacy-policy',
+    name: 'privacy-policy',
+    component: ComingSoonPage,
+    props: {
+      title: 'Privacy Policy',
+      message: 'Our Privacy Policy is being prepared.',
+    },
+  },
+  {
+    path: '/terms-and-conditions',
+    name: 'terms-and-conditions',
+    component: ComingSoonPage,
+    props: {
+      title: 'Terms & Conditions',
+      message: 'Our Terms & Conditions are being prepared.',
+    },
+  },
+  {
     path: '/categories',
     name: 'categories',
     component: CategoriesPage,
@@ -85,6 +114,11 @@ const routes = [
     path: '/profile',
     name: 'profile',
     component: ProfilePage,
+  },
+  {
+    path: '/addresses',
+    name: 'addresses',
+    component: AddressesPage,
   },
   {
     path: '/orders',
