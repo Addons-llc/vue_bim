@@ -13,12 +13,17 @@ import { createRequestForQuotationFromCart } from '../api/rfqApi'
 import { customerAddresses } from '../data/addressStore'
 import { clearCurrentUser, currentUser, isAuthReady, setCurrentUser } from '../data/authStore'
 import { clearCart } from '../data/cartStore'
+import ItemSuggestions from '../components/product/ItemSuggestions.vue'
 import {
   cartProducts,
   updateCartProductQuantity,
 } from '../data/cartStore'
 
 const emit = defineEmits(['continueShopping', 'login'])
+// Suggestions (Item.custom_item_suggestions) are based on everything in the cart.
+const cartSuggestionItemCodes = computed(() =>
+  cartProducts.value.map((item) => item.itemCode || item.id),
+)
 const router = useRouter()
 
 const totalDeliveryDistanceKm = ref(null)
@@ -1003,6 +1008,8 @@ watch(
             </div>
           </article>
         </section>
+
+        <ItemSuggestions :item-codes="cartSuggestionItemCodes" />
 
         <section v-if="!isRfqCart" class="cart-panel">
           <h2 class="cart-panel-title">{{ isCustomerPickup ? 'Pickup details' : 'Delivery details' }}</h2>

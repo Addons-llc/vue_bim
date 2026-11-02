@@ -7,7 +7,7 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  width: min(340px, calc(100vw - 48px));
+  width: min(260px, calc(100vw - 48px));
   min-height: 58px;
   border-radius: 14px;
   padding: 8px 14px;
@@ -50,6 +50,7 @@
 .floating-cart-summary small {
   font-size: 12px;
   font-weight: 700;
+  white-space: nowrap;
 }
 
 .floating-cart-action {
@@ -90,10 +91,11 @@
 
 @media (max-width: 520px) {
   .floating-cart {
-    right: 12px;
+    right: 0;
     bottom: calc(76px + env(safe-area-inset-bottom, 0px));
-    left: 12px;
-    width: auto;
+    left: 0;
+    width: 260px;
+    margin-inline: auto;
   }
 
   /* Keeps the end of the page reachable above the bar and bottom tabs. */

@@ -247,7 +247,7 @@ function skipSignIn() {
           </div>
 
           <button class="signin-skip" type="button" @click="skipSignIn">
-            Skip for now and browse
+            Skip now
           </button>
         </template>
 

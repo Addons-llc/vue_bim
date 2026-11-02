@@ -1,10 +1,10 @@
 import {
   ITEM_GROUP_API_PATH,
+  ITEM_SUGGESTIONS_API_PATH,
   PRODUCT_API_PATH,
   SELLING_PRICE_LIST,
   SITE_BASE_URL,
 } from './config'
-import { getEstimatedDeliveryTimeLabel } from './deliveryEta'
 import { getDocTypeByName, getDocTypeList } from './frappeResource'
 import { apiRequest } from './http'
 
@@ -366,10 +366,10 @@ export async function mapItemToProduct(item) {
   const attachmentImages = getItemAttachmentImages(item)
   const images = getItemGalleryImages(item)
   const fallbackDeliveryTime = getItemDeliveryTime(item)
-  const deliveryTime = await getEstimatedDeliveryTimeLabel({
-    supplierDetails,
-    deliveryTime: fallbackDeliveryTime,
-  })
+  // The live ETA (Google Maps geocode + directions) is computed by ProductCard and
+  // ProductDetailsPage after render. Awaiting it here held back the whole product
+  // list ("Loading items...") until Google responded for every supplier.
+  const deliveryTime = fallbackDeliveryTime
 
   return {
     id: item.name,
@@ -577,4 +577,28 @@ export async function searchItemMasterItems(searchText) {
   return getItemMasterItems({
     search: searchText,
   })
+}
+
+// Products listed in Item.custom_item_suggestions for the given item codes
+// (e.g. everything in the cart). The given items themselves are excluded.
+export async function getItemSuggestions(itemCodes = [], { limit = 12 } = {}) {
+  const codes = [...new Set(itemCodes.filter(Boolean))]
+
+  if (!codes.length) {
+    return []
+  }
+
+  const query = new URLSearchParams({
+    item_codes: JSON.stringify(codes),
+    limit_page_length: limit,
+    published: 1,
+  })
+  const response = await apiRequest(`${ITEM_SUGGESTIONS_API_PATH}?${query.toString()}`)
+  const items = response.message || []
+
+  return Promise.all(
+    items
+      .filter(isPublishedItem)
+      .map(mapItemToProduct),
+  )
 }

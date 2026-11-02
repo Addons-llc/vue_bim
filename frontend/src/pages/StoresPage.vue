@@ -56,7 +56,8 @@ onMounted(loadStores)
       icon-grid
       horizontal
       item-type="store"
-      title="Store"
+      title=""
+      aria-label="Stores"
       @select="openCategoriesTab"
     />
   </section>

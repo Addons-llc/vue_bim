@@ -2049,3 +2049,135 @@ def get_ordered_products(limit_page_length=40):
 		)
 
 	return ordered_products
+
+
+ITEM_SUGGESTIONS_FIELD = "custom_item_suggestions"
+MAX_SUGGESTION_SOURCE_ITEMS = 50
+
+
+def _parse_item_codes_param(item_codes):
+	if not item_codes:
+		return []
+
+	if isinstance(item_codes, str):
+		try:
+			item_codes = frappe.parse_json(item_codes)
+		except Exception:
+			item_codes = item_codes.split(",")
+
+	if isinstance(item_codes, str):
+		item_codes = [item_codes]
+
+	codes = [str(code or "").strip() for code in (item_codes or [])]
+	return list(dict.fromkeys(code for code in codes if code))
+
+
+def _split_item_code_text(value):
+	import re
+
+	return [code.strip() for code in re.split(r"[,\n]", str(value or "")) if code.strip()]
+
+
+def _get_suggested_item_codes(source_item_codes):
+	"""Read Item.custom_item_suggestions for the given items, whatever its field type
+	(Table / Table MultiSelect with a Link-to-Item column, a single Link, or text of codes)."""
+	field = frappe.get_meta("Item").get_field(ITEM_SUGGESTIONS_FIELD)
+	if not field or not source_item_codes:
+		return []
+
+	suggested = []
+
+	if field.fieldtype in ("Table", "Table MultiSelect"):
+		child_meta = frappe.get_meta(field.options)
+		link_fieldname = next(
+			(
+				child_field.fieldname
+				for child_field in child_meta.fields
+				if child_field.fieldtype == "Link" and child_field.options == "Item"
+			),
+			None,
+		)
+		if not link_fieldname:
+			return []
+
+		rows = frappe.get_all(
+			field.options,
+			filters={
+				"parent": ["in", source_item_codes],
+				"parenttype": "Item",
+				"parentfield": ITEM_SUGGESTIONS_FIELD,
+			},
+			fields=["parent", "idx", link_fieldname],
+			order_by="idx asc",
+			limit_page_length=0,
+		)
+		# Keep the order of the selected items, then each item's own row order.
+		source_order = {code: index for index, code in enumerate(source_item_codes)}
+		rows.sort(key=lambda row: (source_order.get(row.parent, 0), row.idx or 0))
+		suggested = [row.get(link_fieldname) for row in rows]
+	else:
+		values = frappe.get_all(
+			"Item",
+			filters={"name": ["in", source_item_codes]},
+			fields=["name", ITEM_SUGGESTIONS_FIELD],
+			limit_page_length=0,
+		)
+		values_by_item = {row.name: row.get(ITEM_SUGGESTIONS_FIELD) for row in values}
+		for code in source_item_codes:
+			value = values_by_item.get(code)
+			if field.fieldtype == "Link":
+				suggested.append(value)
+			else:
+				suggested.extend(_split_item_code_text(value))
+
+	source = set(source_item_codes)
+	return list(dict.fromkeys(code for code in suggested if code and code not in source))
+
+
+def _get_item_suggestions(item_codes, limit_page_length, published):
+	suggested_codes = _get_suggested_item_codes(item_codes)
+	if not suggested_codes:
+		return []
+
+	items = _get_items(
+		limit_page_length=len(suggested_codes),
+		limit_start=0,
+		search=None,
+		item_group=None,
+		item=None,
+		variant_of=None,
+		brand=None,
+		supplier=None,
+		supplier_store=None,
+		published=published,
+		item_codes=suggested_codes,
+	)
+	order = {code: index for index, code in enumerate(suggested_codes)}
+	items = sorted(items, key=lambda item: order.get(item.get("name"), len(order)))
+
+	return items[:limit_page_length] if limit_page_length else items
+
+
+@frappe.whitelist(allow_guest=True)
+def get_item_suggestions(item_codes=None, limit_page_length=12, published=1):
+	"""Products listed in custom_item_suggestions of the given items (e.g. the cart),
+	excluding the given items themselves, in the same shape as get_items."""
+	source_item_codes = _parse_item_codes_param(item_codes)[:MAX_SUGGESTION_SOURCE_ITEMS]
+	if not source_item_codes:
+		return []
+
+	params = {
+		"item_codes": sorted(source_item_codes),
+		"limit_page_length": frappe.utils.cint(limit_page_length) or 12,
+		"published": 1 if _is_truthy_flag(published) else 0,
+	}
+
+	return get_cached_catalog_value(
+		"item_suggestions",
+		{**params, "price_list": _get_selling_price_list()},
+		lambda: _get_item_suggestions(
+			item_codes=params["item_codes"],
+			limit_page_length=params["limit_page_length"],
+			published=params["published"],
+		),
+	)

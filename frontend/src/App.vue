@@ -77,13 +77,6 @@ function navigateToWishlist() {
 function navigateToHome() {
   router.push({ name: 'home' })
 }
-
-function updateProductSearch(searchText) {
-  router.push({
-    name: 'home',
-    query: searchText ? { search: searchText } : {},
-  })
-}
 </script>
 
 <template>
@@ -93,7 +86,6 @@ function updateProductSearch(searchText) {
     v-else
     @login="navigateToLogin"
     @logout="handleLogout"
-    @search="updateProductSearch"
     @wishlist="navigateToWishlist"
   >
     <RouterView v-slot="{ Component }">

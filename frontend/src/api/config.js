@@ -13,6 +13,9 @@ export const API_BASE_URL =
 export const PRODUCT_API_PATH =
   import.meta.env.VITE_PRODUCT_API_PATH || '/method/buy_in_minutes.api.get_items'
 
+export const ITEM_SUGGESTIONS_API_PATH =
+  import.meta.env.VITE_ITEM_SUGGESTIONS_API_PATH || '/method/buy_in_minutes.api.get_item_suggestions'
+
 export const ITEM_GROUP_API_PATH =
   import.meta.env.VITE_ITEM_GROUP_API_PATH || '/method/buy_in_minutes.api.get_item_groups'
 

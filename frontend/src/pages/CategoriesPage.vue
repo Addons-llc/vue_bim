@@ -1,3 +1,9 @@
+<script>
+// Kept across visits so returning to this tab shows the last lists instantly
+// while fresh data loads in the background.
+const listCache = { brands: [], stores: [] }
+</script>
+
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -30,11 +36,12 @@ const activeTab = computed(() =>
 const activeTabLabel = computed(() =>
   categoryTabs.find((tab) => tab.id === activeTab.value)?.label || 'Categories',
 )
-const brands = ref([])
-const stores = ref([])
+const brands = ref(listCache.brands)
+const stores = ref(listCache.stores)
 const categories = ref(getCachedProductCategories())
-const isLoadingCategories = ref(false)
+const loadingLists = ref({ brands: false, stores: false, categories: false })
 const categoryError = ref('')
+const isLoadingCategories = computed(() => loadingLists.value[activeTab.value])
 const topLevelCategories = computed(() =>
   categories.value.filter((category) => {
     const parentItemGroup = String(category.parentItemGroup || '').trim()
@@ -124,32 +131,32 @@ async function openSelectedItem(category) {
   })
 }
 
-async function loadCategories() {
-  isLoadingCategories.value = !categories.value.length
-  categoryError.value = ''
+// Each list is fetched independently and shown as soon as it arrives, so the
+// Categories tab no longer waits on brands and stores (or vice versa).
+async function loadList(key, target, request, fallbackError) {
+  loadingLists.value = { ...loadingLists.value, [key]: !target.value.length }
 
   try {
-    const [loadedCategories, loadedBrands, loadedStores] = await Promise.all([
-      getProductCategories(),
-      getBrands({
-        limit_page_length: 5000,
-      }),
-      getSupplierStores({
-        limit_page_length: 5000,
-      }),
-    ])
+    target.value = await request()
 
-    categories.value = loadedCategories
-    brands.value = loadedBrands
-    stores.value = loadedStores
+    if (key in listCache) {
+      listCache[key] = target.value
+    }
   } catch (error) {
-    categories.value = []
-    brands.value = []
-    stores.value = []
-    categoryError.value = error.message || 'Unable to load categories.'
+    if (!target.value.length && activeTab.value === key) {
+      categoryError.value = error.message || fallbackError
+    }
   } finally {
-    isLoadingCategories.value = false
+    loadingLists.value = { ...loadingLists.value, [key]: false }
   }
+}
+
+function loadCategories() {
+  categoryError.value = ''
+
+  loadList('categories', categories, getProductCategories, 'Unable to load categories.')
+  loadList('brands', brands, () => getBrands({ limit_page_length: 5000 }), 'Unable to load brands.')
+  loadList('stores', stores, () => getSupplierStores({ limit_page_length: 5000 }), 'Unable to load stores.')
 }
 
 onMounted(loadCategories)

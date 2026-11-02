@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 320" role="img" aria-label="Services coming soon">
+  <circle cx="160" cy="140" r="112" fill="#e8f5eb"/>
+  <circle cx="68" cy="92" r="9" fill="#c9e9d0"/>
+  <circle cx="254" cy="70" r="12" fill="#c9e9d0"/>
+  <circle cx="262" cy="198" r="7" fill="#c9e9d0"/>
+  <rect x="150" y="70" width="20" height="10" rx="5" fill="#078b20"/>
+  <rect x="156" y="78" width="8" height="14" fill="#078b20"/>
+  <path d="M92 168 A68 68 0 0 1 228 168 Z" fill="#078b20"/>
+  <path d="M112 150 A48 48 0 0 1 140 112" fill="none" stroke="#ffffff" stroke-opacity="0.5" stroke-width="8" stroke-linecap="round"/>
+  <rect x="76" y="168" width="168" height="14" rx="7" fill="#0aa82a"/>
+  <rect x="64" y="190" width="192" height="12" rx="6" fill="#c9e9d0"/>
+  <text x="160" y="290" text-anchor="middle" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="22" font-weight="800" fill="#111827">Services</text>
+  <text x="160" y="312" text-anchor="middle" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="14" font-weight="600" fill="#6b7280">Coming soon</text>
+</svg>

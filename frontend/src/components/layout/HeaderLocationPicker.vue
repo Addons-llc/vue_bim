@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import {
   clearCurrentLocationCoords,
@@ -7,6 +7,8 @@ import {
   storeCurrentLocationCoords,
 } from '../../api/deliveryEta'
 import { loadGoogleMaps } from '../../api/googleMaps'
+import { customerAddresses, setDefaultCustomerAddress } from '../../data/addressStore'
+import { currentUser } from '../../data/authStore'
 
 const route = useRoute()
 const selectedLocation = ref('Select location')
@@ -15,9 +17,16 @@ const isDetectingLocation = ref(false)
 const locationError = ref('')
 const locationSearchText = ref('')
 const locationSuggestions = ref([])
+const savedAddresses = computed(() => (currentUser.value ? customerAddresses.value : []))
+const savedAddressesLink = computed(() =>
+  savedAddresses.value.length
+    ? { name: 'addresses' }
+    : { name: 'addresses', query: { add: '1' } },
+)
 
 const LOCATION_STORAGE_KEY = 'buyInMinutesSelectedLocation'
 const AUTO_PROMPT_LOCATION_KEY = 'buyInMinutesPromptLocationOnHome'
+const AUTO_DETECTED_SESSION_KEY = 'buyInMinutesLocationAutoDetected'
 const UNWANTED_RESULT_TYPES = ['parking', 'point_of_interest', 'establishment', 'premise', 'subpremise']
 const UAE_COUNTRY_CODE = 'AE'
 const UAE_PLACE_RESTRICTIONS = { country: 'ae' }
@@ -26,7 +35,7 @@ let autocompleteService
 let geocoder
 let placesSessionToken
 let placeApi
-let hasAttemptedAutoLocation = false
+let suggestionRequestId = 0
 
 function setSelectedLocation(location) {
   selectedLocation.value = location
@@ -39,6 +48,31 @@ function setSelectedLocation(location) {
   }
 
   window.dispatchEvent(new CustomEvent(LOCATION_UPDATED_EVENT))
+}
+
+function getSavedAddressText(address) {
+  return [address.area, address.building, address.street, address.emirate]
+    .filter(Boolean)
+    .slice(0, 3)
+    .join(', ') || address.label
+}
+
+function isSavedAddressSelected(address) {
+  return selectedLocation.value === getSavedAddressText(address)
+}
+
+// Delivery falls back to the default address, so the chosen one has to become the default.
+function selectSavedAddress(address) {
+  setDefaultCustomerAddress(address.id)
+
+  if (address.latitude && address.longitude) {
+    storeCurrentLocationCoords({ lat: address.latitude, lng: address.longitude })
+  } else {
+    clearCurrentLocationCoords()
+  }
+
+  setSelectedLocation(getSavedAddressText(address))
+  closeLocationDialog()
 }
 
 function isPlusCodeLabel(label = '') {
@@ -209,19 +243,6 @@ async function toggleLocationDialog() {
   await openLocationDialog()
 }
 
-async function promptForCurrentLocation() {
-  isLocationDialogOpen.value = true
-  locationError.value = ''
-  locationSearchText.value =
-    selectedLocation.value && selectedLocation.value !== 'Select location'
-      ? selectedLocation.value
-      : ''
-  locationSuggestions.value = []
-
-  await initializePlaces()
-  detectCurrentLocation()
-}
-
 function closeLocationDialog() {
   isLocationDialogOpen.value = false
 }
@@ -242,16 +263,29 @@ function describeGeolocationError(error) {
   return 'Unable to access your current location.'
 }
 
-function detectCurrentLocation() {
+function detectCurrentLocation({ silent = false } = {}) {
   locationError.value = ''
 
+  // In silent (automatic) mode, only surface the picker when there is no
+  // location at all to fall back on; otherwise keep the existing one quietly.
+  function failDetection(message) {
+    locationError.value = message
+    isDetectingLocation.value = false
+
+    if (silent && !localStorage.getItem(LOCATION_STORAGE_KEY)) {
+      openLocationDialog().then(() => {
+        locationError.value = message
+      })
+    }
+  }
+
   if (!navigator.geolocation) {
-    locationError.value = 'Current location is not supported in this browser.'
+    failDetection('Current location is not supported in this browser.')
     return
   }
 
   if (!window.isSecureContext) {
-    locationError.value = 'Location detection needs a secure (https://) connection. It will work once this site is served over https.'
+    failDetection('Location detection needs a secure (https://) connection. It will work once this site is served over https.')
     return
   }
 
@@ -266,9 +300,9 @@ function detectCurrentLocation() {
       storeCurrentLocationCoords(currentPosition)
 
       if (!geocoder) {
-        locationError.value = 'Unable to resolve your exact address.'
         isDetectingLocation.value = false
         closeLocationDialog()
+        failDetection('Unable to resolve your exact address.')
         return
       }
 
@@ -280,21 +314,23 @@ function detectCurrentLocation() {
           : null
         const displayLocation = buildReadableLocationFromComponents(placeDetails || geocodedResult || {})
 
+        isDetectingLocation.value = false
+
         if (displayLocation) {
           setSelectedLocation(displayLocation)
         } else if (exactAddress) {
           setSelectedLocation(exactAddress)
         } else {
-          locationError.value = 'Unable to resolve your exact address.'
+          closeLocationDialog()
+          failDetection('Unable to resolve your exact address.')
+          return
         }
 
-        isDetectingLocation.value = false
         closeLocationDialog()
       })
     },
     (error) => {
-      locationError.value = describeGeolocationError(error)
-      isDetectingLocation.value = false
+      failDetection(describeGeolocationError(error))
     },
     {
       timeout: 10000,
@@ -371,20 +407,33 @@ async function submitTypedLocation() {
   )
 }
 
-function promptForLocationOnHome() {
-  if (
-    route.name !== 'home'
-    || sessionStorage.getItem(AUTO_PROMPT_LOCATION_KEY) !== '1'
-  ) {
+// Fetch the current location automatically when the user lands on one of the
+// bottom-tab dashboard pages — once per browser session, plus again right after
+// sign-in (login/OTP/profile set AUTO_PROMPT_LOCATION_KEY).
+async function autoDetectLocationOnDashboard() {
+  // Bottom-tab pages are marked with meta.bottomTab in the router.
+  if (!route.meta.bottomTab) {
+    return
+  }
+
+  const requestedAfterSignIn = sessionStorage.getItem(AUTO_PROMPT_LOCATION_KEY) === '1'
+  const alreadyDetected = sessionStorage.getItem(AUTO_DETECTED_SESSION_KEY) === '1'
+
+  if (isDetectingLocation.value || (alreadyDetected && !requestedAfterSignIn)) {
     return
   }
 
   sessionStorage.removeItem(AUTO_PROMPT_LOCATION_KEY)
-  promptForCurrentLocation()
+  sessionStorage.setItem(AUTO_DETECTED_SESSION_KEY, '1')
+
+  await initializePlaces()
+  detectCurrentLocation({ silent: true })
 }
 
-watch(locationSearchText, async (value) => {
-  const keyword = value.trim()
+// Runs on typing only, so prefilling the box on open doesn't hide the saved addresses.
+function updateLocationSuggestions() {
+  const keyword = locationSearchText.value.trim()
+  const requestId = ++suggestionRequestId
 
   if (!keyword || !autocompleteService) {
     locationSuggestions.value = []
@@ -400,6 +449,10 @@ watch(locationSearchText, async (value) => {
       types: ['geocode'],
     },
     (predictions, status) => {
+      if (requestId !== suggestionRequestId) {
+        return
+      }
+
       if (status !== window.google.maps.places.PlacesServiceStatus.OK || !predictions) {
         locationSuggestions.value = []
         return
@@ -413,26 +466,7 @@ watch(locationSearchText, async (value) => {
       }))
     },
   )
-})
-
-watch(
-  () => route.name,
-  (name) => {
-    promptForLocationOnHome()
-
-    if (
-      hasAttemptedAutoLocation
-      || name !== 'home'
-      || localStorage.getItem(LOCATION_STORAGE_KEY)
-    ) {
-      return
-    }
-
-    hasAttemptedAutoLocation = true
-    promptForCurrentLocation()
-  },
-  { immediate: true },
-)
+}
 
 onMounted(() => {
   const storedLocation = localStorage.getItem(LOCATION_STORAGE_KEY)
@@ -441,7 +475,7 @@ onMounted(() => {
     setSelectedLocation(normalizeDisplayedLocation(storedLocation))
   }
 
-  promptForLocationOnHome()
+  watch(() => route.name, autoDetectLocationOnDashboard, { immediate: true })
 })
 </script>
 
@@ -470,7 +504,9 @@ onMounted(() => {
       <span class="location-copy">
         <span class="action-label">Deliver to</span>
         <span class="location-row">
-          <span class="location-name">{{ selectedLocation }}</span>
+          <span class="location-name">
+            {{ isDetectingLocation && !isLocationDialogOpen ? 'Detecting location…' : selectedLocation }}
+          </span>
           <svg
             class="chevron"
             aria-hidden="true"
@@ -510,7 +546,7 @@ onMounted(() => {
         <button
           class="detect-location-button"
           type="button"
-          @click="detectCurrentLocation"
+          @click="detectCurrentLocation()"
         >
           {{ isDetectingLocation ? 'Detecting...' : 'Detect my location' }}
         </button>
@@ -522,6 +558,7 @@ onMounted(() => {
             type="text"
             autofocus
             placeholder="Search delivery area"
+            @input="updateLocationSuggestions"
           />
         </form>
       </div>
@@ -529,6 +566,71 @@ onMounted(() => {
       <p v-if="locationError" class="form-message error-message">
         {{ locationError }}
       </p>
+
+      <section
+        v-if="currentUser && !locationSuggestions.length"
+        class="location-saved"
+        aria-labelledby="location-saved-title"
+      >
+        <div class="location-saved-header">
+          <h3 id="location-saved-title">Saved addresses</h3>
+          <RouterLink class="location-saved-link" :to="savedAddressesLink" @click="closeLocationDialog">
+            {{ savedAddresses.length ? 'Manage' : 'Add address' }}
+          </RouterLink>
+        </div>
+
+        <button
+          v-for="address in savedAddresses"
+          :key="address.id"
+          class="location-saved-option"
+          :class="{ 'is-selected': isSavedAddressSelected(address) }"
+          type="button"
+          :aria-pressed="isSavedAddressSelected(address)"
+          @click="selectSavedAddress(address)"
+        >
+          <span class="location-saved-icon" aria-hidden="true">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <template v-if="address.label === 'Office'">
+                <path d="M6 3h12v18H6z" />
+                <path d="M10 7h1M13 7h1M10 11h1M13 11h1" />
+                <path d="M10 21v-4h4v4" />
+              </template>
+              <template v-else>
+                <path d="M3 11l9-8 9 8" />
+                <path d="M5 10v10h14V10" />
+              </template>
+            </svg>
+          </span>
+          <span class="location-saved-text">
+            <strong>{{ address.label }}</strong>
+            <small>{{ getSavedAddressText(address) }}</small>
+          </span>
+          <svg
+            v-if="isSavedAddressSelected(address)"
+            class="location-saved-check"
+            aria-hidden="true"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2.6"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path d="M5 12.5l4.5 4.5L19 7.5" />
+          </svg>
+        </button>
+
+        <p v-if="!savedAddresses.length" class="location-saved-empty">
+          No saved addresses yet.
+        </p>
+      </section>
 
       <div class="location-suggestion-list">
         <button

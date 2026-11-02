@@ -26,7 +26,12 @@
   overflow-x: auto;
   padding-bottom: 6px;
   scroll-snap-type: x mandatory;
-  scrollbar-width: thin;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.bundle-rail::-webkit-scrollbar {
+  display: none;
 }
 
 .bundle-card {

@@ -19,6 +19,8 @@ const otp = computed(() => otpDigits.value.join(''))
 const errorMessage = ref('')
 const successMessage = ref('')
 const isSubmitting = ref(false)
+// Only the Verify button's own request shows its spinner (resend also uses isSubmitting).
+const isVerifying = ref(false)
 const resendSecondsRemaining = ref(60)
 const appBase = import.meta.env.BASE_URL
 let resendTimerId = null
@@ -47,13 +49,6 @@ const formattedPhoneNumber = computed(() => {
 const resendCountdown = computed(() => {
   const seconds = resendSecondsRemaining.value
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`
-})
-const submitLabel = computed(() => {
-  if (isSubmitting.value) {
-    return 'Verifying...'
-  }
-
-  return isLinkMode.value ? 'Verify number' : 'Verify and continue'
 })
 
 const canResendOtp = computed(() => resendSecondsRemaining.value === 0 && !isSubmitting.value)
@@ -226,6 +221,7 @@ async function handleOtpVerification() {
   errorMessage.value = ''
   successMessage.value = ''
   isSubmitting.value = true
+  isVerifying.value = true
 
   try {
     console.log('Phone OTP verify payload', {
@@ -275,6 +271,7 @@ async function handleOtpVerification() {
     resetOtpDigits()
   } finally {
     isSubmitting.value = false
+    isVerifying.value = false
   }
 }
 
@@ -383,21 +380,16 @@ function changePhoneNumber() {
             />
           </div>
 
-          <button class="signin-submit" type="submit" :disabled="isSubmitting || otp.length !== OTP_LENGTH">
-            <span>{{ submitLabel }}</span>
-            <svg
-              v-if="!isSubmitting"
-              aria-hidden="true"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2.4"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            >
-              <path d="M5 12h14" />
-              <path d="M13 6l6 6-6 6" />
-            </svg>
+          <button
+            class="signin-submit"
+            :class="{ 'is-loading': isVerifying }"
+            type="submit"
+            :disabled="isSubmitting || otp.length !== OTP_LENGTH"
+            :aria-busy="isVerifying ? 'true' : undefined"
+            :aria-label="isVerifying ? 'Verifying' : undefined"
+          >
+            <span v-if="isVerifying" class="signin-submit-spinner" aria-hidden="true" />
+            <span v-else>Verify</span>
           </button>
         </form>
 
@@ -418,22 +410,6 @@ function changePhoneNumber() {
             Resend code
           </button>
         </div>
-
-        <p class="signin-note">
-          <svg
-            aria-hidden="true"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          >
-            <rect x="5" y="11" width="14" height="10" rx="2" />
-            <path d="M8 11V7a4 4 0 0 1 8 0v4" />
-          </svg>
-          Never share this code with anyone.
-        </p>
       </section>
     </section>
   </main>

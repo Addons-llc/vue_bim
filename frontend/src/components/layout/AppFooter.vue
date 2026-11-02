@@ -1,4 +1,6 @@
 <script setup>
+import { appStoreUrl, playStoreUrl } from '../../data/partnerLinks'
+
 const appBase = import.meta.env.BASE_URL
 </script>
 
@@ -16,7 +18,7 @@ const appBase = import.meta.env.BASE_URL
         </p>
 
         <div class="bf-apps" aria-label="Download app links">
-          <a class="bf-app" href="/app-store">
+          <a class="bf-app" :href="appStoreUrl">
             <svg aria-hidden="true" viewBox="0 0 24 24" fill="currentColor">
               <path d="M16.2 2.2c.1 1.1-.3 2.1-1 2.9-.8.9-1.9 1.5-3 1.4-.1-1.1.4-2.2 1.1-2.9.8-.8 2-1.4 2.9-1.4Z" />
               <path d="M20.6 17.2c-.4.9-.7 1.4-1.3 2.2-.8 1.2-2 2.7-3.5 2.7-1.3 0-1.7-.8-3.5-.8s-2.3.8-3.5.8c-1.5 0-2.7-1.4-3.5-2.6-2.4-3.6-2.7-7.8-1.2-10.1 1-1.6 2.6-2.5 4.2-2.5 1.6 0 2.6.9 3.9.9 1.2 0 2-.9 3.9-.9 1.4 0 2.9.8 3.9 2.1-3.4 1.9-2.8 6.7.6 8.2Z" />
@@ -29,7 +31,7 @@ const appBase = import.meta.env.BASE_URL
 
           <a
             class="bf-app"
-            href="https://play.google.com/store/apps/details?id=com.addons.buyinminutes"
+            :href="playStoreUrl"
             target="_blank"
             rel="noopener noreferrer"
           >

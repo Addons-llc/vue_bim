@@ -6,7 +6,7 @@ import HeaderActions from './HeaderActions.vue'
 import HeaderLocationPicker from './HeaderLocationPicker.vue'
 import HeaderSearchForm from './HeaderSearchForm.vue'
 
-const emit = defineEmits(['login', 'logout', 'search', 'wishlist'])
+const emit = defineEmits(['login', 'logout', 'wishlist'])
 const route = useRoute()
 const isCategoriesRoute = computed(() =>
   ['brands', 'stores', 'categories', 'category-details', 'store-details'].includes(route.name),
@@ -35,7 +35,7 @@ onBeforeUnmount(() => {
     <div class="header-inner">
       <AppBrandLink />
       <HeaderLocationPicker />
-      <HeaderSearchForm @search="emit('search', $event)" />
+      <HeaderSearchForm />
       <HeaderActions
         @login="emit('login')"
         @logout="emit('logout')"

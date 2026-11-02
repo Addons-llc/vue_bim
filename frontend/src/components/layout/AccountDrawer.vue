@@ -2,7 +2,12 @@
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { currentUser } from '../../data/authStore'
-import { deliveryCompanyUrl, supplierRegistrationUrl } from '../../data/partnerLinks'
+import {
+  appStoreUrl,
+  deliveryCompanyUrl,
+  playStoreUrl,
+  supplierRegistrationUrl,
+} from '../../data/partnerLinks'
 import { wishlistItemCount } from '../../data/wishlistStore'
 
 const props = defineProps({
@@ -263,6 +268,38 @@ onBeforeUnmount(() => {
               <span v-if="link.count" class="account-drawer-count">{{ link.count }}</span>
             </component>
           </nav>
+
+          <section class="account-drawer-apps" aria-labelledby="account-drawer-apps-title">
+            <h3 id="account-drawer-apps-title" class="account-drawer-group-title">Get the app</h3>
+            <div class="account-drawer-app-badges">
+              <a class="account-drawer-app" :href="appStoreUrl" @click="emit('close')">
+                <svg aria-hidden="true" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M16.2 2.2c.1 1.1-.3 2.1-1 2.9-.8.9-1.9 1.5-3 1.4-.1-1.1.4-2.2 1.1-2.9.8-.8 2-1.4 2.9-1.4Z" />
+                  <path d="M20.6 17.2c-.4.9-.7 1.4-1.3 2.2-.8 1.2-2 2.7-3.5 2.7-1.3 0-1.7-.8-3.5-.8s-2.3.8-3.5.8c-1.5 0-2.7-1.4-3.5-2.6-2.4-3.6-2.7-7.8-1.2-10.1 1-1.6 2.6-2.5 4.2-2.5 1.6 0 2.6.9 3.9.9 1.2 0 2-.9 3.9-.9 1.4 0 2.9.8 3.9 2.1-3.4 1.9-2.8 6.7.6 8.2Z" />
+                </svg>
+                <span>
+                  <small>Download on the</small>
+                  App Store
+                </span>
+              </a>
+
+              <a
+                class="account-drawer-app"
+                :href="playStoreUrl"
+                target="_blank"
+                rel="noopener noreferrer"
+                @click="emit('close')"
+              >
+                <svg aria-hidden="true" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M4 3.5v17a1 1 0 0 0 1.5.9l14.6-8.5a1 1 0 0 0 0-1.8L5.5 2.6A1 1 0 0 0 4 3.5Z" />
+                </svg>
+                <span>
+                  <small>Get it on</small>
+                  Google Play
+                </span>
+              </a>
+            </div>
+          </section>
 
           <button
             v-if="isAuthenticated"

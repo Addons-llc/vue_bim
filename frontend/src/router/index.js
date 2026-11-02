@@ -15,6 +15,7 @@ import PaymentCancelPage from '../pages/PaymentCancelPage.vue'
 import PaymentSuccessPage from '../pages/PaymentSuccessPage.vue'
 import ProductDetailsPage from '../pages/ProductDetailsPage.vue'
 import ProfilePage from '../pages/ProfilePage.vue'
+import SearchPage from '../pages/SearchPage.vue'
 import StoresPage from '../pages/StoresPage.vue'
 import SupplierDetailsPage from '../pages/SupplierDetailsPage.vue'
 import WishlistPage from '../pages/WishlistPage.vue'
@@ -23,11 +24,20 @@ const routes = [
   {
     path: '/',
     name: 'home',
+    meta: { bottomTab: true },
     component: HomePage,
     props: (route) => ({
       category: route.query.category || '',
       searchText: route.query.search || '',
     }),
+  },
+  {
+    path: '/search',
+    name: 'search',
+    component: SearchPage,
+    meta: {
+      hideHeader: true,
+    },
   },
   {
     path: '/products',
@@ -64,12 +74,25 @@ const routes = [
     component: StoresPage,
   },
   {
+    path: '/explore',
+    name: 'explore',
+    meta: { bottomTab: true },
+    component: ComingSoonPage,
+    props: {
+      title: 'Explore',
+      variant: 'explore',
+      message: 'Discover new stores, trending picks and offers near you. We’re putting it together.',
+    },
+  },
+  {
     path: '/services',
     name: 'services',
+    meta: { bottomTab: true },
     component: ComingSoonPage,
     props: {
       title: 'Services',
-      message: 'Our services are coming soon.',
+      variant: 'services',
+      message: 'Book trusted home and local services right from BIM. We’re getting this ready for you.',
     },
   },
   {
@@ -93,16 +116,19 @@ const routes = [
   {
     path: '/categories',
     name: 'categories',
+    meta: { bottomTab: true },
     component: CategoriesPage,
   },
   {
     path: '/categories/:categoryName',
     name: 'category-details',
+    meta: { bottomTab: true },
     component: CategoryDetailsPage,
   },
   {
     path: '/stores/:categoryName',
     name: 'store-details',
+    meta: { bottomTab: true },
     component: CategoryDetailsPage,
   },
   {

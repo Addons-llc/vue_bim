@@ -59,6 +59,8 @@ const props = defineProps({
 
 const emit = defineEmits(['select', 'view-all'])
 
+// First tiles load immediately; the rest wait until scrolled near.
+const EAGER_IMAGE_COUNT = 8
 const categoryPlaceholderImage = `${import.meta.env.BASE_URL}grocery-card-image-v3.svg?v=3`
 const gridElement = ref(null)
 const fittingCount = ref(null)
@@ -88,7 +90,20 @@ async function measureFittingCount() {
 
   const gridRight = grid.getBoundingClientRect().right
   const tiles = Array.from(grid.children)
-  const fittingTiles = tiles.filter((tile) => tile.getBoundingClientRect().right <= gridRight + 1)
+
+  if (!tiles.length) {
+    return
+  }
+
+  // Count only tiles on the first row that are fully visible. On mobile the
+  // rails switch to a wrapping grid, so a right-edge check alone would count
+  // every wrapped row as "fitting" and show all items.
+  const firstRowBottom = tiles[0].getBoundingClientRect().bottom
+  const fittingTiles = tiles.filter((tile) => {
+    const rect = tile.getBoundingClientRect()
+
+    return rect.top < firstRowBottom && rect.right <= gridRight + 1
+  })
 
   fittingCount.value = Math.max(fittingTiles.length, 1)
 }
@@ -143,8 +158,8 @@ function viewAll() {
     :class="[`category-section--${itemType}`, { 'is-icon-grid': iconGrid }]"
     :id="sectionId || undefined"
   >
-    <div class="category-section-heading">
-      <h2>{{ title }}</h2>
+    <div v-if="title || viewAllTo || showViewAllButton" class="category-section-heading">
+      <h2 v-if="title">{{ title }}</h2>
       <RouterLink
         v-if="viewAllTo"
         class="section-link category-view-all-link"
@@ -167,7 +182,7 @@ function viewAll() {
       :class="{ 'is-manual-scroll': horizontal }"
     >
       <button
-        v-for="category in visibleCategories"
+        v-for="(category, index) in visibleCategories"
         :key="category.id"
         class="category-tile"
         :class="{
@@ -182,6 +197,8 @@ function viewAll() {
             class="category-image"
             :src="getCategoryImage(category)"
             :alt="category.name"
+            :loading="index < EAGER_IMAGE_COUNT ? 'eager' : 'lazy'"
+            decoding="async"
             @error="showPlaceholderImage"
           />
         </span>

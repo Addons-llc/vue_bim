@@ -6,7 +6,7 @@ const route = useRoute()
 
 const isHomeActive = computed(() => route.name === 'home')
 const isCategoriesActive = computed(() => ['categories', 'category-details'].includes(route.name))
-const isExploreActive = computed(() => ['stores', 'store-details'].includes(route.name))
+const isExploreActive = computed(() => route.name === 'explore')
 const isServicesActive = computed(() => route.name === 'services')
 </script>
 
@@ -59,7 +59,7 @@ const isServicesActive = computed(() => route.name === 'services')
     <RouterLink
       class="mobile-nav-item"
       :class="{ 'is-active': isExploreActive }"
-      :to="{ name: 'stores' }"
+      :to="{ name: 'explore' }"
     >
       <svg
         class="mobile-nav-icon"

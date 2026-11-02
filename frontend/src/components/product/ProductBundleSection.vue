@@ -26,7 +26,6 @@ defineProps({
 
 const emit = defineEmits(['select'])
 
-const VISIBLE_BUNDLE_ITEMS = 4
 const bundlePlaceholderImage = `${import.meta.env.BASE_URL}grocery-card-image-v3.svg?v=3`
 const priceFormatter = new Intl.NumberFormat('en-AE', {
   minimumFractionDigits: 0,
@@ -37,17 +36,6 @@ function formatPrice(value) {
   const price = Number(value)
 
   return Number.isFinite(price) ? priceFormatter.format(price) : value
-}
-
-function formatQuantity(component) {
-  const qty = Number(component.qty) || 0
-  const qtyLabel = Number.isInteger(qty) ? qty : priceFormatter.format(qty)
-
-  return component.uom ? `${qtyLabel} ${component.uom}` : `× ${qtyLabel}`
-}
-
-function getSavings(bundle) {
-  return bundle.oldPrice ? bundle.oldPrice - bundle.price : 0
 }
 
 function getCartQuantity(bundle) {
@@ -104,9 +92,6 @@ function showPlaceholderImage(event) {
           <span class="bundle-card-count">
             {{ bundle.bundleItems.length }} {{ bundle.bundleItems.length === 1 ? 'item' : 'items' }}
           </span>
-          <span v-if="getSavings(bundle) > 0" class="bundle-card-savings">
-            Save AED {{ formatPrice(getSavings(bundle)) }}
-          </span>
         </div>
 
         <div class="bundle-card-body">
@@ -123,18 +108,6 @@ function showPlaceholderImage(event) {
           </h3>
           <p v-if="bundle.supplierName" class="bundle-card-supplier">{{ bundle.supplierName }}</p>
 
-          <ul v-if="bundle.bundleItems.length" class="bundle-card-contents" aria-label="Kit contents">
-            <li
-              v-for="component in bundle.bundleItems.slice(0, VISIBLE_BUNDLE_ITEMS)"
-              :key="component.itemCode"
-            >
-              <span class="bundle-content-name">{{ component.name }}</span>
-              <span class="bundle-content-qty">{{ formatQuantity(component) }}</span>
-            </li>
-            <li v-if="bundle.bundleItems.length > VISIBLE_BUNDLE_ITEMS" class="bundle-content-more">
-              + {{ bundle.bundleItems.length - VISIBLE_BUNDLE_ITEMS }} more
-            </li>
-          </ul>
 
           <div class="bundle-card-footer">
             <span class="bundle-card-price">

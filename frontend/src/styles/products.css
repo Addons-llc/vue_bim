@@ -2256,3 +2256,50 @@
     display: none;
   }
 }
+
+/* Spinner shown while a product list is loading (replaces the "Loading items..." text). */
+.product-section-loader {
+  display: flex;
+  justify-content: center;
+  padding: 40px 0;
+}
+
+.product-section-loader-spinner {
+  width: 36px;
+  height: 36px;
+  border: 3px solid rgba(7, 139, 32, 0.18);
+  border-top-color: var(--brand-green, #078b20);
+  border-radius: 50%;
+  animation: product-section-loader-spin 0.75s linear infinite;
+}
+
+@keyframes product-section-loader-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .product-section-loader-spinner {
+    animation-duration: 1.6s;
+  }
+}
+
+/* "You may also like" rail on the cart page (Item.custom_item_suggestions). */
+.item-suggestions {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  margin: 8px 0 16px;
+}
+
+.item-suggestions-title {
+  margin: 0;
+  color: var(--text-strong);
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.item-suggestions-rail {
+  padding-right: 0;
+}

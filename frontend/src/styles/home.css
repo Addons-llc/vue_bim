@@ -80,6 +80,18 @@
   object-position: center;
 }
 
+/* Desktop: a shorter banner with the artwork stretched to fill it, so nothing is cropped. */
+@media (min-width: 861px) {
+  .dashboard-hero {
+    height: clamp(320px, 32vw, 460px);
+    aspect-ratio: auto;
+  }
+
+  .hero-slide-image {
+    object-fit: fill;
+  }
+}
+
 .hero-slide.is-active {
   pointer-events: auto;
 }

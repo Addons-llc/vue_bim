@@ -121,7 +121,9 @@ onUnmounted(() => {
 
 <template>
   <section class="product-section">
-    <p v-if="isLoading" class="dashboard-message">Loading items...</p>
+    <div v-if="isLoading" class="product-section-loader" role="status" aria-label="Loading items">
+      <span class="product-section-loader-spinner" aria-hidden="true" />
+    </div>
     <p v-if="productError" class="dashboard-message">{{ productError }}</p>
     <p
       v-if="!isLoading && !productError && !products.length"

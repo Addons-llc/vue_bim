@@ -96,7 +96,7 @@ export function useProducts(searchText, initialCategory, options = {}) {
     }
   }
 
-  async function loadProducts(params = {}, { append = false } = {}) {
+  async function loadProducts(params = {}, { append = false, paginate = true } = {}) {
     const pageSize = params.limit_page_length || PRODUCT_PAGE_SIZE
     const query = {
       ...params,
@@ -131,7 +131,7 @@ export function useProducts(searchText, initialCategory, options = {}) {
         ? [...products.value, ...loadedProducts]
         : loadedProducts
       nextProductOffset.value = products.value.length
-      hasMoreProducts.value = loadedProducts.length === pageSize
+      hasMoreProducts.value = paginate && loadedProducts.length === pageSize
     } catch (error) {
       if (!append) {
         products.value = []
@@ -146,12 +146,25 @@ export function useProducts(searchText, initialCategory, options = {}) {
     }
   }
 
+  function clearProducts() {
+    productRequestId += 1
+    products.value = []
+    productError.value = ''
+    hasMoreProducts.value = false
+    isLoadingProducts.value = false
+    isLoadingMoreProducts.value = false
+  }
+
   function loadHomeProducts() {
     loadCategories()
 
-    return loadProducts({
-      limit_page_length: PRODUCT_PAGE_SIZE,
-    })
+    // The home view groups products into category previews capped at 11 items,
+    // so extra pages mostly land in hidden overflow. Paginating here made the
+    // load-more observer fire repeatedly with no visible change (flicker).
+    return loadProducts(
+      { limit_page_length: PRODUCT_PAGE_SIZE },
+      { paginate: false },
+    )
   }
 
   function loadMoreProducts() {
@@ -177,6 +190,11 @@ export function useProducts(searchText, initialCategory, options = {}) {
     ([searchValue, categoryValue]) => {
       const keyword = searchValue.trim()
       activeCategory.value = ''
+
+      if (!keyword && options.searchOnly) {
+        clearProducts()
+        return
+      }
 
       if (!keyword) {
         const category = categoryValue

@@ -73,20 +73,15 @@
 
   .search-input {
     height: 36px;
-    padding-right: 78px;
+    padding-right: 12px;
     padding-left: 36px;
     font-size: 14px;
+    line-height: 34px;
   }
 
   .search-icon {
     left: 13px;
     font-size: 16px;
-  }
-
-  .search-button {
-    min-height: 28px;
-    padding: 0 12px;
-    font-size: 13px;
   }
 
   .header-actions {
@@ -286,6 +281,10 @@
     padding: 12px 16px;
   }
 
+  .location-saved {
+    padding: 12px 16px 16px;
+  }
+
   .search-form {
     order: 3;
     flex: 0 0 100%;
@@ -297,20 +296,15 @@
 
   .search-input {
     height: 40px;
-    padding-right: 88px;
+    padding-right: 14px;
     padding-left: 42px;
     font-size: 15px;
+    line-height: 38px;
   }
 
   .search-icon {
     left: 15px;
     font-size: 18px;
-  }
-
-  .search-button {
-    min-height: 32px;
-    padding: 0 12px;
-    font-size: 14px;
   }
 
   .page-shell {
@@ -1193,17 +1187,20 @@
     grid-template-columns: 1fr;
   }
 
-  .wishlist-page .product-grid {
+  .wishlist-page .product-grid,
+  .search-page .product-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 10px;
   }
 
   /* Half-width cards: stack the price and give the button the full card width. */
-  .wishlist-page .product-info {
+  .wishlist-page .product-info,
+  .search-page .product-info {
     padding: 10px;
   }
 
-  .wishlist-page .product-name {
+  .wishlist-page .product-name,
+  .search-page .product-name {
     display: -webkit-box;
     overflow: hidden;
     font-size: 14px;
@@ -1212,7 +1209,8 @@
     -webkit-line-clamp: 2;
   }
 
-  .wishlist-page .product-footer {
+  .wishlist-page .product-footer,
+  .search-page .product-footer {
     flex-direction: column;
     align-items: stretch;
     gap: 8px;
@@ -1220,11 +1218,14 @@
     padding-top: 8px;
   }
 
-  .wishlist-page .product-price {
+  .wishlist-page .product-price,
+  .search-page .product-price {
     font-size: 15px;
   }
 
   .wishlist-page .add-cart-button,
+  .search-page .add-cart-button,
+  .search-page .product-quantity-control,
   .wishlist-page .product-quantity-control {
     width: 100%;
     min-width: 0;
@@ -1842,5 +1843,59 @@
     width: calc(100% - 32px);
     padding: 16px 0 20px;
     text-align: center;
+  }
+}
+
+/* Mobile: compact Home rails (Brands, Store, Categories) — 4 smaller tiles per row.
+   CategoryRail's fit-to-row shows only the first row; "View all" leads to the rest. */
+@media (max-width: 520px) {
+  .dashboard-hero ~ .category-section.home-rail-brands .category-grid.is-manual-scroll,
+  .dashboard-hero ~ .category-section.home-rail-store .category-grid.is-manual-scroll,
+  .dashboard-hero ~ .category-section.home-rail-categories .category-grid.is-manual-scroll {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 12px 8px;
+    justify-content: stretch;
+    justify-items: center;
+    overflow: visible;
+  }
+
+  .dashboard-hero ~ .category-section.home-rail-brands .category-grid.is-manual-scroll .category-tile,
+  .dashboard-hero ~ .category-section.home-rail-store .category-grid.is-manual-scroll .category-tile,
+  .dashboard-hero ~ .category-section.home-rail-categories .category-grid.is-manual-scroll .category-tile {
+    flex: none;
+    width: 100%;
+    min-width: 0;
+    max-width: 76px;
+    min-height: 0;
+    gap: 6px;
+    padding: 0;
+  }
+
+  .dashboard-hero ~ .category-section.home-rail-brands .category-tile .category-image-wrap,
+  .dashboard-hero ~ .category-section.home-rail-store .category-tile .category-image-wrap,
+  .dashboard-hero ~ .category-section.home-rail-categories .category-tile .category-image-wrap {
+    flex-basis: auto;
+    width: 100%;
+    max-width: 64px;
+    height: auto;
+    aspect-ratio: 1;
+    margin: 0 auto;
+  }
+
+  .dashboard-hero ~ .category-section.home-rail-brands .category-name,
+  .dashboard-hero ~ .category-section.home-rail-store .category-name,
+  .dashboard-hero ~ .category-section.home-rail-categories .category-name {
+    max-width: 100%;
+    min-height: 0;
+    font-size: 11px;
+    line-height: 1.25;
+    text-align: center;
+  }
+
+  .dashboard-hero ~ .category-section.home-rail-brands .category-section-heading h2,
+  .dashboard-hero ~ .category-section.home-rail-store .category-section-heading h2,
+  .dashboard-hero ~ .category-section.home-rail-categories .category-section-heading h2 {
+    font-size: 18px;
   }
 }
