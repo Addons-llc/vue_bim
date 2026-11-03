@@ -53,8 +53,6 @@ const rfqRequiredDateInput = ref(null)
 const isRfqRequiredDatePickerVisible = ref(false)
 const selectedRfqRequiredDate = ref('')
 const LAST_COD_ORDER_ITEMS_STORAGE_KEY = 'buyInMinutesLastCodOrderItems'
-const ORDER_DATE_MIN_VALUE = '2026-09-26'
-const ORDER_DATE_MAX_VALUE = '2026-09-27'
 const SUPPLIER_MINIMUM_ORDER_RULES = [
   {
     supplierNames: ['Red Chilly Restaurant', 'Red Chillies', 'Red Chillies Restaurant'],
@@ -128,12 +126,9 @@ const selectedRfqRequiredDateLabel = computed(() => formatDeliveryDate(selectedR
 const deliveryDatePrompt = computed(() =>
   isCustomerPickup.value ? 'Choose pickup date' : 'Choose delivery date',
 )
-const deliveryDateMin = computed(() =>
-  isRfqCart.value ? undefined : ORDER_DATE_MIN_VALUE,
-)
-const deliveryDateMax = computed(() =>
-  isRfqCart.value ? undefined : ORDER_DATE_MAX_VALUE,
-)
+// Any date from today onwards; ERPNext rejects a delivery date before the order date.
+const deliveryDateMin = computed(() => getTodayDateValue())
+const deliveryDateMax = computed(() => undefined)
 const rfqRequiredDatePrompt = computed(() => 'Choose required date')
 const selectedDeliveryAddress = computed(() =>
   customerAddresses.value.find((address) => address.isDefault)
@@ -460,11 +455,7 @@ function selectDeliverySlot(slot) {
 function selectFulfillmentMode(mode) {
   fulfillmentMode.value = mode
 
-  if (
-    !isRfqCart.value
-    && selectedDeliveryDate.value
-    && (selectedDeliveryDate.value < ORDER_DATE_MIN_VALUE || selectedDeliveryDate.value > ORDER_DATE_MAX_VALUE)
-  ) {
+  if (selectedDeliveryDate.value && selectedDeliveryDate.value < getTodayDateValue()) {
     selectedDeliveryDate.value = ''
   }
 }
