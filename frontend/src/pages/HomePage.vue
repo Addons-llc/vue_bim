@@ -53,6 +53,15 @@ const itemGroupRails = ref(
   })),
 )
 const visibleItemGroupRails = computed(() => itemGroupRails.value.filter((rail) => rail.products.length))
+// Products shown after the kits in "BIM Mart Essentials".
+const ESSENTIALS_ITEM_GROUPS = ['Fresh items', 'Grocery & Kitchen']
+const essentialsProducts = ref([])
+// Kits are Items in these groups too; don't show them twice in the same row.
+const essentialsExtraProducts = computed(() => {
+  const bundleIds = new Set(productBundles.value.map((bundle) => bundle.id))
+
+  return essentialsProducts.value.filter((product) => !bundleIds.has(product.id))
+})
 const heroImageFallback = `${import.meta.env.BASE_URL}grocery-card-image-v3.svg?v=3`
 let heroSlideTimer = null
 
@@ -105,6 +114,17 @@ const discoveryCategories = computed(() =>
 const brandsTabRoute = { name: 'categories', query: { tab: 'brands' } }
 const storesTabRoute = { name: 'categories', query: { tab: 'stores' } }
 const categoriesTabRoute = { name: 'categories', query: { tab: 'categories' } }
+// Every published top-level category, shown as pills at the top of the page.
+const categoryPills = computed(() =>
+  categories.value
+    .filter(isPublished)
+    .filter((category) => {
+      const parentItemGroup = String(category.parentItemGroup || '').trim()
+
+      return !parentItemGroup || parentItemGroup === 'All Item Groups'
+    }),
+)
+const categoryPillPlaceholder = `${import.meta.env.BASE_URL}grocery-card-image-v3.svg?v=3`
 
 const homeShortcuts = [
   {
@@ -208,17 +228,38 @@ async function loadProductBundles() {
 
 // The items API matches item_group exactly, so query the group and every group
 // beneath it (e.g. Fashion -> Men's fashion -> Shirt) and merge the results.
-async function loadItemGroupProducts(rootGroup) {
-  let groups = [rootGroup]
-
-  try {
-    groups = await getItemGroupWithDescendants(rootGroup)
-  } catch {
-    // Fall back to the top-level group only.
+// Finds rootGroup and every group beneath it. Root groups like Food hold no
+// items directly, so losing the tree would empty the rail: retry the request
+// once, then fall back to the published category list already on the page.
+async function getGroupTree(rootGroup) {
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      return await getItemGroupWithDescendants(rootGroup)
+    } catch {
+      // The shared request resets itself on failure, so the next attempt refetches.
+    }
   }
 
+  const groups = [rootGroup]
+
+  for (let index = 0; index < groups.length; index += 1) {
+    for (const category of categories.value) {
+      const name = category.itemGroup || category.name
+
+      if (String(category.parentItemGroup || '').trim() === groups[index] && name && !groups.includes(name)) {
+        groups.push(name)
+      }
+    }
+  }
+
+  return groups
+}
+
+async function loadItemGroupProducts(rootGroup, { perGroupMinimum = 2, limit = HOME_RAIL_SIZE } = {}) {
+  const groups = await getGroupTree(rootGroup)
+
   // Items are interleaved one per group below, so only a few per group are needed.
-  const perGroupLimit = Math.max(2, Math.ceil(HOME_RAIL_SIZE / groups.length) + 1)
+  const perGroupLimit = Math.max(perGroupMinimum, Math.ceil(HOME_RAIL_SIZE / groups.length) + 1)
   const results = await Promise.allSettled(
     groups.map((itemGroup) => getProducts({ item_group: itemGroup, limit_page_length: perGroupLimit })),
   )
@@ -227,13 +268,13 @@ async function loadItemGroupProducts(rootGroup) {
   const merged = []
 
   // Take one item from each group in turn so the rail mixes sub-categories.
-  for (let round = 0; merged.length < HOME_RAIL_SIZE; round += 1) {
+  for (let round = 0; merged.length < limit; round += 1) {
     const roundItems = groupLists.map((list) => list[round]).filter(Boolean)
 
     if (!roundItems.length) break
 
     for (const product of roundItems) {
-      if (merged.length >= HOME_RAIL_SIZE) break
+      if (merged.length >= limit) break
       if (product.id && !seen.has(product.id)) {
         seen.add(product.id)
         merged.push(product)
@@ -244,11 +285,43 @@ async function loadItemGroupProducts(rootGroup) {
   return merged
 }
 
+async function loadEssentialsProducts() {
+  // Fetch extra per group: kits live in these groups too and are filtered out
+  // afterwards, so a small fetch could come back almost entirely as kits.
+  const groupLists = await Promise.all(
+    ESSENTIALS_ITEM_GROUPS.map((group) => loadItemGroupProducts(group, { perGroupMinimum: 20, limit: 20 })),
+  )
+  const seen = new Set()
+  const merged = []
+  const longest = Math.max(0, ...groupLists.map((list) => list.length))
+
+  // Alternate between the groups so fresh and grocery items are mixed.
+  for (let index = 0; index < longest; index += 1) {
+    for (const list of groupLists) {
+      const product = list[index]
+
+      if (product?.id && !seen.has(product.id)) {
+        seen.add(product.id)
+        merged.push(product)
+      }
+    }
+  }
+
+  essentialsProducts.value = merged
+}
+
 function loadItemGroupRails() {
   for (const rail of itemGroupRails.value) {
-    loadItemGroupProducts(rail.itemGroup).then((products) => {
-      rail.products = products
-    })
+    loadItemGroupRail(rail)
+  }
+}
+
+async function loadItemGroupRail(rail, attempt = 0) {
+  rail.products = await loadItemGroupProducts(rail.itemGroup)
+
+  // An empty result is usually a failed request rather than an empty group: try once more.
+  if (!rail.products.length && attempt === 0) {
+    setTimeout(() => loadItemGroupRail(rail, 1), 3000)
   }
 }
 
@@ -288,6 +361,7 @@ onMounted(() => {
   loadStores()
   loadProductBundles()
   loadItemGroupRails()
+  loadEssentialsProducts()
   syncHeroAutoplay()
 })
 
@@ -297,6 +371,27 @@ onUnmounted(() => {
 </script>
 
 <template>
+  <nav v-if="categoryPills.length" class="home-category-pills" aria-label="Categories">
+    <button
+      v-for="category in categoryPills"
+      :key="category.id || category.name"
+      class="home-category-pill"
+      :class="{ 'is-active': activeCategory === category.name }"
+      type="button"
+      @click="openCategoryItem(category)"
+    >
+      <img
+        class="home-category-pill-image"
+        :src="category.image || categoryPillPlaceholder"
+        alt=""
+        aria-hidden="true"
+        loading="lazy"
+        decoding="async"
+      />
+      <span>{{ category.name }}</span>
+    </button>
+  </nav>
+
   <nav class="home-shortcuts" aria-label="Browse">
     <RouterLink
       v-for="shortcut in homeShortcuts"
@@ -352,6 +447,7 @@ onUnmounted(() => {
   <CategoryRail
     v-if="discoveryBrands.length"
     class="home-rail-section home-rail-brands"
+    view-all-label="Explore"
     section-id="brands"
     title="Featured Brands"
     horizontal
@@ -367,6 +463,7 @@ onUnmounted(() => {
   <CategoryRail
     v-if="discoveryStores.length"
     class="home-rail-section home-rail-store"
+    view-all-label="Explore"
     section-id="shops"
     title="Store"
     horizontal
@@ -381,6 +478,7 @@ onUnmounted(() => {
   <CategoryRail
     v-if="discoveryCategories.length"
     class="home-rail-section home-rail-categories"
+    view-all-label="Explore"
     section-id="categories"
     title="Categories"
     horizontal
@@ -396,20 +494,29 @@ onUnmounted(() => {
   <ProductBundleSection
     title="BIM Mart Essentials"
     subtitle=""
-    v-if="publishedBundles.length"
+    v-if="publishedBundles.length || essentialsExtraProducts.length"
     :bundles="publishedBundles"
     @select="openProductDetails"
-  />
+  >
+    <ProductCard
+      v-for="product in essentialsExtraProducts"
+      :key="product.id"
+      :product="product"
+      compact
+      @select="openProductDetails(product)"
+    />
+  </ProductBundleSection>
 
   <section
     v-for="rail in visibleItemGroupRails"
     :key="rail.id"
     class="product-category-section home-group-rail"
+    :class="`home-group-rail--${rail.id}`"
     :aria-labelledby="`home-${rail.id}-title`"
   >
     <div class="product-category-heading">
       <h2 :id="`home-${rail.id}-title`">{{ rail.title }}</h2>
-      <RouterLink class="section-link" :to="rail.viewAllTo">Explore</RouterLink>
+      <RouterLink class="section-link home-explore-link" :to="rail.viewAllTo">Explore</RouterLink>
     </div>
 
     <div class="product-rail-wrap">
@@ -425,7 +532,10 @@ onUnmounted(() => {
     </div>
   </section>
 
+  <!-- The home page ends with the curated rails above; per-item-group sections
+       only appear when the user searches or picks a category. -->
   <ProductSections
+    v-if="isFilteredProducts"
     :is-filtered-products="isFilteredProducts"
     :is-loading="isLoadingProducts"
     :is-loading-more="isLoadingMoreProducts"

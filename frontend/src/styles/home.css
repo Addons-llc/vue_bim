@@ -15,6 +15,89 @@
   flex-direction: column;
 }
 
+/* Category pills above the Brands / Stores / Categories cards. One row that
+   scrolls sideways; the edge fade hints that there is more. */
+.home-category-pills {
+  order: 0;
+  display: flex;
+  gap: 10px;
+  margin: -6px 0 14px;
+  overflow-x: auto;
+  padding: 4px 2px;
+  scroll-snap-type: x proximity;
+  scrollbar-width: none;
+  -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 32px), transparent);
+  mask-image: linear-gradient(90deg, #000 calc(100% - 32px), transparent);
+}
+
+.home-category-pills::-webkit-scrollbar {
+  display: none;
+}
+
+.home-category-pill {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 8px;
+  min-height: 40px;
+  border: 1px solid #e5e7eb;
+  border-radius: 999px;
+  padding: 4px 14px 4px 4px;
+  background: #ffffff;
+  color: #111827;
+  cursor: pointer;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  white-space: nowrap;
+  scroll-snap-align: start;
+  box-shadow: 0 2px 6px rgba(17, 24, 39, 0.04);
+  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+
+.home-category-pill:hover,
+.home-category-pill:focus-visible {
+  border-color: #00a878;
+  background: #e9f8f2;
+  color: #00785f;
+  outline: 0;
+}
+
+.home-category-pill.is-active {
+  border-color: #00a878;
+  background: #00a878;
+  color: #ffffff;
+}
+
+.home-category-pill-image {
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
+  border-radius: 50%;
+  background: #f3f4f6;
+  object-fit: cover;
+}
+
+@media (max-width: 640px) {
+  .home-category-pills {
+    gap: 8px;
+    margin: -2px 0 12px;
+  }
+
+  .home-category-pill {
+    min-height: 36px;
+    gap: 6px;
+    padding-right: 12px;
+    font-size: 13px;
+  }
+
+  .home-category-pill-image {
+    width: 26px;
+    height: 26px;
+    flex-basis: 26px;
+  }
+}
+
 .home-shortcuts {
   order: 0;
   display: grid;
@@ -513,3 +596,65 @@
   object-fit: cover;
   box-shadow: 0 16px 24px rgba(15, 42, 95, 0.18);
 }
+
+/* "Explore" links on the home page: a soft pill, each section in its own colour. */
+.home-rail-section .category-view-all-link,
+.section-link.home-explore-link {
+  --explore-bg: #e6f7f1;
+  --explore-ink: #00785f;
+
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  min-height: 32px;
+  border: 1px solid color-mix(in srgb, var(--explore-ink) 22%, transparent);
+  border-radius: 999px;
+  padding: 0 14px;
+  background: var(--explore-bg);
+  color: var(--explore-ink);
+  font-size: 13px;
+  font-weight: 800;
+  text-decoration: none;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.home-rail-section .category-view-all-link:hover,
+.home-rail-section .category-view-all-link:focus-visible,
+.section-link.home-explore-link:hover,
+.section-link.home-explore-link:focus-visible {
+  border-color: var(--explore-ink);
+  background: var(--explore-ink);
+  color: #ffffff;
+  outline: 0;
+  transform: none;
+}
+
+.home-rail-store .category-view-all-link {
+  --explore-bg: #fff4e5;
+  --explore-ink: #b45309;
+}
+
+.home-rail-categories .category-view-all-link {
+  --explore-bg: #eef2ff;
+  --explore-ink: #4338ca;
+}
+
+.home-group-rail--everyday-style .section-link.home-explore-link {
+  --explore-bg: #fdf2f8;
+  --explore-ink: #be185d;
+}
+
+.home-group-rail--craving-food .section-link.home-explore-link {
+  --explore-bg: #fef2f2;
+  --explore-ink: #dc2626;
+}
+
+@media (max-width: 520px) {
+  .home-rail-section .category-view-all-link,
+  .section-link.home-explore-link {
+    min-height: 28px;
+    padding: 0 12px;
+    font-size: 12px;
+  }
+}
+

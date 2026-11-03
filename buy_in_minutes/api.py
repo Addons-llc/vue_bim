@@ -457,14 +457,78 @@ def _resolve_supplier_name(candidate_supplier):
 	return frappe.db.get_value("Supplier", {"supplier_name": candidate_supplier}, "name") or ""
 
 
+def _get_default_suppliers_from_defaults(items):
+	"""Default supplier per item from the Item / Item Group / Brand "defaults" tables.
+
+	Checkout (payment._get_default_supplier_for_item) falls back to these, so the
+	catalog must too; otherwise an item checkout can order shows no supplier.
+	Batched into one query instead of loading each Item, Item Group and Brand.
+	"""
+	if not items or not frappe.db.exists("DocType", "Item Default"):
+		return {}
+
+	parents_by_type = {
+		"Item": {item.name for item in items if item.name},
+		"Item Group": {item.get("item_group") for item in items if item.get("item_group")},
+		"Brand": {item.get("brand") for item in items if item.get("brand")},
+	}
+	parent_names = set().union(*parents_by_type.values())
+	if not parent_names:
+		return {}
+
+	from buy_in_minutes.payment import _get_default_company
+
+	try:
+		company = _get_default_company()
+	except Exception:
+		company = None
+
+	rows = frappe.get_all(
+		"Item Default",
+		filters={
+			"parenttype": ["in", list(parents_by_type)],
+			"parent": ["in", list(parent_names)],
+			"default_supplier": ["is", "set"],
+		},
+		fields=["parent", "parenttype", "company", "default_supplier"],
+		ignore_permissions=True,
+		limit_page_length=0,
+	)
+
+	# Prefer the row for the checkout company; otherwise accept any company's row.
+	defaults = {}
+	for row in rows:
+		key = (row.parenttype, row.parent)
+		if key not in defaults or (company and row.company == company):
+			defaults[key] = row.default_supplier
+
+	suppliers = {}
+	for item in items:
+		for key in (("Item", item.name), ("Item Group", item.get("item_group")), ("Brand", item.get("brand"))):
+			supplier = defaults.get(key)
+			if supplier:
+				suppliers[item.name] = supplier
+				break
+
+	return suppliers
+
+
 def _apply_supplier_details(items):
 	item_names = [item.name for item in items if item.name]
 	item_supplier_links = _get_item_supplier_links(item_names)
 	item_supplier_options = _get_item_supplier_options(item_names)
+	default_suppliers = _get_default_suppliers_from_defaults(
+		[item for item in items if not (_get_supplier_from_item_fields(item) or item_supplier_links.get(item.name))]
+	)
 	item_suppliers = {}
 
 	for item in items:
-		supplier = _get_supplier_from_item_fields(item) or item_supplier_links.get(item.name) or ""
+		supplier = (
+			_get_supplier_from_item_fields(item)
+			or item_supplier_links.get(item.name)
+			or default_suppliers.get(item.name)
+			or ""
+		)
 		if supplier:
 			item_suppliers[item.name] = supplier
 
@@ -1554,6 +1618,21 @@ def get_items(
 	)
 
 
+def _get_item_group_with_descendants(item_group):
+	"""Return item_group plus every group beneath it, at any depth.
+
+	Parent groups such as "Men's fashion" usually hold no items themselves
+	(they live in Shirt, Dhoti, ...), so filtering by the exact group alone
+	makes a parent category look empty.
+	"""
+	if not frappe.db.exists("Item Group", item_group):
+		return [item_group]
+
+	from frappe.utils.nestedset import get_descendants_of
+
+	return [item_group, *get_descendants_of("Item Group", item_group, ignore_permissions=True)]
+
+
 def _get_items(
 	limit_page_length,
 	limit_start,
@@ -1643,7 +1722,7 @@ def _get_items(
 		query = query.where(item_table.variant_of == variant_of)
 
 	if item_group:
-		query = query.where(item_table.item_group == item_group)
+		query = query.where(item_table.item_group.isin(_get_item_group_with_descendants(item_group)))
 
 	if brand:
 		query = query.where(item_table.brand == brand)

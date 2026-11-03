@@ -51,7 +51,7 @@ const productQuantity = computed(() => {
   return cartProducts.value.find((item) => item.id === product.value.id)?.quantity || 0
 })
 const baseSupplierName = computed(() =>
-  product.value?.supplierName || product.value?.supplier || 'Supplier not set',
+  product.value?.supplierName || product.value?.supplier || '',
 )
 const baseSupplierIdentifier = computed(() =>
   product.value?.supplier || product.value?.supplierDetails?.name || baseSupplierName.value,
@@ -127,6 +127,8 @@ const supplierName = computed(() =>
 const supplierIdentifier = computed(() =>
   selectedSupplierOption.value?.name || baseSupplierIdentifier.value,
 )
+// Items with no supplier configured hide the seller card instead of a placeholder name.
+const hasSupplier = computed(() => Boolean(supplierName.value && supplierIdentifier.value))
 const activeSupplierDetails = computed(() =>
   selectedSupplierOption.value
     ? {
@@ -923,7 +925,7 @@ onUnmounted(() => {
         >
           {{ brandName }}
         </RouterLink>
-        <p v-else class="product-detail-category">{{ supplierName }}</p>
+        <p v-else-if="hasSupplier" class="product-detail-category">{{ supplierName }}</p>
         <!-- Source listing is kept in productDetails below; avoid duplicating Brand under the brand link. -->
         <!--
         <p v-if="sourceListing" class="product-detail-category">
@@ -1041,6 +1043,7 @@ onUnmounted(() => {
 
       <aside class="product-detail-purchase" aria-label="Purchase options">
         <RouterLink
+          v-if="hasSupplier"
           class="product-detail-seller-card"
           :to="{ name: 'supplier-details', params: { supplierName: supplierIdentifier } }"
           @click="rememberSupplierSelection"
@@ -1064,7 +1067,7 @@ onUnmounted(() => {
           <span>↩ Easy and hassle free returns</span>
           <span>♢ Secure payments</span>
           <RouterLink
-            v-if="productReviews.length"
+            v-if="productReviews.length && hasSupplier"
             class="product-detail-trust-reviews"
             :to="{ name: 'supplier-details', params: { supplierName: supplierIdentifier } }"
             @click="rememberSupplierSelection"

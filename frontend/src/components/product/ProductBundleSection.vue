@@ -152,6 +152,9 @@ function showPlaceholderImage(event) {
           </div>
         </div>
       </article>
+
+      <!-- Extra cards (e.g. products) shown in the same row after the bundles. -->
+      <slot />
     </div>
   </section>
 </template>

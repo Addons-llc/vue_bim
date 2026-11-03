@@ -22,7 +22,7 @@
 
 .bundle-rail {
   display: flex;
-  gap: 16px;
+  gap: 18px;
   overflow-x: auto;
   padding-bottom: 6px;
   scroll-snap-type: x mandatory;
@@ -34,9 +34,12 @@
   display: none;
 }
 
+/* Same width as product cards (.product-card.is-compact) at every breakpoint. */
 .bundle-card {
   display: flex;
-  flex: 0 0 300px;
+  flex: 0 0 252px;
+  width: 252px;
+  min-width: 0;
   flex-direction: column;
   overflow: hidden;
   border: 1px solid #dcefe0;
@@ -177,11 +180,60 @@
     font-size: 19px;
   }
 
-  .bundle-card {
-    flex-basis: 260px;
-  }
 
   .bundle-card-media {
     height: 140px;
   }
+}
+
+@media (max-width: 860px) {
+  .bundle-rail {
+    gap: 24px;
+  }
+
+  .bundle-card {
+    flex-basis: 214px;
+    width: 214px;
+  }
+}
+
+@media (max-width: 520px) {
+  .bundle-rail {
+    gap: 16px;
+  }
+
+  .bundle-card {
+    flex-basis: clamp(150px, calc((100vw - 56px) / 2), 214px);
+    width: clamp(150px, calc((100vw - 56px) / 2), 214px);
+  }
+
+  /* Narrow cards: match the product card type sizes so price and button fit on one row. */
+  .bundle-card-body {
+    gap: 6px;
+    padding: 10px;
+  }
+
+  .bundle-card-title {
+    font-size: 13px;
+  }
+
+  .bundle-card-footer {
+    gap: 6px;
+  }
+
+  .bundle-card-price {
+    font-size: 13px;
+    white-space: nowrap;
+  }
+
+  .bundle-card-old-price {
+    font-size: 10px;
+  }
+}
+
+/* Product cards placed after the kits share the row's gap; drop their own spacing. */
+.bundle-rail > .product-card {
+  flex-shrink: 0;
+  margin-right: 0;
+  scroll-snap-align: start;
 }

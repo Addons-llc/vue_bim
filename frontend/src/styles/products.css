@@ -723,7 +723,8 @@
 
 .product-detail-screen {
   display: grid;
-  grid-template-columns: 560px minmax(420px, 1fr) 300px;
+  /* Image and details shrink so the 300px purchase box always fits (1280px laptops overflowed). */
+  grid-template-columns: minmax(320px, 560px) minmax(320px, 1fr) 300px;
   gap: 28px;
   align-items: start;
   width: 100%;
@@ -2128,6 +2129,13 @@
   overflow-x: auto;
   padding-bottom: 4px;
   scroll-snap-type: x proximity;
+  /* Still scrolls by swipe/trackpad; just no visible scrollbar. */
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.product-related-row::-webkit-scrollbar {
+  display: none;
 }
 
 .product-related-row .product-card.is-compact {
