@@ -238,6 +238,7 @@ onBeforeUnmount(() => {
             Login
           </button>
 
+
           <nav
             v-for="group in linkGroups"
             :key="group.key"
@@ -309,6 +310,11 @@ onBeforeUnmount(() => {
           >
             Logout
           </button>
+
+          <p class="account-drawer-powered">
+            <span>Powered by <strong>ADDON-S</strong></span>
+            <a href="https://www.addon-s.com" target="_blank" rel="noopener noreferrer">www.addon-s.com</a>
+          </p>
         </aside>
       </div>
     </Transition>

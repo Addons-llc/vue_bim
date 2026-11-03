@@ -2,8 +2,27 @@ import frappe
 from frappe.utils import flt
 
 
+def _get_session_customer():
+	"""Customer linked to the logged-in user, cached for the current request."""
+	cache = getattr(frappe.local, "buy_in_minutes_session_customer", None)
+	if cache is None:
+		cache = {}
+		frappe.local.buy_in_minutes_session_customer = cache
+	user_name = frappe.session.user
+	if user_name not in cache:
+		from buy_in_minutes.payment import _find_customer_for_user
+
+		cache[user_name] = _find_customer_for_user(user_name)
+
+	return cache[user_name]
+
+
 def _can_view_sales_order(sales_order):
-	return frappe.session.user == "Administrator" or sales_order.owner == frappe.session.user
+	if frappe.session.user == "Administrator":
+		return True
+
+	customer = _get_session_customer()
+	return bool(customer) and sales_order.customer == customer
 
 
 def _can_view_request_for_quotation(request_for_quotation):
@@ -324,10 +343,10 @@ def get_order_history(limit_page_length=20):
 	if _is_guest_session_user():
 		frappe.throw("Please sign in to view order history.", frappe.AuthenticationError)
 
-	filters = {
-		"docstatus": 1,
-		"owner": frappe.session.user,
-	}
+	# Orders are matched by the user's Customer, not by who created the document.
+	customer = _get_session_customer()
+	if not customer:
+		return []
 
 	sales_orders = frappe.get_all(
 		"Sales Order",
@@ -340,30 +359,20 @@ def get_order_history(limit_page_length=20):
 			"owner",
 			"customer",
 		],
-		filters=filters,
+		filters={"docstatus": 1, "customer": customer},
 		order_by="transaction_date desc, creation desc",
 		ignore_permissions=True,
 		limit_page_length=limit_page_length,
 	)
-	supplier_quotations = _get_supplier_quotations_for_user(limit_page_length)
-
-	if not sales_orders and not supplier_quotations:
+	if not sales_orders:
 		return []
 
 	items_by_order = _get_order_items([sales_order.name for sales_order in sales_orders])
-	items_by_supplier_quotation = _get_supplier_quotation_items(
-		[supplier_quotation.name for supplier_quotation in supplier_quotations]
-	)
-	items_by_supplier_quotation = _allocate_supplier_quotation_totals(
-		items_by_supplier_quotation,
-		supplier_quotations,
-	)
-	customer_names = _get_customer_names([sales_order.customer for sales_order in sales_orders])
+	customer_names = _get_customer_names([customer])
 	for sales_order in sales_orders:
-		if _can_view_sales_order(sales_order):
-			_ensure_purchase_orders_for_sales_order(sales_order)
+		_ensure_purchase_orders_for_sales_order(sales_order)
 
-	history_entries = [
+	return [
 		{
 			"name": sales_order.name,
 			"history_type": "sales_order",
@@ -378,35 +387,4 @@ def get_order_history(limit_page_length=20):
 			"items": items_by_order.get(sales_order.name, []),
 		}
 		for sales_order in sales_orders
-		if _can_view_sales_order(sales_order)
 	]
-
-	for supplier_quotation in supplier_quotations:
-		history_entries.append(
-			{
-				"name": supplier_quotation.name,
-				"history_type": "supplier_quotation",
-				"title": supplier_quotation.name,
-				"status": supplier_quotation.status,
-				"transaction_date": supplier_quotation.transaction_date,
-				"valid_till": supplier_quotation.get("valid_till"),
-				"grand_total": flt(supplier_quotation.get("grand_total")),
-				"currency": supplier_quotation.get("currency") or "AED",
-				"customer": "",
-				"customer_name": "",
-				"purchase_orders": [],
-				"items": items_by_supplier_quotation.get(supplier_quotation.name, []),
-				"company": supplier_quotation.get("company") or "",
-				"supplier": supplier_quotation.get("supplier") or "",
-				"supplier_name": supplier_quotation.get("supplier_name") or supplier_quotation.get("supplier") or "",
-			}
-		)
-
-	return sorted(
-		history_entries,
-		key=lambda entry: (
-			str(entry.get("transaction_date") or ""),
-			str(entry.get("name") or ""),
-		),
-		reverse=True,
-	)[:limit_page_length]

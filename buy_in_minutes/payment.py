@@ -582,17 +582,36 @@ def _require_checkout_user(checkout_user=None):
 	return frappe.session.user
 
 
+def _find_customer_for_user(user_name):
+	"""Return the Customer linked to a user (matched by email, then mobile), or None.
+
+	This is the same matching checkout uses when it creates Sales Orders, so the
+	orders list and checkout always agree on who the customer is.
+	"""
+	user_name = _normalize_user_name(user_name)
+	if _is_guest_user(user_name):
+		return None
+
+	user = frappe.db.get_value("User", user_name, ["email", "mobile_no"], as_dict=True)
+	if not user:
+		return None
+
+	customer_name = None
+	if user.email:
+		customer_name = frappe.db.get_value("Customer", {"email_id": user.email}, "name")
+	if not customer_name and user.mobile_no:
+		customer_name = frappe.db.get_value("Customer", {"mobile_no": user.mobile_no}, "name")
+
+	return customer_name or None
+
+
 def _get_or_create_customer_for_user(user_name):
 	user_name = _normalize_user_name(user_name)
 	if _is_guest_user(user_name):
 		frappe.throw(_("Please sign in before checkout."), frappe.AuthenticationError)
 
 	user = frappe.get_doc("User", user_name)
-	customer_name = None
-	if user.email:
-		customer_name = frappe.db.get_value("Customer", {"email_id": user.email}, "name")
-	if not customer_name and user.mobile_no:
-		customer_name = frappe.db.get_value("Customer", {"mobile_no": user.mobile_no}, "name")
+	customer_name = _find_customer_for_user(user_name)
 
 	if customer_name:
 		return customer_name

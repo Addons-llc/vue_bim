@@ -824,6 +824,15 @@
   color: #16a34a;
 }
 
+.wishlist-empty .empty-cart-visual {
+  background: radial-gradient(circle at 35% 30%, #fff1f2 0%, #f3f4f6 70%);
+}
+
+.wishlist-empty .empty-cart-icon {
+  color: #e11d48;
+  fill: rgba(225, 29, 72, 0.08);
+}
+
 .empty-cart-dot {
   position: absolute;
   width: 14px;

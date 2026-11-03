@@ -41,14 +41,18 @@
 .dashboard-hero ~ .category-section {
   border: 0;
   border-radius: 0;
-  padding: 0 0 18px;
+  padding: 0 0 4px;
   background: transparent;
   box-shadow: none;
 }
 
 .dashboard-hero ~ .category-section + .category-section {
   border-top: 0;
-  padding-top: 12px;
+  padding-top: 4px;
+}
+
+.dashboard-hero ~ .category-section .category-section-heading {
+  margin-bottom: 12px;
 }
 
 .dashboard-hero ~ .category-section .category-grid {
@@ -107,6 +111,10 @@
   grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
   gap: 16px;
   align-items: start;
+}
+
+.categories-page > .category-section:first-of-type {
+  padding-top: 6px;
 }
 
 .categories-page .category-grid {

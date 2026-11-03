@@ -15,6 +15,155 @@
   flex-direction: column;
 }
 
+.home-shortcuts {
+  order: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.home-shortcut-card {
+  --shortcut-ink: #00785f;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  min-width: 0;
+  border: 1px solid transparent;
+  border-radius: 18px;
+  padding: 18px;
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  min-height: 96px;
+  background: #1f2937;
+  color: #ffffff;
+  text-decoration: none;
+  box-shadow: 0 10px 24px rgba(17, 24, 39, 0.04);
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+.home-shortcut-card.is-stores {
+  --shortcut-ink: #b45309;
+}
+
+.home-shortcut-card.is-categories {
+  --shortcut-ink: #4338ca;
+}
+
+.home-shortcut-card {
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.home-shortcut-card:hover {
+  border-color: var(--shortcut-ink);
+  box-shadow: 0 16px 32px rgba(17, 24, 39, 0.16);
+  transform: translateY(-3px);
+}
+
+.home-shortcut-card:focus-visible {
+  outline: 3px solid var(--shortcut-ink);
+  outline-offset: 3px;
+}
+
+/* Pressed state gives instant tap feedback, especially on touch screens. */
+.home-shortcut-card:active {
+  box-shadow: 0 6px 14px rgba(17, 24, 39, 0.14);
+  transform: translateY(0) scale(0.97);
+  transition-duration: 0.08s;
+}
+
+.home-shortcut-art {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  pointer-events: none;
+  transition: transform 0.3s ease;
+}
+
+/* Darkens the photo so the white text stays readable, tinted with the card colour. */
+.home-shortcut-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  /* Even darkening so the centred text reads on any part of the photo. */
+  background: radial-gradient(
+    ellipse at center,
+    rgba(15, 23, 42, 0.72) 0%,
+    rgba(15, 23, 42, 0.5) 70%,
+    color-mix(in srgb, var(--shortcut-ink) 30%, rgba(15, 23, 42, 0.45)) 100%
+  );
+  pointer-events: none;
+}
+
+.home-shortcut-card:hover .home-shortcut-art,
+.home-shortcut-card:focus-visible .home-shortcut-art {
+  transform: scale(1.05);
+}
+
+.home-shortcut-text {
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  min-width: 0;
+  text-align: center;
+}
+
+.home-shortcut-text strong {
+  font-size: 16px;
+  font-weight: 850;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+}
+
+.home-shortcut-text small {
+  overflow: hidden;
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .home-shortcuts {
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+
+  .home-shortcut-card {
+    border-radius: 14px;
+    padding: 12px 6px;
+  }
+
+  .home-shortcut-text strong {
+    font-size: 13px;
+  }
+
+  .home-shortcut-text small {
+    display: none;
+  }
+
+  .home-shortcut-card::after {
+    background: rgba(15, 23, 42, 0.58);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-shortcut-card:hover,
+  .home-shortcut-card:active,
+  .home-shortcut-card:hover .home-shortcut-art,
+  .home-shortcut-card:focus-visible .home-shortcut-art {
+    transform: none;
+  }
+}
+
 .dashboard-hero {
   position: relative;
   order: 1;
@@ -48,6 +197,12 @@
 .page-shell:has(> .dashboard-hero) > .bundle-section {
   order: 5;
   margin-top: 18px;
+}
+
+.page-shell:has(> .dashboard-hero) > .home-group-rail {
+  order: 5;
+  margin-top: 6px;
+  margin-bottom: 26px;
 }
 
 .page-shell:has(> .dashboard-hero) > .product-section {

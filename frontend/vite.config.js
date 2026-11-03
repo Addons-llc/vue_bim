@@ -46,6 +46,21 @@ export default defineConfig(({ command, mode }) => {
     : undefined
   const base = command === 'serve' ? '/' : '/assets/buy_in_minutes/buy-in-minutes/'
   const https = command === 'serve' ? getLocalHttpsConfig(env) : undefined
+  // The live site marks its session cookie `Secure`. Over plain-HTTP dev
+  // (Safari on localhost, or any browser via a LAN IP) the browser silently
+  // drops it, so every request after login runs as Guest. Strip the flag when
+  // the dev server isn't HTTPS. Dev server only; production is untouched.
+  const configureProxy = https
+    ? undefined
+    : (proxy) => {
+        proxy.on('proxyRes', (proxyRes) => {
+          const cookies = proxyRes.headers['set-cookie']
+
+          if (Array.isArray(cookies)) {
+            proxyRes.headers['set-cookie'] = cookies.map((cookie) => cookie.replace(/;\s*Secure/gi, ''))
+          }
+        })
+      }
   const clientEnv = Object.fromEntries(
     Object.entries(env)
       .filter(([key]) => key.startsWith('VITE_'))
@@ -79,6 +94,7 @@ export default defineConfig(({ command, mode }) => {
           changeOrigin: true,
           secure: true,
           headers: frappeProxyHeaders,
+          configure: configureProxy,
         },
         '/files': {
           target: proxyTarget,
@@ -90,6 +106,7 @@ export default defineConfig(({ command, mode }) => {
           changeOrigin: true,
           secure: true,
           headers: frappeProxyHeaders,
+          configure: configureProxy,
         },
       },
     },

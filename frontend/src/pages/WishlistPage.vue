@@ -31,12 +31,46 @@ function openProductDetails(product) {
   <section class="wishlist-page">
     <div class="section-heading">
       <h2>Wishlist</h2>
-      <p class="section-support">{{ wishlistProducts.length }} saved items</p>
     </div>
 
-    <p v-if="!wishlistProducts.length" class="dashboard-message">
-      Your wishlist is empty.
-    </p>
+    <section v-if="!wishlistProducts.length" class="cart-page-empty wishlist-empty">
+      <div class="empty-cart-visual" aria-hidden="true">
+        <svg
+          class="empty-cart-icon"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.75"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8z" />        </svg>
+        <span class="empty-cart-dot is-green"></span>
+        <span class="empty-cart-dot is-blue"></span>
+        <span class="empty-cart-dot is-yellow"></span>
+      </div>
+
+      <div class="empty-cart-copy">
+        <p class="empty-cart-kicker">Nothing saved yet</p>
+        <h2>Your wishlist is empty</h2>
+        <p>
+          Tap the heart on any product to save it here, so you can find it
+          quickly and add it to your cart later.
+        </p>
+      </div>
+
+      <nav class="empty-cart-suggestions" aria-label="Shopping suggestions">
+        <RouterLink :to="{ name: 'categories' }">Categories</RouterLink>
+        <RouterLink :to="{ name: 'stores' }">Stores</RouterLink>
+        <RouterLink :to="{ name: 'brands' }">Brands</RouterLink>
+      </nav>
+
+      <div class="empty-cart-actions is-single">
+        <RouterLink class="primary-dark-button" :to="{ name: 'home' }">
+          Start shopping
+        </RouterLink>
+      </div>
+    </section>
 
     <div v-else class="product-grid">
       <ProductCard

@@ -268,6 +268,41 @@ a.account-drawer-profile:focus-visible .account-drawer-identity strong {
   background: #fef2f2;
 }
 
+.account-drawer-powered {
+  display: grid;
+  justify-items: center;
+  gap: 1px;
+  margin: 14px 0 0;
+  border-top: 1px solid #e5e7eb;
+  padding-top: 10px;
+  color: #6b7280;
+  font-size: 10px;
+  line-height: 1.4;
+  text-align: center;
+}
+
+/* When logged out there is no Logout button, so push the credit to the bottom itself. */
+.account-drawer-login ~ .account-drawer-powered {
+  margin-top: auto;
+}
+
+.account-drawer-powered strong {
+  color: #111827;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.account-drawer-powered a {
+  color: #00785f;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.account-drawer-powered a:hover,
+.account-drawer-powered a:focus-visible {
+  text-decoration: underline;
+}
+
 .account-drawer-enter-active,
 .account-drawer-leave-active {
   transition: opacity 0.22s ease;

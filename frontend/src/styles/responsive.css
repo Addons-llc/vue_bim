@@ -467,16 +467,25 @@
   }
 
   .categories-page .category-section-heading {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
     width: 100%;
-    gap: 14px 12px;
+    gap: 12px;
     padding: 0;
   }
 
-  .categories-page .category-section-heading h2 {
-    justify-self: center;
-    transform: translateX(10px);
+  /* Tabs span the full width as three equal segments, aligned with the content edge. */
+  .categories-page .category-tab-bar {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    width: 100%;
+    gap: 4px;
+    margin-bottom: 12px;
+  }
+
+  .categories-page .category-tab-button {
+    padding: 0 8px;
   }
 
   .categories-page .category-tile {
@@ -649,7 +658,11 @@
   }
 
   .dashboard-hero ~ .category-section {
-    padding: 10px 0 8px;
+    padding: 4px 0 2px;
+  }
+
+  .dashboard-hero ~ .category-section .category-section-heading {
+    margin-bottom: 8px;
   }
 
   .category-section-heading {

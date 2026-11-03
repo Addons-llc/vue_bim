@@ -1847,8 +1847,27 @@ def _get_item_groups(limit_page_length, published):
 	return query.orderby(item_group_table[_get_item_group_order_field(order_fields)]).run(as_dict=True)
 
 
+def _get_session_customer():
+	"""Customer linked to the logged-in user, cached for the current request."""
+	cache = getattr(frappe.local, "buy_in_minutes_session_customer", None)
+	if cache is None:
+		cache = {}
+		frappe.local.buy_in_minutes_session_customer = cache
+	user_name = frappe.session.user
+	if user_name not in cache:
+		from buy_in_minutes.payment import _find_customer_for_user
+
+		cache[user_name] = _find_customer_for_user(user_name)
+
+	return cache[user_name]
+
+
 def _can_view_sales_order(sales_order):
-	return frappe.session.user == "Administrator" or sales_order.owner == frappe.session.user
+	if frappe.session.user == "Administrator":
+		return True
+
+	customer = _get_session_customer()
+	return bool(customer) and sales_order.customer == customer
 
 
 def _is_guest_session_user():

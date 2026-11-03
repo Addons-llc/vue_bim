@@ -9,8 +9,8 @@
   gap: 12px;
   width: min(260px, calc(100vw - 48px));
   min-height: 58px;
-  border-radius: 14px;
-  padding: 8px 14px;
+  border-radius: 999px;
+  padding: 8px 18px 8px 20px;
   background: #00a878;
   color: #ffffff;
   box-shadow: 0 12px 28px rgba(0, 120, 95, 0.32);
@@ -27,7 +27,7 @@
 
 .floating-cart:focus-visible {
   outline: 2px solid #00785f;
-  outline-offset: 2px;
+  outline-offset: 3px;
 }
 
 .floating-cart-icon {

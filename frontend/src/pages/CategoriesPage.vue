@@ -40,8 +40,17 @@ const brands = ref(listCache.brands)
 const stores = ref(listCache.stores)
 const categories = ref(getCachedProductCategories())
 const loadingLists = ref({ brands: false, stores: false, categories: false })
+// Lists that have had a response (or came from cache), so "No ... found" only
+// shows once we actually know the list is empty, not before the first request.
+const settledLists = ref({
+  brands: brands.value.length > 0,
+  stores: stores.value.length > 0,
+  categories: categories.value.length > 0,
+})
 const categoryError = ref('')
-const isLoadingCategories = computed(() => loadingLists.value[activeTab.value])
+const isLoadingCategories = computed(
+  () => loadingLists.value[activeTab.value] || !settledLists.value[activeTab.value],
+)
 const topLevelCategories = computed(() =>
   categories.value.filter((category) => {
     const parentItemGroup = String(category.parentItemGroup || '').trim()
@@ -148,6 +157,7 @@ async function loadList(key, target, request, fallbackError) {
     }
   } finally {
     loadingLists.value = { ...loadingLists.value, [key]: false }
+    settledLists.value = { ...settledLists.value, [key]: true }
   }
 }
 
@@ -178,7 +188,14 @@ onMounted(loadCategories)
     </div>
 
     <p v-if="categoryError" class="dashboard-message">{{ categoryError }}</p>
-    <p v-if="isLoadingCategories" class="dashboard-message">Loading {{ activeTabLabel.toLowerCase() }}...</p>
+    <div
+      v-if="isLoadingCategories && !visibleItems.length"
+      class="product-section-loader"
+      role="status"
+      :aria-label="`Loading ${activeTabLabel.toLowerCase()}`"
+    >
+      <span class="product-section-loader-spinner" aria-hidden="true" />
+    </div>
     <p v-if="!isLoadingCategories && !categoryError && !visibleItems.length" class="dashboard-message">
       No {{ activeTabLabel.toLowerCase() }} found.
     </p>

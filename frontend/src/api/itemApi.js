@@ -573,6 +573,55 @@ export async function getItemMasterCategories() {
     .map(mapItemGroupToCategory)
 }
 
+// Returns rootGroup plus every item group below it, at any depth. Uses the
+// unfiltered group list because sub-groups are often not published themselves.
+let allItemGroupsRequest = null
+
+// Shared by every caller on the page so the full group list is fetched once.
+function getAllItemGroups() {
+  if (!allItemGroupsRequest) {
+    const query = new URLSearchParams({
+      limit_page_length: 5000,
+      published: 0,
+    })
+
+    allItemGroupsRequest = apiRequest(`${ITEM_GROUP_API_PATH}?${query.toString()}`).catch((error) => {
+      allItemGroupsRequest = null
+      throw error
+    })
+  }
+
+  return allItemGroupsRequest
+}
+
+export async function getItemGroupWithDescendants(rootGroup) {
+  const response = await getAllItemGroups()
+  const childrenByParent = new Map()
+
+  for (const group of response.message || []) {
+    const name = String(group.name || '').trim()
+    const parent = String(group.parent_item_group || '').trim()
+
+    if (!name || !parent) continue
+    if (!childrenByParent.has(parent)) childrenByParent.set(parent, [])
+    childrenByParent.get(parent).push(name)
+  }
+
+  const groups = [rootGroup]
+  const seen = new Set(groups)
+
+  for (let index = 0; index < groups.length; index += 1) {
+    for (const child of childrenByParent.get(groups[index]) || []) {
+      if (!seen.has(child)) {
+        seen.add(child)
+        groups.push(child)
+      }
+    }
+  }
+
+  return groups
+}
+
 export async function searchItemMasterItems(searchText) {
   return getItemMasterItems({
     search: searchText,

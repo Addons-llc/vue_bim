@@ -3,9 +3,12 @@ import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import CategoryRail from '../components/product/CategoryRail.vue'
 import ProductBundleSection from '../components/product/ProductBundleSection.vue'
+import ProductCard from '../components/product/ProductCard.vue'
 import ProductSections from '../components/product/ProductSections.vue'
 import { getBrands } from '../api/brandApi'
 import { getProductBundles } from '../api/productBundleApi'
+import { getItemGroupWithDescendants } from '../api/itemApi'
+import { getProducts } from '../api/productApi'
 import { getSupplierStores } from '../api/supplierStoreApi'
 import { useProducts } from '../composables/useProducts'
 import { saveSelectedProduct } from '../data/productSelectionStore'
@@ -14,6 +17,9 @@ import { openCategoryOrProduct } from '../utils/categoryNavigation'
 import bannerImageOne from '../assets/images/banner_1.png'
 import bannerImageTwo from '../assets/images/banner_2.png'
 import bannerImageThree from '../assets/images/banner_3.png'
+import shortcutBrandsBg from '../assets/images/shortcut-brands.jpg'
+import shortcutCategoriesBg from '../assets/images/shortcut-categories.jpg'
+import shortcutStoresBg from '../assets/images/shortcut-stores.jpg'
 
 const props = defineProps({
   category: {
@@ -34,6 +40,19 @@ const activeHeroSlide = ref(0)
 const brands = ref([])
 const stores = ref([])
 const productBundles = ref([])
+// Product rails below "BIM Mart Essentials", each fed by an item group and
+// everything beneath it. A rail hides itself while its group has no published items.
+const itemGroupRails = ref(
+  [
+    { id: 'everyday-style', title: 'Your Everyday Style', itemGroup: 'Fashion' },
+    { id: 'craving-food', title: 'Craving Food?', itemGroup: 'Food' },
+  ].map((rail) => ({
+    ...rail,
+    products: [],
+    viewAllTo: { name: 'category-details', params: { categoryName: rail.itemGroup } },
+  })),
+)
+const visibleItemGroupRails = computed(() => itemGroupRails.value.filter((rail) => rail.products.length))
 const heroImageFallback = `${import.meta.env.BASE_URL}grocery-card-image-v3.svg?v=3`
 let heroSlideTimer = null
 
@@ -86,6 +105,30 @@ const discoveryCategories = computed(() =>
 const brandsTabRoute = { name: 'categories', query: { tab: 'brands' } }
 const storesTabRoute = { name: 'categories', query: { tab: 'stores' } }
 const categoriesTabRoute = { name: 'categories', query: { tab: 'categories' } }
+
+const homeShortcuts = [
+  {
+    key: 'brands',
+    image: shortcutBrandsBg,
+    label: 'Featured Brands',
+    hint: 'Shop top brands',
+    to: brandsTabRoute,
+  },
+  {
+    key: 'stores',
+    image: shortcutStoresBg,
+    label: 'Stores',
+    hint: 'Stores near you',
+    to: storesTabRoute,
+  },
+  {
+    key: 'categories',
+    image: shortcutCategoriesBg,
+    label: 'Categories',
+    hint: 'Browse by aisle',
+    to: categoriesTabRoute,
+  },
+]
 
 function openProductDetails(product) {
   const supplierName = product.supplierName || product.supplier || 'Supplier not set'
@@ -163,6 +206,52 @@ async function loadProductBundles() {
   }
 }
 
+// The items API matches item_group exactly, so query the group and every group
+// beneath it (e.g. Fashion -> Men's fashion -> Shirt) and merge the results.
+async function loadItemGroupProducts(rootGroup) {
+  let groups = [rootGroup]
+
+  try {
+    groups = await getItemGroupWithDescendants(rootGroup)
+  } catch {
+    // Fall back to the top-level group only.
+  }
+
+  // Items are interleaved one per group below, so only a few per group are needed.
+  const perGroupLimit = Math.max(2, Math.ceil(HOME_RAIL_SIZE / groups.length) + 1)
+  const results = await Promise.allSettled(
+    groups.map((itemGroup) => getProducts({ item_group: itemGroup, limit_page_length: perGroupLimit })),
+  )
+  const groupLists = results.map((result) => (result.status === 'fulfilled' ? result.value : []))
+  const seen = new Set()
+  const merged = []
+
+  // Take one item from each group in turn so the rail mixes sub-categories.
+  for (let round = 0; merged.length < HOME_RAIL_SIZE; round += 1) {
+    const roundItems = groupLists.map((list) => list[round]).filter(Boolean)
+
+    if (!roundItems.length) break
+
+    for (const product of roundItems) {
+      if (merged.length >= HOME_RAIL_SIZE) break
+      if (product.id && !seen.has(product.id)) {
+        seen.add(product.id)
+        merged.push(product)
+      }
+    }
+  }
+
+  return merged
+}
+
+function loadItemGroupRails() {
+  for (const rail of itemGroupRails.value) {
+    loadItemGroupProducts(rail.itemGroup).then((products) => {
+      rail.products = products
+    })
+  }
+}
+
 function selectHeroSlide(index) {
   activeHeroSlide.value = index
 }
@@ -198,6 +287,7 @@ onMounted(() => {
   loadBrands()
   loadStores()
   loadProductBundles()
+  loadItemGroupRails()
   syncHeroAutoplay()
 })
 
@@ -207,6 +297,22 @@ onUnmounted(() => {
 </script>
 
 <template>
+  <nav class="home-shortcuts" aria-label="Browse">
+    <RouterLink
+      v-for="shortcut in homeShortcuts"
+      :key="shortcut.key"
+      class="home-shortcut-card"
+      :class="`is-${shortcut.key}`"
+      :to="shortcut.to"
+    >
+      <img class="home-shortcut-art" :src="shortcut.image" alt="" aria-hidden="true" decoding="async" />
+      <span class="home-shortcut-text">
+        <strong>{{ shortcut.label }}</strong>
+        <small>{{ shortcut.hint }}</small>
+      </span>
+    </RouterLink>
+  </nav>
+
   <section class="dashboard-hero">
     <div
       class="hero-slider"
@@ -247,7 +353,7 @@ onUnmounted(() => {
     v-if="discoveryBrands.length"
     class="home-rail-section home-rail-brands"
     section-id="brands"
-    title="Brands"
+    title="Featured Brands"
     horizontal
     item-type="brand"
     stacked-tile
@@ -288,10 +394,36 @@ onUnmounted(() => {
   />
 
   <ProductBundleSection
+    title="BIM Mart Essentials"
+    subtitle=""
     v-if="publishedBundles.length"
     :bundles="publishedBundles"
     @select="openProductDetails"
   />
+
+  <section
+    v-for="rail in visibleItemGroupRails"
+    :key="rail.id"
+    class="product-category-section home-group-rail"
+    :aria-labelledby="`home-${rail.id}-title`"
+  >
+    <div class="product-category-heading">
+      <h2 :id="`home-${rail.id}-title`">{{ rail.title }}</h2>
+      <RouterLink class="section-link" :to="rail.viewAllTo">Explore</RouterLink>
+    </div>
+
+    <div class="product-rail-wrap">
+      <div class="product-rail">
+        <ProductCard
+          v-for="product in rail.products"
+          :key="product.id"
+          :product="product"
+          compact
+          @select="openProductDetails(product)"
+        />
+      </div>
+    </div>
+  </section>
 
   <ProductSections
     :is-filtered-products="isFilteredProducts"
