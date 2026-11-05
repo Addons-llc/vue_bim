@@ -198,7 +198,17 @@ fixtures = [
 	},
 	{
 		"dt": "Custom Field",
-		"filters": [["name", "in", ["Sales Order-custom_delivery_slot", "Sales Order-custom_customer_location"]]],
+		"filters": [
+			[
+				"name",
+				"in",
+				[
+					"Sales Order-custom_delivery_slot",
+					"Sales Order-custom_customer_location",
+					"Item-custom_published",
+				],
+			]
+		],
 	},
 ]
 

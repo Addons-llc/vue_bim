@@ -1,16 +1,14 @@
 <script setup>
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import CategoryRail from '../components/product/CategoryRail.vue'
 import ProductBundleSection from '../components/product/ProductBundleSection.vue'
 import ProductCard from '../components/product/ProductCard.vue'
 import ProductSections from '../components/product/ProductSections.vue'
-import { getBrands } from '../api/brandApi'
 import { getProductBundles } from '../api/productBundleApi'
 import { getItemGroupWithDescendants } from '../api/itemApi'
 import { getProducts } from '../api/productApi'
-import { getSupplierStores } from '../api/supplierStoreApi'
 import { useProducts } from '../composables/useProducts'
+import { ESSENTIALS_ITEM_GROUPS, ESSENTIALS_TITLE } from '../data/essentials'
 import { saveSelectedProduct } from '../data/productSelectionStore'
 import { saveSelectedSupplier } from '../data/supplierSelectionStore'
 import { openCategoryOrProduct } from '../utils/categoryNavigation'
@@ -37,8 +35,6 @@ const router = useRouter()
 const searchText = computed(() => props.searchText)
 const initialCategory = computed(() => props.category)
 const activeHeroSlide = ref(0)
-const brands = ref([])
-const stores = ref([])
 const productBundles = ref([])
 // Product rails below "BIM Mart Essentials", each fed by an item group and
 // everything beneath it. A rail hides itself while its group has no published items.
@@ -54,8 +50,8 @@ const itemGroupRails = ref(
 )
 const visibleItemGroupRails = computed(() => itemGroupRails.value.filter((rail) => rail.products.length))
 // Products shown after the kits in "BIM Mart Essentials".
-const ESSENTIALS_ITEM_GROUPS = ['Fresh items', 'Grocery & Kitchen']
 const essentialsProducts = ref([])
+const essentialsExploreRoute = { name: 'essentials' }
 // Kits are Items in these groups too; don't show them twice in the same row.
 const essentialsExtraProducts = computed(() => {
   const bundleIds = new Set(productBundles.value.map((bundle) => bundle.id))
@@ -96,21 +92,7 @@ const {
 } = useProducts(searchText, initialCategory)
 
 const isPublished = (item) => item.isPublished !== false
-const publishedBrands = computed(() => brands.value.filter(isPublished))
-const publishedStores = computed(() => stores.value.filter(isPublished))
 const publishedBundles = computed(() => productBundles.value.filter(isPublished))
-const discoveryBrands = computed(() => publishedBrands.value.slice(0, HOME_RAIL_SIZE))
-const discoveryStores = computed(() => publishedStores.value.slice(0, HOME_RAIL_SIZE))
-const discoveryCategories = computed(() =>
-  categories.value
-    .filter(isPublished)
-    .filter((category) => {
-      const parentItemGroup = String(category.parentItemGroup || '').trim()
-
-      return !parentItemGroup || parentItemGroup === 'All Item Groups'
-    })
-    .slice(0, HOME_RAIL_SIZE),
-)
 const brandsTabRoute = { name: 'categories', query: { tab: 'brands' } }
 const storesTabRoute = { name: 'categories', query: { tab: 'stores' } }
 const categoriesTabRoute = { name: 'categories', query: { tab: 'categories' } }
@@ -131,21 +113,18 @@ const homeShortcuts = [
     key: 'brands',
     image: shortcutBrandsBg,
     label: 'Featured Brands',
-    hint: 'Shop top brands',
     to: brandsTabRoute,
   },
   {
     key: 'stores',
     image: shortcutStoresBg,
     label: 'Stores',
-    hint: 'Stores near you',
     to: storesTabRoute,
   },
   {
     key: 'categories',
     image: shortcutCategoriesBg,
     label: 'Categories',
-    hint: 'Browse by aisle',
     to: categoriesTabRoute,
   },
 ]
@@ -169,24 +148,6 @@ function openProductDetails(product) {
   })
 }
 
-async function openBrandItem(brand) {
-  await openCategoryOrProduct({
-    categories: categories.value,
-    item: brand,
-    router,
-    sourceType: 'brand',
-  })
-}
-
-async function openStoreItem(store) {
-  await openCategoryOrProduct({
-    categories: categories.value,
-    item: store,
-    router,
-    sourceType: 'store',
-  })
-}
-
 async function openCategoryItem(category) {
   await openCategoryOrProduct({
     categories: categories.value,
@@ -194,26 +155,6 @@ async function openCategoryItem(category) {
     router,
     sourceType: 'category',
   })
-}
-
-async function loadBrands() {
-  try {
-    brands.value = await getBrands({
-      limit_page_length: HOME_RAIL_SIZE,
-    })
-  } catch {
-    brands.value = []
-  }
-}
-
-async function loadStores() {
-  try {
-    stores.value = await getSupplierStores({
-      limit_page_length: HOME_RAIL_SIZE,
-    })
-  } catch {
-    stores.value = []
-  }
 }
 
 async function loadProductBundles() {
@@ -357,8 +298,6 @@ function syncHeroAutoplay() {
 }
 
 onMounted(() => {
-  loadBrands()
-  loadStores()
   loadProductBundles()
   loadItemGroupRails()
   loadEssentialsProducts()
@@ -403,7 +342,6 @@ onUnmounted(() => {
       <img class="home-shortcut-art" :src="shortcut.image" alt="" aria-hidden="true" decoding="async" />
       <span class="home-shortcut-text">
         <strong>{{ shortcut.label }}</strong>
-        <small>{{ shortcut.hint }}</small>
       </span>
     </RouterLink>
   </nav>
@@ -444,67 +382,25 @@ onUnmounted(() => {
     </div>
   </section>
 
-  <CategoryRail
-    v-if="discoveryBrands.length"
-    class="home-rail-section home-rail-brands"
-    view-all-label="Explore"
-    section-id="brands"
-    title="Featured Brands"
-    horizontal
-    item-type="brand"
-    stacked-tile
-    fit-to-row
-    show-brand-detail-fallbacks
-    :view-all-to="brandsTabRoute"
-    :categories="discoveryBrands"
-    @select="openBrandItem"
-  />
-
-  <CategoryRail
-    v-if="discoveryStores.length"
-    class="home-rail-section home-rail-store"
-    view-all-label="Explore"
-    section-id="shops"
-    title="Store"
-    horizontal
-    item-type="store"
-    stacked-tile
-    fit-to-row
-    :view-all-to="storesTabRoute"
-    :categories="discoveryStores"
-    @select="openStoreItem"
-  />
-
-  <CategoryRail
-    v-if="discoveryCategories.length"
-    class="home-rail-section home-rail-categories"
-    view-all-label="Explore"
-    section-id="categories"
-    title="Categories"
-    horizontal
-    item-type="category"
-    stacked-tile
-    fit-to-row
-    :view-all-to="categoriesTabRoute"
-    :active-category="activeCategory"
-    :categories="discoveryCategories"
-    @select="openCategoryItem"
-  />
-
   <ProductBundleSection
-    title="BIM Mart Essentials"
+    :title="ESSENTIALS_TITLE"
     subtitle=""
+    fit-to-row
+    :view-all-to="essentialsExploreRoute"
     v-if="publishedBundles.length || essentialsExtraProducts.length"
     :bundles="publishedBundles"
+    :extra-count="essentialsExtraProducts.length"
     @select="openProductDetails"
   >
+    <template #default="{ extraLimit }">
     <ProductCard
-      v-for="product in essentialsExtraProducts"
+      v-for="product in extraLimit === null ? essentialsExtraProducts : essentialsExtraProducts.slice(0, extraLimit)"
       :key="product.id"
       :product="product"
       compact
       @select="openProductDetails(product)"
     />
+    </template>
   </ProductBundleSection>
 
   <section

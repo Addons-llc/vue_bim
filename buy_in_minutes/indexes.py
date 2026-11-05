@@ -4,8 +4,7 @@ import frappe
 # the doctype or column does not exist on this site, so this is safe to run on every migrate.
 CATALOG_INDEXES = (
 	("Item", ("brand",)),
-	("Item", ("published_in_supplier_portal",)),
-	("Item", ("custom_published_in_supplier_portal",)),
+	("Item", ("custom_published",)),
 	("Item Supplier", ("supplier",)),
 	("Brand", ("custom_published",)),
 	("Brand", ("published",)),

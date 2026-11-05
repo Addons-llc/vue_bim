@@ -350,3 +350,10 @@
   }
 
 }
+
+/* Essentials has no sidebar: fill the width with as many cards as fit, phones keep 2 columns. */
+@media (min-width: 640px) {
+  .essentials-page .category-detail-grid {
+    grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  }
+}

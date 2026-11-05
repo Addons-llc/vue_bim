@@ -1,11 +1,12 @@
 <script setup>
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import {
   addProductToCart,
   cartQuantityById,
   updateCartProductQuantity,
 } from '../../data/cartStore'
 
-defineProps({
+const props = defineProps({
   bundles: {
     type: Array,
     required: true,
@@ -22,9 +23,107 @@ defineProps({
     type: String,
     default: 'weekly-kits',
   },
+  // Optional route for an "Explore" link beside the title.
+  viewAllTo: {
+    type: [String, Object],
+    default: null,
+  },
+  viewAllLabel: {
+    type: String,
+    default: 'Explore',
+  },
+  // Show only the cards that fully fit in one row (no horizontal scroll). The
+  // default slot receives `extraLimit`: how many of its cards it may render.
+  fitToRow: {
+    type: Boolean,
+    default: false,
+  },
+  // Number of cards the default slot would render without a limit.
+  extraCount: {
+    type: Number,
+    default: 0,
+  },
 })
 
 const emit = defineEmits(['select'])
+
+const railElement = ref(null)
+const fittingCount = ref(null)
+let railResizeObserver = null
+
+const totalCount = computed(() => props.bundles.length + props.extraCount)
+const visibleBundles = computed(() =>
+  !props.fitToRow || fittingCount.value === null
+    ? props.bundles
+    : props.bundles.slice(0, fittingCount.value),
+)
+const extraLimit = computed(() =>
+  !props.fitToRow || fittingCount.value === null
+    ? null
+    : Math.max(fittingCount.value - props.bundles.length, 0),
+)
+const showViewAll = computed(() => {
+  if (!props.viewAllTo) return false
+  if (!props.fitToRow) return true
+
+  return fittingCount.value !== null && fittingCount.value < totalCount.value
+})
+
+async function measureFittingCount() {
+  if (!props.fitToRow || !railElement.value) {
+    return
+  }
+
+  // Render every card first so the measurement uses this breakpoint's card widths.
+  fittingCount.value = null
+  await nextTick()
+
+  const rail = railElement.value
+  const cards = rail ? Array.from(rail.children) : []
+
+  if (!cards.length) {
+    return
+  }
+
+  const railRight = rail.getBoundingClientRect().right
+  const firstRowBottom = cards[0].getBoundingClientRect().bottom
+  const fittingCards = cards.filter((card) => {
+    const rect = card.getBoundingClientRect()
+
+    return rect.top < firstRowBottom && rect.right <= railRight + 1
+  })
+
+  fittingCount.value = Math.max(fittingCards.length, 1)
+}
+
+onMounted(() => {
+  if (!props.fitToRow) {
+    return
+  }
+
+  measureFittingCount()
+
+  if (typeof ResizeObserver === 'undefined') {
+    return
+  }
+
+  let lastWidth = 0
+  railResizeObserver = new ResizeObserver(([entry]) => {
+    const width = Math.round(entry.contentRect.width)
+
+    if (width !== lastWidth) {
+      lastWidth = width
+      measureFittingCount()
+    }
+  })
+  railResizeObserver.observe(railElement.value)
+})
+
+onUnmounted(() => {
+  railResizeObserver?.disconnect()
+})
+
+watch(() => [props.bundles, props.extraCount], measureFittingCount)
 
 const bundlePlaceholderImage = `${import.meta.env.BASE_URL}grocery-card-image-v3.svg?v=3`
 const priceFormatter = new Intl.NumberFormat('en-AE', {
@@ -70,13 +169,18 @@ function showPlaceholderImage(event) {
 <template>
   <section class="bundle-section" :id="sectionId || undefined">
     <div class="bundle-section-heading">
-      <h2>{{ title }}</h2>
-      <p v-if="subtitle">{{ subtitle }}</p>
+      <div class="bundle-section-heading-text">
+        <h2>{{ title }}</h2>
+        <p v-if="subtitle">{{ subtitle }}</p>
+      </div>
+      <RouterLink v-if="showViewAll" class="section-link home-explore-link" :to="viewAllTo">
+        {{ viewAllLabel }}
+      </RouterLink>
     </div>
 
-    <div class="bundle-rail">
+    <div ref="railElement" class="bundle-rail" :class="{ 'is-fit-to-row': fitToRow }">
       <article
-        v-for="bundle in bundles"
+        v-for="bundle in visibleBundles"
         :key="bundle.id"
         class="bundle-card"
         :class="{ 'is-out-of-stock': bundle.inStock === false }"
@@ -154,7 +258,7 @@ function showPlaceholderImage(event) {
       </article>
 
       <!-- Extra cards (e.g. products) shown in the same row after the bundles. -->
-      <slot />
+      <slot :extra-limit="extraLimit" />
     </div>
   </section>
 </template>

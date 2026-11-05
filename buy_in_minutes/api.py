@@ -16,10 +16,8 @@ from buy_in_minutes.payment import (
 
 
 SELLING_PRICE_LIST = "Selling Price"
-ITEM_SUPPLIER_PORTAL_PUBLISH_FIELDS = (
-	"published_in_supplier_portal",
-	"custom_published_in_supplier_portal",
-)
+# The website only ever lists Items with this checkbox ticked.
+ITEM_WEBSITE_PUBLISH_FIELD = "custom_published"
 ITEM_SUPPLIER_FIELDS = (
 	"supplier",
 	"default_supplier",
@@ -71,20 +69,6 @@ def _get_existing_fields(doctype, fieldnames):
 		fieldname
 		for fieldname in fieldnames
 		if meta.has_field(fieldname)
-	]
-
-
-def _get_item_supplier_portal_publish_fields():
-	meta = frappe.get_meta("Item")
-	publish_fields = _get_existing_fields("Item", ITEM_SUPPLIER_PORTAL_PUBLISH_FIELDS)
-
-	if publish_fields:
-		return publish_fields
-
-	return [
-		df.fieldname
-		for df in meta.fields
-		if df.fieldname and df.label == "Published in Supplier Portal"
 	]
 
 
@@ -1663,7 +1647,11 @@ def _get_items(
 	if brand and not item_meta.has_field("brand"):
 		return []
 
-	publish_fields = _get_item_supplier_portal_publish_fields()
+	# Always enforced, whatever `published` the caller sends: these endpoints are public and
+	# only serve the storefront. Without the field nothing counts as published (fail closed).
+	if not item_meta.has_field(ITEM_WEBSITE_PUBLISH_FIELD):
+		return []
+
 	item_supplier_fields = [
 		fieldname for fieldname in ITEM_SUPPLIER_FIELDS if item_meta.has_field(fieldname)
 	]
@@ -1701,7 +1689,7 @@ def _get_items(
 			]
 			+ optional_fields
 			+ item_supplier_fields
-			+ publish_fields
+			+ [ITEM_WEBSITE_PUBLISH_FIELD]
 		)
 	)
 
@@ -1710,6 +1698,7 @@ def _get_items(
 		frappe.qb.from_(item_table)
 		.select(*[item_table[fieldname] for fieldname in fields])
 		.where(item_table.disabled == 0)
+		.where(item_table[ITEM_WEBSITE_PUBLISH_FIELD] == 1)
 	)
 
 	if item:
@@ -1738,9 +1727,6 @@ def _get_items(
 				]
 			)
 		)
-
-	if published and publish_fields:
-		query = query.where(_get_publish_criterion(item_table, "Item", publish_fields))
 
 	if supplier_store_item_codes:
 		query = query.where(

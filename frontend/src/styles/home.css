@@ -10,9 +10,23 @@
   margin: 0 0 20px;
 }
 
+/* Home spacing: one rhythm for the whole page. The browse controls (pills,
+   shortcuts, banner) sit closer together; content sections get more air. */
 .page-shell:has(> .dashboard-hero) {
+  --home-gap: 16px;
+  --home-section-gap: 30px;
+  --home-heading-gap: 14px;
   display: flex;
   flex-direction: column;
+  gap: var(--home-gap);
+}
+
+@media (max-width: 640px) {
+  .page-shell:has(> .dashboard-hero) {
+    --home-gap: 12px;
+    --home-section-gap: 22px;
+    --home-heading-gap: 10px;
+  }
 }
 
 /* Category pills above the Brands / Stores / Categories cards. One row that
@@ -21,7 +35,7 @@
   order: 0;
   display: flex;
   gap: 10px;
-  margin: -6px 0 14px;
+  margin: -4px 0 0;
   overflow-x: auto;
   padding: 4px 2px;
   scroll-snap-type: x proximity;
@@ -40,11 +54,15 @@
   flex: 0 0 auto;
   gap: 8px;
   min-height: 40px;
-  border: 1px solid #e5e7eb;
+  --pill-bg: #eaf8f2;
+  --pill-bg-hover: #d3f1e4;
+  --pill-border: #cdeee0;
+  --pill-text: #0b3d30;
+  border: 1px solid var(--pill-border);
   border-radius: 999px;
   padding: 4px 14px 4px 4px;
-  background: #ffffff;
-  color: #111827;
+  background: var(--pill-bg);
+  color: var(--pill-text);
   cursor: pointer;
   font: inherit;
   font-size: 14px;
@@ -57,10 +75,46 @@
 
 .home-category-pill:hover,
 .home-category-pill:focus-visible {
-  border-color: #00a878;
-  background: #e9f8f2;
-  color: #00785f;
+  border-color: var(--pill-text);
+  background: var(--pill-bg-hover);
+  color: var(--pill-text);
   outline: 0;
+}
+
+/* Each pill gets its own soft tint; the palette repeats every 6 pills. */
+.home-category-pill:nth-child(6n + 2) {
+  --pill-bg: #fff4e5;
+  --pill-bg-hover: #ffe6c2;
+  --pill-border: #fde0b5;
+  --pill-text: #7a4200;
+}
+
+.home-category-pill:nth-child(6n + 3) {
+  --pill-bg: #eaf2ff;
+  --pill-bg-hover: #d6e6ff;
+  --pill-border: #cddffd;
+  --pill-text: #173f7a;
+}
+
+.home-category-pill:nth-child(6n + 4) {
+  --pill-bg: #fdecf3;
+  --pill-bg-hover: #fbd7e6;
+  --pill-border: #f8d0e0;
+  --pill-text: #7d1f4a;
+}
+
+.home-category-pill:nth-child(6n + 5) {
+  --pill-bg: #f2edff;
+  --pill-bg-hover: #e3d9ff;
+  --pill-border: #ddd2fb;
+  --pill-text: #4a2a8a;
+}
+
+.home-category-pill:nth-child(6n) {
+  --pill-bg: #fffbe0;
+  --pill-bg-hover: #fff3b0;
+  --pill-border: #f5ea9e;
+  --pill-text: #6b5600;
 }
 
 .home-category-pill.is-active {
@@ -74,14 +128,14 @@
   height: 30px;
   flex: 0 0 30px;
   border-radius: 50%;
-  background: #f3f4f6;
+  background: #ffffff;
   object-fit: cover;
 }
 
 @media (max-width: 640px) {
   .home-category-pills {
     gap: 8px;
-    margin: -2px 0 12px;
+    margin: -4px 0 0;
   }
 
   .home-category-pill {
@@ -103,7 +157,6 @@
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 14px;
-  margin-bottom: 18px;
 }
 
 .home-shortcut-card {
@@ -206,18 +259,9 @@
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
 }
 
-.home-shortcut-text small {
-  overflow: hidden;
-  color: rgba(255, 255, 255, 0.85);
-  font-size: 13px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 @media (max-width: 640px) {
   .home-shortcuts {
     gap: 10px;
-    margin-bottom: 14px;
   }
 
   .home-shortcut-card {
@@ -227,10 +271,6 @@
 
   .home-shortcut-text strong {
     font-size: 13px;
-  }
-
-  .home-shortcut-text small {
-    display: none;
   }
 
   .home-shortcut-card::after {
@@ -277,15 +317,21 @@
   box-shadow: 0 16px 34px rgba(17, 24, 39, 0.06);
 }
 
-.page-shell:has(> .dashboard-hero) > .bundle-section {
-  order: 5;
-  margin-top: 18px;
-}
-
+.page-shell:has(> .dashboard-hero) > .bundle-section,
 .page-shell:has(> .dashboard-hero) > .home-group-rail {
   order: 5;
-  margin-top: 6px;
-  margin-bottom: 26px;
+  margin: calc(var(--home-section-gap) - var(--home-gap)) 0 0;
+  padding: 0;
+}
+
+/* Hero -> first section reads as part of the browse block, so keep it tighter. */
+.page-shell:has(> .dashboard-hero) > .dashboard-hero + * {
+  margin-top: calc(var(--home-section-gap) / 2 - var(--home-gap) + 4px);
+}
+
+.page-shell:has(> .dashboard-hero) > .bundle-section .bundle-section-heading,
+.page-shell:has(> .dashboard-hero) > .home-group-rail .product-category-heading {
+  margin-bottom: var(--home-heading-gap);
 }
 
 .page-shell:has(> .dashboard-hero) > .product-section {

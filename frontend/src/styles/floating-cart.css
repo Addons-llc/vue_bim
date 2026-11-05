@@ -11,14 +11,14 @@
   min-height: 58px;
   border-radius: 999px;
   padding: 8px 18px 8px 20px;
-  background: #00a878;
+  background: #2f455c;
   color: #ffffff;
-  box-shadow: 0 12px 28px rgba(0, 120, 95, 0.32);
+  box-shadow: 0 12px 28px rgba(47, 69, 92, 0.32);
   text-decoration: none;
 }
 
 .floating-cart:hover {
-  background: #008f67;
+  background: #253747;
 }
 
 .floating-cart:active {
@@ -26,7 +26,7 @@
 }
 
 .floating-cart:focus-visible {
-  outline: 2px solid #00785f;
+  outline: 2px solid #2f455c;
   outline-offset: 3px;
 }
 

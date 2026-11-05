@@ -6,6 +6,7 @@ import CartPage from '../pages/CartPage.vue'
 import CategoryDetailsPage from '../pages/CategoryDetailsPage.vue'
 import CategoriesPage from '../pages/CategoriesPage.vue'
 import ComingSoonPage from '../pages/ComingSoonPage.vue'
+import EssentialsPage from '../pages/EssentialsPage.vue'
 import HomePage from '../pages/HomePage.vue'
 import LoginPage from '../pages/LoginPage.vue'
 import OtpPage from '../pages/OtpPage.vue'
@@ -72,6 +73,12 @@ const routes = [
     path: '/stores',
     name: 'stores',
     component: StoresPage,
+  },
+  {
+    path: '/essentials',
+    name: 'essentials',
+    meta: { bottomTab: true },
+    component: EssentialsPage,
   },
   {
     path: '/explore',

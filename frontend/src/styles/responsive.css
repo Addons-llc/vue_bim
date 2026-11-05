@@ -363,61 +363,6 @@
     padding-bottom: 0;
   }
 
-  .mobile-nav {
-    position: fixed;
-    right: 0;
-    bottom: 0;
-    left: 0;
-    z-index: 90;
-    display: grid;
-    grid-auto-flow: column;
-    grid-auto-columns: minmax(0, 1fr);
-    align-items: stretch;
-    width: 100%;
-    min-height: calc(64px + env(safe-area-inset-bottom, 0px));
-    max-width: 100vw;
-    border-top: 1px solid #e5e7eb;
-    overflow: hidden;
-    padding-bottom: env(safe-area-inset-bottom, 0px);
-    background: #ffffff;
-    box-shadow: 0 -6px 20px rgba(17, 24, 39, 0.06);
-    transform: translateZ(0);
-  }
-
-  .mobile-nav-item {
-    position: relative;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 3px;
-    min-width: 0;
-    border: 0;
-    padding: 8px 4px 10px;
-    background: transparent;
-    color: #6b7280;
-    font: inherit;
-    text-decoration: none;
-    cursor: pointer;
-    white-space: nowrap;
-  }
-
-  .mobile-nav-item.is-active {
-    color: #16a34a;
-  }
-
-  .mobile-nav-icon {
-    width: 21px;
-    height: 21px;
-    flex: 0 0 21px;
-  }
-
-  .mobile-nav-label {
-    font-size: 11px;
-    font-weight: 700;
-    line-height: 1.2;
-  }
-
   .dashboard-hero {
     min-height: 0;
   }
@@ -1910,5 +1855,74 @@
   .dashboard-hero ~ .category-section.home-rail-store .category-section-heading h2,
   .dashboard-hero ~ .category-section.home-rail-categories .category-section-heading h2 {
     font-size: 18px;
+  }
+}
+
+/* Bottom tabs: phones and tablets only; desktop navigates from the header. */
+@media (max-width: 1024px) {
+  .mobile-nav {
+    position: fixed;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 90;
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 1fr);
+    align-items: stretch;
+    width: 100%;
+    min-height: calc(64px + env(safe-area-inset-bottom, 0px));
+    max-width: 100vw;
+    border-top: 1px solid #e5e7eb;
+    overflow: hidden;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    background: #ffffff;
+    box-shadow: 0 -6px 20px rgba(17, 24, 39, 0.06);
+    transform: translateZ(0);
+  }
+
+  .mobile-nav-item {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    min-width: 0;
+    border: 0;
+    padding: 8px 4px 10px;
+    background: transparent;
+    color: #6b7280;
+    font: inherit;
+    text-decoration: none;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+
+  .mobile-nav-item.is-active {
+    color: #16a34a;
+  }
+
+  .mobile-nav-icon {
+    width: 21px;
+    height: 21px;
+    flex: 0 0 21px;
+  }
+
+  .mobile-nav-label {
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1.2;
+  }
+}
+
+/* Tablets keep the footer, so give it room to scroll clear of the bottom tabs. */
+@media (min-width: 521px) and (max-width: 1024px) {
+  .bf {
+    padding-bottom: calc(64px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .floating-cart {
+    bottom: calc(84px + env(safe-area-inset-bottom, 0px));
   }
 }
