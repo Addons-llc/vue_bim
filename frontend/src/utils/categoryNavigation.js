@@ -62,7 +62,7 @@ export async function openCategoryOrProduct({
 
     await router.push({
       name: 'brand-details',
-      params: { brandName: brandIdentifier },
+      params: { brandName: item.slug || brandIdentifier },
     })
     return
   }
@@ -98,6 +98,6 @@ export async function openCategoryOrProduct({
 
   await router.push({
     name: 'category-details',
-    params: { categoryName },
+    params: { categoryName: item.slug || categoryName },
   })
 }

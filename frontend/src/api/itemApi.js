@@ -434,6 +434,8 @@ function mapItemGroupToCategory(itemGroup) {
 
   return {
     id: itemGroupName,
+    // Readable URL key (Item Group.custom_slug); links fall back to the group name.
+    slug: itemGroup.custom_slug || '',
     name: displayName,
     itemGroup: itemGroupName,
     parentItemGroup,

@@ -1,6 +1,6 @@
 <script setup>
 import { productRoute } from '../utils/productRoute'
-import { computed, nextTick } from 'vue'
+import { computed, nextTick, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { pageTitle, usePageMeta } from '../composables/usePageMeta'
 import ProductCard from '../components/product/ProductCard.vue'
@@ -23,6 +23,11 @@ const selectedCategoryTitle = computed(() => {
 
   if (!selectedCategory.value) {
     return isStoreDetailsPage.value ? 'Store' : 'Category'
+  }
+
+  // The URL holds a slug ("fresh-fruits"); show the group's real name once it is known.
+  if (selectedCategoryRecord.value?.name) {
+    return selectedCategoryRecord.value.name
   }
 
   return isStoreDetailsPage.value
@@ -56,7 +61,7 @@ const {
 })
 const selectedCategoryRecord = computed(() =>
   categories.value.find((category) =>
-    [category.id, category.name, category.itemGroup].includes(selectedCategory.value),
+    [category.slug, category.id, category.name, category.itemGroup].includes(selectedCategory.value),
   ) || null,
 )
 const parentCategoryRecord = computed(() => {
@@ -91,7 +96,7 @@ function showPlaceholderImage(event) {
 }
 
 async function selectCategory(category) {
-  const categoryName = category.itemGroup || category.name
+  const categoryName = (!isStoreDetailsPage.value && category.slug) || category.itemGroup || category.name
 
   await router.push({
     name: detailRouteName.value,
@@ -120,6 +125,13 @@ function openProductDetails(product) {
 
   router.push(productRoute(product))
 }
+
+// Opened by group name (an old link): move to the readable slug URL.
+watch(selectedCategoryRecord, (category) => {
+  if (!isStoreDetailsPage.value && category?.slug && selectedCategory.value !== category.slug) {
+    router.replace({ name: 'category-details', params: { categoryName: category.slug }, query: route.query })
+  }
+})
 
 usePageMeta(() => ({
   title: isStoreDetailsPage.value
@@ -175,7 +187,7 @@ usePageMeta(() => ({
           v-for="category in sidebarCategoryItems"
           :key="category.id"
           class="category-side-item"
-          :class="{ 'is-active': [category.id, category.name, category.itemGroup].includes(selectedCategory) }"
+          :class="{ 'is-active': [category.slug, category.id, category.name, category.itemGroup].includes(selectedCategory) }"
           type="button"
           @click="selectCategory(category)"
         >

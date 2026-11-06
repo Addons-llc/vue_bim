@@ -5,21 +5,29 @@
     <link rel="icon" type="image/jpeg" href="/assets/buy_in_minutes/buy-in-minutes/bim.jpeg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     {{ seo_head or "<title>BUY IN MINUTES</title>" }}
+    <style>
+      .bim-ssr-fallback { max-width: 960px; margin: 0 auto; padding: 24px 16px; font: 15px/1.5 system-ui, sans-serif; color: #111827; }
+      .bim-ssr-fallback h1 { font-size: 22px; margin: 8px 0 12px; }
+      .bim-ssr-fallback nav, .bim-ssr-fallback nav a { color: #6b7280; font-size: 13px; }
+      .bim-ssr-fallback img { max-width: 100%; height: auto; border-radius: 12px; }
+      .bim-ssr-fallback ul { padding-left: 18px; columns: 2; }
+      .bim-ssr-fallback a { color: #00785f; }
+    </style>
     <script>
       window.frappe = window.frappe || {}
     </script>
     <!-- csrf_token -->
      <script src="/assets/store_domain_router/js/store_domain_router.js"></script>
-    <script type="module" crossorigin src="/assets/buy_in_minutes/buy-in-minutes/assets/index-JSxrn2uo.js"></script>
+    <script type="module" crossorigin src="/assets/buy_in_minutes/buy-in-minutes/assets/index-BJnnC7n2.js"></script>
     <link rel="modulepreload" crossorigin href="/assets/buy_in_minutes/buy-in-minutes/assets/runtime-core.esm-bundler-DUmJfq31.js">
     <link rel="modulepreload" crossorigin href="/assets/buy_in_minutes/buy-in-minutes/assets/config-BU7IzlCg.js">
     <link rel="modulepreload" crossorigin href="/assets/buy_in_minutes/buy-in-minutes/assets/http-NajWzFY4.js">
     <link rel="modulepreload" crossorigin href="/assets/buy_in_minutes/buy-in-minutes/assets/googleMaps-Bxobz4B8.js">
-    <link rel="modulepreload" crossorigin href="/assets/buy_in_minutes/buy-in-minutes/assets/itemApi-Bt4a1Y9z.js">
+    <link rel="modulepreload" crossorigin href="/assets/buy_in_minutes/buy-in-minutes/assets/itemApi-2jh3F3ds.js">
     <link rel="stylesheet" crossorigin href="/assets/buy_in_minutes/buy-in-minutes/assets/index-CoTxCp5G.css">
   </head>
   <body>
-    <div id="app"></div>
+    <div id="app">{{ seo_body or "" }}</div>
   </body>
 
   

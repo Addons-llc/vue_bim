@@ -2,7 +2,7 @@ import frappe
 from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
 
 from buy_in_minutes.catalog_cache import clear_catalog_cache
-from buy_in_minutes.product_slug import backfill_item_slugs
+from buy_in_minutes.url_slug import backfill_slugs
 
 ITEM_SLUG_FIELD = {
 	"fieldname": "custom_slug",
@@ -21,5 +21,5 @@ def execute():
 	# Fixtures sync after patches, so create the field here before backfilling it.
 	create_custom_fields({"Item": [ITEM_SLUG_FIELD]}, ignore_validate=frappe.flags.in_patch, update=True)
 	frappe.clear_cache(doctype="Item")
-	backfill_item_slugs()
+	backfill_slugs("Item")
 	clear_catalog_cache()

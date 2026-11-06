@@ -7,13 +7,15 @@ title, description, canonical, robots, Open Graph/Twitter tags and JSON-LD.
 """
 
 import json
+import re
 from html import escape
 from urllib.parse import quote, unquote
 
 import frappe
-from frappe.utils import flt, strip_html
+from frappe.utils import cint, flt, strip_html
 
 from buy_in_minutes import api
+from buy_in_minutes.url_slug import SLUG_FIELD, get_slug, has_slug_field, resolve_name
 
 APP_PREFIX = "/buy-in-minutes"
 SITE_NAME = "Buy In Minutes"
@@ -50,14 +52,23 @@ STATIC_PAGES = {
 }
 
 
-def build_seo_head(request_path):
-	"""Return (head_html, http_status_code, redirect_url) for a storefront request path.
+def build_seo_page(request_path):
+	"""SEO output for a storefront request path, as a dict:
 
-	redirect_url is set when the page has moved (an item-code product URL whose
-	readable slug URL should be used instead); the caller answers with a 301."""
+	head      <head> tags (title, meta, canonical, Open Graph, JSON-LD)
+	body      plain HTML for inside #app; Vue replaces it on mount, crawlers that do not
+	          run JavaScript read it
+	status    HTTP status code
+	redirect  absolute URL when the page has moved (item-code product URL -> slug URL)
+	"""
 	seo = _resolve(_get_app_segments(request_path))
 	redirect = seo.get("redirect")
-	return _render_head(seo), seo.get("status", 200), _canonical(redirect) if redirect else None
+	return {
+		"head": _render_head(seo),
+		"body": _render_body(seo),
+		"status": seo.get("status", 200),
+		"redirect": _canonical(redirect) if redirect else None,
+	}
 
 
 def _get_app_segments(request_path):
@@ -79,12 +90,14 @@ def _resolve(segments):
 	if not key:
 		if section not in STATIC_PAGES:
 			return _not_found(path)
-		title, description = STATIC_PAGES[section]
-		if section:
-			title = f"{title} | {SITE_NAME}"
-		seo = {"title": title, "description": description, "path": path}
+		heading, description = STATIC_PAGES[section]
+		title = f"{heading} | {SITE_NAME}" if section else heading
+		seo = {"title": title, "description": description, "path": path, "heading": heading}
 		if not section:
+			seo["heading"] = f"{SITE_NAME}: groceries and essentials delivered in minutes"
 			seo["json_ld"] = _home_json_ld()
+		if section in ("", "categories"):
+			seo["links"] = _category_links()
 		return seo
 
 	if len(segments) > 2:
@@ -167,13 +180,30 @@ def _product_seo(product_key):
 			"itemCondition": "https://schema.org/NewCondition",
 		}
 
+	rating = _product_rating_json_ld(item)
+	if rating:
+		product.update(rating)
+
 	crumbs = [("Home", "/")]
 	if item.get("item_group"):
-		crumbs.append((item.get("item_group"), f"/categories/{item.get('item_group')}"))
+		crumbs.append((item.get("item_group"), f"/categories/{get_slug('Item Group', item.get('item_group'))}"))
 	crumbs.append((name, product_path))
 
 	return {
 		"path": product_path,
+		"heading": name,
+		"body_text": _plain_text(item.get("description")),
+		"facts": [
+			value
+			for value in (
+				f"{currency} {price:.2f}" if price > 0 else "",
+				"In stock" if in_stock else "Out of stock",
+				f"Brand: {item.get('brand')}" if item.get("brand") else "",
+				f"Sold by: {item.get('supplier')}" if item.get("supplier") else "",
+			)
+			if value
+		],
+		"crumbs": crumbs,
 		"title": f"{name} | {SITE_NAME}",
 		"description": description,
 		"image": image,
@@ -183,40 +213,110 @@ def _product_seo(product_key):
 	}
 
 
-def _category_seo(item_group):
-	if item_group == "All Item Groups" or not frappe.db.exists("Item Group", item_group):
+def _product_rating_json_ld(item):
+	"""aggregateRating + review entries for the Product, from the reviews the page shows.
+
+	Google requires the markup to match visible content, so this uses the same
+	get_product_reviews() call the product page makes. Reviews live on the supplier's
+	website profile, so they are cached briefly rather than read on every request."""
+	from buy_in_minutes.catalog_cache import get_cached_catalog_value
+
+	item_code = item.get("name")
+	supplier = item.get("supplier") or ""
+	try:
+		reviews = get_cached_catalog_value(
+			"seo_reviews",
+			{"item": item_code, "supplier": supplier},
+			lambda: api.get_product_reviews(product_id=item_code, supplier=supplier),
+		)
+	except Exception:
+		frappe.log_error(title="Buy In Minutes SEO: product reviews failed")
+		return None
+
+	rated = [review for review in reviews or [] if cint(review.get("rating")) > 0]
+	if not rated:
+		return None
+
+	average = sum(cint(review["rating"]) for review in rated) / len(rated)
+	return {
+		"aggregateRating": {
+			"@type": "AggregateRating",
+			"ratingValue": f"{average:.1f}",
+			"reviewCount": len(rated),
+			"bestRating": "5",
+			"worstRating": "1",
+		},
+		"review": [
+			{
+				"@type": "Review",
+				"author": {"@type": "Person", "name": review.get("customerName") or "Customer"},
+				"reviewRating": {"@type": "Rating", "ratingValue": str(cint(review["rating"])), "bestRating": "5"},
+				**({"reviewBody": _plain_text(review["description"])} if review.get("description") else {}),
+			}
+			# Google reads a handful; keep the page light.
+			for review in rated[:5]
+		],
+	}
+
+
+def _category_seo(category_key, section="categories"):
+	# category_key is the readable slug, or the group name from links made before slugs.
+	item_group = resolve_name("Item Group", category_key)
+	if not item_group or item_group == "All Item Groups":
 		return None
 
 	publish_fields = api._get_item_group_publish_fields()
 	fields = ["name"] + api._get_existing_fields(
-		"Item Group", ("item_group_name", "description", "image", "website_image") + tuple(publish_fields)
+		"Item Group",
+		("item_group_name", "description", "image", "website_image", SLUG_FIELD) + tuple(publish_fields),
 	)
 	group = frappe.db.get_value("Item Group", item_group, fields, as_dict=True)
 	if publish_fields and not any(api._is_truthy_flag(group.get(f)) for f in publish_fields):
 		return None
 
+	path = f"/{section}/{group.get(SLUG_FIELD) or group.name}"
+	if path != f"/{section}/{category_key}":
+		return {"redirect": path}
+
 	name = group.get("item_group_name") or group.name
+	crumbs = [("Home", "/"), ("Categories", "/categories"), (name, path)]
 	return {
+		"path": path,
+		"heading": name,
+		"body_text": _plain_text(group.get("description")),
+		"crumbs": crumbs,
+		"links": _product_links(item_group=group.name),
 		"title": f"{name} - Shop Online | {SITE_NAME}",
 		"description": _clean_description(group.get("description"))
 		or f"Shop {name} online at {SITE_NAME}. Fresh stock from local stores, delivered in minutes.",
 		"image": group.get("website_image") or group.get("image"),
-		"json_ld": [_breadcrumbs([("Home", "/"), ("Categories", "/categories"), (name, f"/categories/{group.name}")])],
+		"json_ld": [_breadcrumbs(crumbs)],
 	}
 
 
-def _brand_seo(brand_name):
-	brand = api.get_brand(brand=brand_name)
+def _brand_seo(brand_key):
+	# brand_key is the readable slug, or the brand name from links made before slugs.
+	brand = api.get_brand(brand=brand_key)
 	if not brand:
 		return None
 
+	path = f"/brands/{brand.get(SLUG_FIELD) or brand.get('name')}"
+	if path != f"/brands/{brand_key}":
+		return {"redirect": path}
+
 	name = brand.get("brand") or brand.get("name")
+	crumbs = [("Home", "/"), ("Brands", "/brands"), (name, path)]
 	return {
+		"path": path,
+		"heading": f"{name} products",
+		"body_text": _plain_text(brand.get("description")),
+		"crumbs": crumbs,
+		"links": _product_links(brand=brand.get("name")),
 		"title": f"{name} Products | {SITE_NAME}",
 		"description": _clean_description(brand.get("description"))
 		or f"Shop {name} products online at {SITE_NAME}, delivered in minutes.",
 		"image": brand.get("logo") or brand.get("image"),
-		"json_ld": [_breadcrumbs([("Home", "/"), ("Brands", "/brands"), (name, f"/brands/{brand_name}")])],
+		"json_ld": [_breadcrumbs(crumbs)],
 	}
 
 
@@ -224,7 +324,7 @@ def _store_seo(store_identifier):
 	store = api.get_supplier_store(supplier_store=store_identifier)
 	if not store:
 		# /stores/<x> is also used for category-style store listings.
-		return _category_seo(store_identifier)
+		return _category_seo(store_identifier, section="stores")
 
 	name = store.get("store_name") or store.get("name")
 	description = _clean_description(
@@ -246,14 +346,16 @@ def _store_seo(store_identifier):
 	if store.get("contact_number"):
 		local_business["telephone"] = store.get("contact_number")
 
+	crumbs = [("Home", "/"), ("Stores", "/stores"), (name, f"/stores/{store_identifier}")]
 	return {
+		"heading": name,
+		"body_text": description,
+		"crumbs": crumbs,
+		"links": _product_links(supplier_store=store.get("name")),
 		"title": f"{name} | {SITE_NAME}",
 		"description": description,
 		"image": image,
-		"json_ld": [
-			local_business,
-			_breadcrumbs([("Home", "/"), ("Stores", "/stores"), (name, f"/stores/{store_identifier}")]),
-		],
+		"json_ld": [local_business, _breadcrumbs(crumbs)],
 	}
 
 
@@ -264,6 +366,9 @@ def _supplier_seo(supplier_name):
 
 	name = supplier.get("supplier_name") or supplier.get("name")
 	return {
+		"heading": name,
+		"body_text": _plain_text(supplier.get("supplier_details")),
+		"links": _product_links(supplier=supplier.get("name")),
 		"title": f"{name} | {SITE_NAME}",
 		"description": _clean_description(supplier.get("supplier_details"))
 		or f"Shop products from {name} on {SITE_NAME}, delivered in minutes.",
@@ -274,6 +379,48 @@ def _supplier_seo(supplier_name):
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+BODY_LINK_LIMIT = 48
+
+
+def _product_links(**filters):
+	"""(label, path) links to a listing's products, so crawlers reach every product page."""
+	try:
+		items = api.get_items(limit_page_length=BODY_LINK_LIMIT, **filters)
+	except Exception:
+		frappe.log_error(title="Buy In Minutes SEO: listing products failed")
+		return []
+
+	return [(item.get("item_name") or item.get("name"), _product_path(item)) for item in items]
+
+
+def _category_links():
+	"""Categories that hold published products: the same list the sitemap uses."""
+	from buy_in_minutes.catalog_cache import get_cached_catalog_value
+
+	try:
+		paths = get_cached_catalog_value("sitemap", {}, _get_sitemap_paths)
+	except Exception:
+		frappe.log_error(title="Buy In Minutes SEO: categories failed")
+		return []
+
+	prefix = "/categories/"
+	keys = [path[len(prefix) :] for path, _lastmod in paths if path.startswith(prefix)][:BODY_LINK_LIMIT]
+	if not keys:
+		return []
+
+	# Paths hold slugs (or names for groups without one); show the group's display name.
+	key_field = SLUG_FIELD if has_slug_field("Item Group") else "name"
+	labels = {
+		row.get(key_field): row.item_group_name or row.name
+		for row in frappe.get_all(
+			"Item Group",
+			filters={key_field: ["in", keys]},
+			fields=["name", "item_group_name", key_field],
+		)
+	}
+	return [(labels.get(key) or key, f"{prefix}{key}") for key in keys]
 
 
 def _product_path(item):
@@ -321,8 +468,17 @@ def _breadcrumbs(crumbs):
 	}
 
 
+BLOCK_TAG = re.compile(r"<\s*/?\s*(br|p|div|li|h[1-6]|tr|td|ul|ol)\b[^>]*>", re.IGNORECASE)
+
+
+def _plain_text(text):
+	# Break at block tags first so "<p>Storage</p><p>Keep cool</p>" doesn't run together.
+	text = BLOCK_TAG.sub(" ", str(text or ""))
+	return " ".join(strip_html(text).split())
+
+
 def _clean_description(text):
-	text = " ".join(strip_html(str(text or "")).split())
+	text = _plain_text(text)
 	if len(text) <= DESCRIPTION_LIMIT:
 		return text
 	return text[: DESCRIPTION_LIMIT - 1].rsplit(" ", 1)[0] + "…"
@@ -422,10 +578,10 @@ def _get_sitemap_paths():
 		add("products", row.get("custom_slug") or row.name, row.modified)
 
 	for row in _published_item_groups({row.item_group for row in items}):
-		add("categories", row.name, row.modified)
+		add("categories", row.get(SLUG_FIELD) or row.name, row.modified)
 
 	for brand in api._get_brands(limit_page_length=SITEMAP_LIMIT, published=1):
-		add("brands", brand.get("name"), brand.get("modified"))
+		add("brands", brand.get(SLUG_FIELD) or brand.get("name"), brand.get("modified"))
 
 	if frappe.db.exists("DocType", "Supplier Store"):
 		for store in api._get_supplier_stores(limit_page_length=SITEMAP_LIMIT, published=1):
@@ -458,7 +614,13 @@ def _published_item_groups(item_groups_with_products):
 	table = frappe.qb.DocType("Item Group")
 	query = (
 		frappe.qb.from_(table)
-		.select(table.name, table.modified, table.lft, table.rgt)
+		.select(
+			table.name,
+			table.modified,
+			table.lft,
+			table.rgt,
+			*([table[SLUG_FIELD]] if has_slug_field("Item Group") else []),
+		)
 		.where(table.name != "All Item Groups")
 		.limit(SITEMAP_LIMIT)
 	)
@@ -485,3 +647,43 @@ def _published_item_groups(item_groups_with_products):
 
 def _date(value):
 	return f"{value:%Y-%m-%d}" if hasattr(value, "strftime") else None
+
+
+def _render_body(seo):
+	"""Plain, lightly styled HTML placed inside #app. Vue clears it when it mounts."""
+	if seo.get("noindex") or not seo.get("heading"):
+		return ""
+
+	esc = lambda value: escape(str(value), quote=True)  # noqa: E731
+	href = lambda path: esc(_canonical(path))  # noqa: E731
+	parts = ['<div class="bim-ssr-fallback">']
+
+	crumbs = seo.get("crumbs") or []
+	if crumbs:
+		parts.append(
+			'<nav aria-label="Breadcrumb">'
+			+ " &rsaquo; ".join(f'<a href="{href(path)}">{esc(label)}</a>' for label, path in crumbs)
+			+ "</nav>"
+		)
+
+	parts.append(f"<h1>{esc(seo['heading'])}</h1>")
+
+	if seo.get("image") and seo.get("og_type") == "product":
+		parts.append(
+			f'<img src="{esc(_absolute(seo["image"]))}" alt="{esc(seo["heading"])}" width="320" height="320">'
+		)
+
+	if seo.get("facts"):
+		parts.append("<p>" + " &middot; ".join(esc(fact) for fact in seo["facts"]) + "</p>")
+
+	if seo.get("body_text"):
+		parts.append(f"<p>{esc(seo['body_text'])}</p>")
+
+	links = seo.get("links") or []
+	if links:
+		parts.append(
+			"<ul>" + "".join(f'<li><a href="{href(path)}">{esc(label)}</a></li>' for label, path in links) + "</ul>"
+		)
+
+	parts.append("</div>")
+	return "".join(parts)

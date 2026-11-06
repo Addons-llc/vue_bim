@@ -166,7 +166,15 @@ doc_events = {
 		"on_submit": "buy_in_minutes.payment.on_sales_order_submit",
 	},
 	**{
-		doctype: _catalog_cache_events
+		doctype: {
+			**_catalog_cache_events,
+			# Readable URLs: fill custom_slug from the record's title (url_slug.py).
+			**(
+				{"validate": "buy_in_minutes.url_slug.set_slug"}
+				if doctype in ("Item", "Item Group", "Brand")
+				else {}
+			),
+		}
 		for doctype in (
 			"Item",
 			"Item Price",
@@ -178,14 +186,16 @@ doc_events = {
 			"Price List",
 		)
 	},
-	# Readable product URLs: fill Item.custom_slug from the item name.
-	"Item": {
-		**_catalog_cache_events,
-		"validate": "buy_in_minutes.product_slug.set_item_slug",
-	},
 	"File": {
-		"after_insert": "buy_in_minutes.catalog_cache.clear_catalog_cache_for_file",
-		"on_trash": "buy_in_minutes.catalog_cache.clear_catalog_cache_for_file",
+		"after_insert": [
+			"buy_in_minutes.catalog_cache.clear_catalog_cache_for_file",
+			# Web-sized WebP copy of catalog images (image_optimizer.py).
+			"buy_in_minutes.image_optimizer.on_file_insert",
+		],
+		"on_trash": [
+			"buy_in_minutes.catalog_cache.clear_catalog_cache_for_file",
+			"buy_in_minutes.image_optimizer.on_file_trash",
+		],
 	},
 }
 
@@ -218,6 +228,8 @@ fixtures = [
 					"Sales Order-custom_customer_location",
 					"Item-custom_published",
 					"Item-custom_slug",
+					"Item Group-custom_slug",
+					"Brand-custom_slug",
 				],
 			]
 		],

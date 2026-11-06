@@ -131,6 +131,12 @@ async function loadBrandProducts() {
     ])
 
     brandRecord.value = brand
+
+    // Opened by brand name (an old link): move to the readable slug URL.
+    if (brand?.slug && brandName.value !== brand.slug) {
+      router.replace({ name: 'brand-details', params: { brandName: brand.slug } })
+    }
+
     loadedProducts.value = products
     hasMoreBrandProducts.value = products.length === BRAND_PRODUCT_PAGE_SIZE
     console.log('Brand details page state', {

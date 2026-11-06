@@ -144,6 +144,8 @@ function mapBrand(brand = {}) {
 
   return {
     id: brand.name || brandName,
+    // Readable URL key (Brand.custom_slug); links fall back to the brand name.
+    slug: brand.custom_slug || '',
     name: brandName,
     brand: brand.name || brandName,
     description: stripHtml(brand.description || ''),

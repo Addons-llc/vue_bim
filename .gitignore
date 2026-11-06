@@ -24,3 +24,7 @@ dist-ssr
 *.sw?
 __pycache__/
 *.py[cod]
+
+# Python bytecode
+__pycache__/
+*.pyc

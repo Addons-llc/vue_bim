@@ -5,6 +5,8 @@ from frappe.query_builder.functions import Coalesce, NullIf
 from frappe.utils import flt, getdate, today
 
 from buy_in_minutes.catalog_cache import get_cached_catalog_value
+from buy_in_minutes.image_optimizer import apply_web_images
+from buy_in_minutes.url_slug import resolve_name
 from buy_in_minutes.payment import (
 	_build_delivery_address_display,
 	_get_or_create_customer_address,
@@ -1308,6 +1310,7 @@ def _get_brands(limit_page_length, published, brand=None):
 		"Brand",
 		(
 			"brand",
+			"custom_slug",
 			"description",
 			"image",
 			"brand_image",
@@ -1376,7 +1379,7 @@ def _get_brands(limit_page_length, published, brand=None):
 			filters["published"] = 1
 
 	if brand:
-		filters["name"] = brand
+		filters["name"] = resolve_name("Brand", brand) or brand
 
 	brands = frappe.get_all(
 		"Brand",
@@ -1392,7 +1395,7 @@ def _get_brands(limit_page_length, published, brand=None):
 			dict.fromkeys(brand.get(fieldname) for fieldname in banner_fields if brand.get(fieldname))
 		)
 
-	return brands
+	return apply_web_images(brands)
 
 
 @frappe.whitelist()
@@ -1554,14 +1557,16 @@ def _get_supplier_stores(limit_page_length, published, supplier_store=None):
 			if fieldname in store_fields
 		]
 
-	return frappe.get_all(
-		"Supplier Store",
-		fields=fields,
-		filters=filters,
-		or_filters=or_filters,
-		ignore_permissions=True,
-		order_by="modified desc",
-		limit_page_length=limit_page_length,
+	return apply_web_images(
+		frappe.get_all(
+			"Supplier Store",
+			fields=fields,
+			filters=filters,
+			or_filters=or_filters,
+			ignore_permissions=True,
+			order_by="modified desc",
+			limit_page_length=limit_page_length,
+		)
 	)
 
 
@@ -1608,7 +1613,10 @@ def _get_item_group_with_descendants(item_group):
 	Parent groups such as "Men's fashion" usually hold no items themselves
 	(they live in Shirt, Dhoti, ...), so filtering by the exact group alone
 	makes a parent category look empty.
+
+	`item_group` may be the group's readable URL slug.
 	"""
+	item_group = resolve_name("Item Group", item_group) or item_group
 	if not frappe.db.exists("Item Group", item_group):
 		return [item_group]
 
@@ -1705,9 +1713,7 @@ def _get_items(
 	if item:
 		# Product URLs pass the readable slug; old links pass the item code. A slug wins
 		# when a value is both one item's slug and another's code, so URLs stay unambiguous.
-		from buy_in_minutes.product_slug import get_item_code_for_slug
-
-		query = query.where(item_table.name == (get_item_code_for_slug(item) or item))
+		query = query.where(item_table.name == (resolve_name("Item", item) or item))
 
 	if item_codes is not None:
 		query = query.where(item_table.name.isin(item_codes))
@@ -1719,7 +1725,8 @@ def _get_items(
 		query = query.where(item_table.item_group.isin(_get_item_group_with_descendants(item_group)))
 
 	if brand:
-		query = query.where(item_table.brand == brand)
+		# Brand pages pass the readable URL slug.
+		query = query.where(item_table.brand == (resolve_name("Brand", brand) or brand))
 
 	if search:
 		search_text = f"%{search}%"
@@ -1761,6 +1768,8 @@ def _get_items(
 	_apply_item_attachments(items)
 	_apply_item_variant_metadata(items)
 	_apply_supplier_details(items)
+	# Serve the web-sized WebP copies of product photos where they exist.
+	apply_web_images(items)
 
 	return items
 
@@ -1893,6 +1902,7 @@ def _get_item_groups(limit_page_length, published):
 			"website_image",
 			"parent_item_group",
 			"is_group",
+			"custom_slug",
 		),
 	)
 	order_fields = _get_item_group_order_fields()
@@ -1914,7 +1924,9 @@ def _get_item_groups(limit_page_length, published):
 	if published and publish_fields:
 		query = query.where(_get_publish_criterion(item_group_table, "Item Group", publish_fields))
 
-	return query.orderby(item_group_table[_get_item_group_order_field(order_fields)]).run(as_dict=True)
+	return apply_web_images(
+		query.orderby(item_group_table[_get_item_group_order_field(order_fields)]).run(as_dict=True)
+	)
 
 
 def _get_session_customer():
