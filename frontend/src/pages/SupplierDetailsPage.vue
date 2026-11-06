@@ -1,6 +1,8 @@
 <script setup>
+import { productRoute } from '../utils/productRoute'
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { pageTitle, usePageMeta } from '../composables/usePageMeta'
 import { getProductById, getProducts } from '../api/productApi'
 import { getProductReviews } from '../api/reviewApi'
 import { getSupplierDetails } from '../api/supplierApi'
@@ -204,10 +206,7 @@ const hasMoreSupplierReviews = computed(() => supplierReviews.value.length > 2)
 function openProductDetails(product) {
   saveSelectedProduct(product)
 
-  router.push({
-    name: 'product-details',
-    params: { productId: product.id },
-  })
+  router.push(productRoute(product))
 }
 
 function hideBrokenSupplierBanner() {
@@ -299,6 +298,15 @@ watch(supplierName, () => {
   isShowingAllSupplierReviews.value = false
   loadSupplierProducts()
 })
+
+usePageMeta(() => ({
+  title: pageTitle(supplierDisplayName.value),
+  description:
+    supplierDetails.value.details
+    || `Shop products from ${supplierDisplayName.value} on Buy In Minutes, delivered in minutes.`,
+  image: supplierDetails.value.image,
+  path: route.path,
+}))
 </script>
 
 <template>

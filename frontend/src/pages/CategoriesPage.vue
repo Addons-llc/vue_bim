@@ -174,6 +174,7 @@ onMounted(loadCategories)
 
 <template>
   <section class="categories-page">
+    <h1 class="visually-hidden">Shop by category</h1>
     <div class="category-tab-bar" aria-label="Category views">
       <button
         v-for="tab in categoryTabs"

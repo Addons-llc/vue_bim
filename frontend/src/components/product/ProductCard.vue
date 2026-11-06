@@ -183,7 +183,7 @@ watch(
     >
       <img
         :src="product.image || productPlaceholderImage"
-        alt=""
+        :alt="product.name || ''"
         loading="lazy"
         decoding="async"
         width="252"

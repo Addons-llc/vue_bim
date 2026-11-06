@@ -59,6 +59,12 @@ app_license = "mit"
 # application home page (will override Website Settings)
 home_page = "buy-in-minutes"
 
+# Serve the Vue storefront for every sub-path so history-mode URLs
+# (/buy-in-minutes/products/...) load the app instead of 404ing.
+website_route_rules = [
+	{"from_route": "/buy-in-minutes/<path:app_path>", "to_route": "buy-in-minutes"},
+]
+
 # website user home page (by Role)
 # role_home_page = {
 # 	"Role": "home_page"
@@ -172,6 +178,11 @@ doc_events = {
 			"Price List",
 		)
 	},
+	# Readable product URLs: fill Item.custom_slug from the item name.
+	"Item": {
+		**_catalog_cache_events,
+		"validate": "buy_in_minutes.product_slug.set_item_slug",
+	},
 	"File": {
 		"after_insert": "buy_in_minutes.catalog_cache.clear_catalog_cache_for_file",
 		"on_trash": "buy_in_minutes.catalog_cache.clear_catalog_cache_for_file",
@@ -206,6 +217,7 @@ fixtures = [
 					"Sales Order-custom_delivery_slot",
 					"Sales Order-custom_customer_location",
 					"Item-custom_published",
+					"Item-custom_slug",
 				],
 			]
 		],

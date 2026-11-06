@@ -1,0 +1,1 @@
+import{t as e}from"./http-NajWzFY4.js";function t(t){return e(`/method/buy_in_minutes.api.get_sales_order?${new URLSearchParams({sales_order_name:t}).toString()}`)}export{t};

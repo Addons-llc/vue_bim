@@ -1,4 +1,5 @@
 <script setup>
+import { productRoute } from '../utils/productRoute'
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import ProductBundleSection from '../components/product/ProductBundleSection.vue'
@@ -12,12 +13,12 @@ import { ESSENTIALS_ITEM_GROUPS, ESSENTIALS_TITLE } from '../data/essentials'
 import { saveSelectedProduct } from '../data/productSelectionStore'
 import { saveSelectedSupplier } from '../data/supplierSelectionStore'
 import { openCategoryOrProduct } from '../utils/categoryNavigation'
-import bannerImageOne from '../assets/images/banner_1.png'
-import bannerImageTwo from '../assets/images/banner_2.png'
-import bannerImageThree from '../assets/images/banner_3.png'
-import shortcutBrandsBg from '../assets/images/shortcut-brands.jpg'
-import shortcutCategoriesBg from '../assets/images/shortcut-categories.jpg'
-import shortcutStoresBg from '../assets/images/shortcut-stores.jpg'
+import bannerImageOne from '../assets/images/banner_1.webp'
+import bannerImageTwo from '../assets/images/banner_2.webp'
+import bannerImageThree from '../assets/images/banner_3.webp'
+import shortcutBrandsBg from '../assets/images/shortcut-brands.webp'
+import shortcutCategoriesBg from '../assets/images/shortcut-categories.webp'
+import shortcutStoresBg from '../assets/images/shortcut-stores.webp'
 
 const props = defineProps({
   category: {
@@ -142,10 +143,7 @@ function openProductDetails(product) {
     ),
   })
 
-  router.push({
-    name: 'product-details',
-    params: { productId: product.id },
-  })
+  router.push(productRoute(product))
 }
 
 async function openCategoryItem(category) {
@@ -310,6 +308,7 @@ onUnmounted(() => {
 </script>
 
 <template>
+  <h1 class="visually-hidden">Buy In Minutes: groceries and essentials delivered in minutes</h1>
   <nav v-if="categoryPills.length" class="home-category-pills" aria-label="Categories">
     <button
       v-for="category in categoryPills"
@@ -362,6 +361,7 @@ onUnmounted(() => {
           :src="slide.image"
           :alt="slide.title"
           :loading="index === 0 ? 'eager' : 'lazy'"
+          :fetchpriority="index === 0 ? 'high' : 'auto'"
           decoding="async"
           @error="useHeroImageFallback"
         />

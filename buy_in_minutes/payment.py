@@ -1919,8 +1919,8 @@ def _upsert_sales_order(
 
 def _build_checkout_params(checkout_items, sales_order_name=None, return_origin=None):
 	return_origin = _get_checkout_return_origin(return_origin)
-	success_url = f"{return_origin}/buy-in-minutes#/payment/success?method=stripe&session_id={{CHECKOUT_SESSION_ID}}"
-	cancel_url = f"{return_origin}/buy-in-minutes#/payment/cancel"
+	success_url = f"{return_origin}/buy-in-minutes/payment/success?method=stripe&session_id={{CHECKOUT_SESSION_ID}}"
+	cancel_url = f"{return_origin}/buy-in-minutes/payment/cancel"
 	stripe_currency = _get_stripe_settings().get("currency") or DEFAULT_CURRENCY
 	checkout_user = _normalize_user_name(frappe.session.user)
 	adaptive_pricing_enabled = bool((adaptive_pricing or {}).get("enabled"))

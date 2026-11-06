@@ -1,4 +1,5 @@
 <script setup>
+import { productRoute } from '../utils/productRoute'
 import { useRouter } from 'vue-router'
 import ProductCard from '../components/product/ProductCard.vue'
 import { saveSelectedProduct } from '../data/productSelectionStore'
@@ -20,10 +21,7 @@ function openProductDetails(product) {
     ),
   })
 
-  router.push({
-    name: 'product-details',
-    params: { productId: product.id },
-  })
+  router.push(productRoute(product))
 }
 </script>
 

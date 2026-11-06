@@ -52,6 +52,7 @@ onMounted(loadBrands)
 
 <template>
   <section class="categories-page">
+    <h1 class="visually-hidden">Shop by brand</h1>
     <p v-if="isLoadingBrands" class="dashboard-message">Loading brands...</p>
     <p v-if="brandError" class="dashboard-message">{{ brandError }}</p>
     <p v-if="!isLoadingBrands && !brandError && !brands.length" class="dashboard-message">

@@ -1674,6 +1674,7 @@ def _get_items(
 			"custom_available_qty",
 			"custom_out_of_stock",
 			"standard_rate",
+			"custom_slug",
 		)
 		if item_meta.has_field(fieldname)
 	]
@@ -1702,7 +1703,11 @@ def _get_items(
 	)
 
 	if item:
-		query = query.where(item_table.name == item)
+		# Product URLs pass the readable slug; old links pass the item code. A slug wins
+		# when a value is both one item's slug and another's code, so URLs stay unambiguous.
+		from buy_in_minutes.product_slug import get_item_code_for_slug
+
+		query = query.where(item_table.name == (get_item_code_for_slug(item) or item))
 
 	if item_codes is not None:
 		query = query.where(item_table.name.isin(item_codes))

@@ -373,6 +373,8 @@ export async function mapItemToProduct(item) {
 
   return {
     id: item.name,
+    // Readable URL key (Item.custom_slug); productRoute() falls back to the id without it.
+    slug: item.custom_slug || '',
     itemCode,
     name: item.item_name || itemCode,
     category: itemGroup,

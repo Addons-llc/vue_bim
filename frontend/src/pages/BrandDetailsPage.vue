@@ -1,6 +1,8 @@
 <script setup>
+import { productRoute } from '../utils/productRoute'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { pageTitle, usePageMeta } from '../composables/usePageMeta'
 import { getBrand } from '../api/brandApi'
 import { getProducts } from '../api/productApi'
 import ProductCard from '../components/product/ProductCard.vue'
@@ -82,10 +84,7 @@ const dummyBrandRating = {
 function openProductDetails(product) {
   saveSelectedProduct(product)
 
-  router.push({
-    name: 'product-details',
-    params: { productId: product.id },
-  })
+  router.push(productRoute(product))
 }
 
 function hideBrokenBrandBanner(image) {
@@ -212,6 +211,19 @@ watch(brandBannerImages, (images) => {
 
   startBrandBannerAutoplay()
 }, { immediate: true })
+
+usePageMeta(() =>
+  brandRecord.value
+    ? {
+        title: pageTitle(brandDisplayName.value, ' Products'),
+        description:
+          brandDescription.value
+          || `Shop ${brandDisplayName.value} products online at Buy In Minutes, delivered in minutes.`,
+        image: brandDetails.value.image,
+        path: route.path,
+      }
+    : null,
+)
 </script>
 
 <template>

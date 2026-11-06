@@ -1,4 +1,5 @@
 <script setup>
+import { productRoute } from '../utils/productRoute'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import ProductCard from '../components/product/ProductCard.vue'
@@ -165,10 +166,7 @@ function openProductDetails(product) {
     ),
   })
 
-  router.push({
-    name: 'product-details',
-    params: { productId: product.id },
-  })
+  router.push(productRoute(product))
 }
 
 function handleVoiceKeydown(event) {

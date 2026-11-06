@@ -1528,6 +1528,7 @@
     background: transparent;
   }
 
+  .product-detail-content h1,
   .product-detail-content h2 {
     font-size: 20px;
     line-height: 1.32;

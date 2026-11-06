@@ -1,4 +1,5 @@
 <script setup>
+import { productRoute } from '../../utils/productRoute'
 import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { getItemSuggestions } from '../../api/itemApi'
@@ -53,7 +54,7 @@ async function loadSuggestions() {
 
 function openProduct(product) {
   saveSelectedProduct(product)
-  router.push({ name: 'product-details', params: { productId: product.id } })
+  router.push(productRoute(product))
 }
 
 watch(itemCodesKey, loadSuggestions, { immediate: true })

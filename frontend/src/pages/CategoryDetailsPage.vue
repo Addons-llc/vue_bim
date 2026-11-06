@@ -1,6 +1,8 @@
 <script setup>
+import { productRoute } from '../utils/productRoute'
 import { computed, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { pageTitle, usePageMeta } from '../composables/usePageMeta'
 import ProductCard from '../components/product/ProductCard.vue'
 import { useProducts } from '../composables/useProducts'
 import { saveSelectedProduct } from '../data/productSelectionStore'
@@ -116,11 +118,18 @@ function openProductDetails(product) {
     ),
   })
 
-  router.push({
-    name: 'product-details',
-    params: { productId: product.id },
-  })
+  router.push(productRoute(product))
 }
+
+usePageMeta(() => ({
+  title: isStoreDetailsPage.value
+    ? pageTitle(selectedCategoryTitle.value)
+    : pageTitle(selectedCategoryTitle.value, ' - Shop Online'),
+  description: isStoreDetailsPage.value
+    ? `Order from ${selectedCategoryTitle.value} on Buy In Minutes and get it delivered in minutes.`
+    : `Shop ${selectedCategoryTitle.value} online at Buy In Minutes. Fresh stock from local stores, delivered in minutes.`,
+  path: route.path,
+}))
 </script>
 
 <template>
@@ -174,6 +183,8 @@ function openProductDetails(product) {
             <img
               :src="getCategoryImage(category)"
               :alt="category.name"
+              loading="lazy"
+              decoding="async"
               @error="showPlaceholderImage"
             />
           </span>

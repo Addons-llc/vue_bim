@@ -1,6 +1,7 @@
 import { apiRequest, clearStoredCsrfToken } from './http'
 import { CHECKOUT_RESUME_TOKEN_STORAGE_KEY } from './paymentApi'
 import { clearCurrentUser } from '../data/authStore'
+import { appUrl } from '../router/base'
 
 export const AUTH_TOKEN_STORAGE_KEY = 'authToken'
 export const AUTH_FLOW_TOKEN_STORAGE_KEY = 'authFlowToken'
@@ -203,6 +204,5 @@ export async function logout() {
 
 /** Full reload onto the login page so no signed-in state survives in memory. */
 export function reloadToLogin() {
-  window.location.hash = '#/login'
-  window.location.reload()
+  window.location.assign(appUrl('/login'))
 }

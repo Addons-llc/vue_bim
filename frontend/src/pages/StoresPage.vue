@@ -44,6 +44,7 @@ onMounted(loadStores)
 
 <template>
   <section class="categories-page">
+    <h1 class="visually-hidden">Local stores</h1>
     <p v-if="isLoadingStores" class="dashboard-message">Loading stores...</p>
     <p v-if="storeError" class="dashboard-message">{{ storeError }}</p>
     <p v-if="!isLoadingStores && !storeError && !stores.length" class="dashboard-message">

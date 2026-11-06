@@ -1,6 +1,8 @@
 <script setup>
+import { isProductKey, productRoute } from '../utils/productRoute'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { pageTitle, usePageMeta } from '../composables/usePageMeta'
 import {
   addProductToCart,
   cartProducts,
@@ -41,7 +43,10 @@ const productReviews = ref([])
 
 const MAX_DELIVERABLE_DISTANCE_KM = 20
 
+// URL key: the product's slug, or its item code for older links.
 const productId = computed(() => String(route.params.productId || ''))
+// Item code of the loaded product; reviews and other records are keyed by it.
+const productItemCode = computed(() => product.value?.id || productId.value)
 const isRfqOnly = computed(() => product.value?.customRfqOnly === true)
 const productQuantity = computed(() => {
   if (!product.value) {
@@ -470,7 +475,7 @@ async function refreshSupplierOptionDistances() {
 
     if (nearestSupplier?.name && nearestSupplier.name !== selectedSupplierName.value) {
       selectedSupplierName.value = nearestSupplier.name
-      await loadProductReviews(productId.value, supplierIdentifier.value)
+      await loadProductReviews(productItemCode.value, supplierIdentifier.value)
     }
   }
 }
@@ -578,12 +583,9 @@ async function loadVariantsForProduct(loadedProduct) {
     if (loadedProduct?.hasVariants && !loadedProduct?.variantOf && variants.length) {
       const defaultVariant = variants.find((variant) => variant.inStock) || variants[0]
 
-      if (defaultVariant?.id && defaultVariant.id !== route.params.productId) {
+      if (defaultVariant?.id && !isProductKey(defaultVariant, productId.value)) {
         saveSelectedProduct(defaultVariant)
-        await router.replace({
-          name: 'product-details',
-          params: { productId: defaultVariant.id },
-        })
+        await router.replace(productRoute(defaultVariant))
         return true
       }
     }
@@ -647,7 +649,7 @@ async function loadProduct() {
   selectedSupplierDeliveryTimeLabel.value = ''
   productVariants.value = []
   await loadProductReviews(
-    productId.value,
+    cachedProduct?.id || productId.value,
     cachedProduct?.supplier || cachedProduct?.supplierDetails?.name || '',
   )
   isLoading.value = !cachedProduct
@@ -662,9 +664,18 @@ async function loadProduct() {
     }
 
     product.value = mergeProductDetails(cachedProduct, loadedProduct)
+
+    // Opened by item code (an old link): move to the readable slug URL. The page reloads
+    // for the new URL and picks the product up from the selection cache.
+    if (loadedProduct.slug && productId.value !== loadedProduct.slug) {
+      saveSelectedProduct(product.value)
+      await router.replace(productRoute(loadedProduct))
+      return
+    }
+
     selectedSupplierName.value = product.value?.supplier || product.value?.supplierDetails?.name || ''
     await loadProductReviews(
-      productId.value,
+      productItemCode.value,
       supplierIdentifier.value,
     )
     const redirectedToVariant = await loadVariantsForProduct(product.value)
@@ -741,10 +752,7 @@ function openProductDetails(relatedProduct) {
     ),
   })
 
-  router.push({
-    name: 'product-details',
-    params: { productId: relatedProduct.id },
-  })
+  router.push(productRoute(relatedProduct))
 }
 
 function addSelectedProductToCart() {
@@ -769,7 +777,7 @@ function selectProductSize(size) {
 async function selectProductSupplier(supplierName) {
   hasManuallySelectedSupplier.value = true
   selectedSupplierName.value = supplierName
-  await loadProductReviews(productId.value, supplierIdentifier.value)
+  await loadProductReviews(productItemCode.value, supplierIdentifier.value)
   await Promise.all([
     refreshSupplierDistance(),
     refreshSelectedSupplierDeliveryTime(),
@@ -799,10 +807,7 @@ async function updateVariantSelection(attributeName, attributeValue) {
 
   syncSelectedVariantAttributes(matchedVariant)
   saveSelectedProduct(matchedVariant)
-  await router.push({
-    name: 'product-details',
-    params: { productId: matchedVariant.id },
-  })
+  await router.push(productRoute(matchedVariant))
 }
 
 function toggleProductDescription() {
@@ -853,6 +858,20 @@ onMounted(() => {
 onUnmounted(() => {
   window.removeEventListener(LOCATION_UPDATED_EVENT, refreshProductLocationContext)
 })
+
+// Search/link-preview tags; product names repeat the server format in buy_in_minutes/seo.py.
+usePageMeta(() =>
+  product.value
+    ? {
+        title: pageTitle(product.value.name),
+        description:
+          productDescription.value
+          || `Buy ${product.value.name} online at Buy In Minutes. Fast delivery from local stores.`,
+        image: activeProductImage.value,
+        path: route.path,
+      }
+    : null,
+)
 </script>
 
 <template>
@@ -892,6 +911,8 @@ onUnmounted(() => {
             class="product-detail-main-image"
             :src="activeProductImage"
             :alt="product.name"
+            fetchpriority="high"
+            decoding="async"
           />
           <template v-if="productImages.length > 1">
             <button
@@ -932,7 +953,7 @@ onUnmounted(() => {
           {{ sourceListing.label }}: {{ sourceListing.name }}
         </p>
         -->
-        <h2 :id="`product-detail-title-${product.id}`">{{ product.name }}</h2>
+        <h1 :id="`product-detail-title-${product.id}`">{{ product.name }}</h1>
 
         <div class="product-detail-rating-row">
           <span>{{ averageReviewRatingLabel }}</span>

@@ -188,7 +188,7 @@ function showPlaceholderImage(event) {
         <div class="bundle-card-media" aria-hidden="true" @click="selectBundle(bundle)">
           <img
             :src="bundle.image || bundlePlaceholderImage"
-            alt=""
+            :alt="bundle.name || ''"
             loading="lazy"
             decoding="async"
             @error="showPlaceholderImage"
