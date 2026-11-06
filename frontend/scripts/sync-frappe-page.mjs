@@ -35,9 +35,13 @@ const fallbackStyle = `<style>
       .bim-ssr-fallback a { color: #00785f; }
     </style>`
 
-// Frappe renders this page through Jinja; index.py fills seo_head / seo_body per URL.
+// Frappe renders this page through Jinja; index.py fills seo_head / seo_body per URL and
+// analytics_head with the GA4 tag when a measurement ID is configured.
 const template = html
-  .replace(defaultTitle, `{{ seo_head or "${defaultTitle}" }}\n    ${fallbackStyle}`)
+  .replace(
+    defaultTitle,
+    `{{ seo_head or "${defaultTitle}" }}\n    ${fallbackStyle}\n    {{ analytics_head or "" }}`,
+  )
   .replace(appContainer, '<div id="app">{{ seo_body or "" }}</div>')
 
 writeFileSync(join(pageDir, 'index.html'), template)

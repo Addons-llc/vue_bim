@@ -1,5 +1,6 @@
 import frappe
 
+from buy_in_minutes.analytics import get_analytics_head
 from buy_in_minutes.seo import build_seo_page
 
 # Every /buy-in-minutes/* URL renders this one page (website_route_rules), and Frappe's
@@ -19,6 +20,7 @@ def get_context(context):
 		raise frappe.Redirect(301)
 
 	context.seo_head = page["head"]
+	context.analytics_head = get_analytics_head()
 	context.seo_body = page["body"]
 	if page["status"] != 200:
 		context.http_status_code = page["status"]

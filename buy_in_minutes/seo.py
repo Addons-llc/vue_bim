@@ -39,6 +39,23 @@ NOINDEX_SECTIONS = {
 	"search",
 }
 
+# Titles for private pages (kept out of search, but readable in analytics reports).
+# Keep in step with the noindex routes in frontend/src/router/index.js.
+NOINDEX_TITLES = {
+	"search": "Search",
+	"cart": "Your Cart",
+	"wishlist": "Wishlist",
+	"profile": "My Profile",
+	"addresses": "Saved Addresses",
+	"orders": "My Orders",
+	"payment/success": "Order Confirmed",
+	"payment/cancel": "Checkout Cancelled",
+	"login": "Sign In",
+	"login/otp": "Verify Code",
+	"login/verify-phone": "Verify Phone",
+	"login/profile": "Complete Profile",
+}
+
 STATIC_PAGES = {
 	"": (DEFAULT_TITLE, DEFAULT_DESCRIPTION),
 	"categories": ("Shop by Category", "Browse every grocery and essentials category on Buy In Minutes."),
@@ -85,7 +102,10 @@ def _resolve(segments):
 	path = "/" + "/".join(segments)
 
 	if section in NOINDEX_SECTIONS:
-		return {"title": DEFAULT_TITLE, "path": path, "noindex": True}
+		label = NOINDEX_TITLES.get("/".join(segments[:2]) if len(segments) > 1 else section)
+		label = label or NOINDEX_TITLES.get(section)
+		title = f"{label} | {SITE_NAME}" if label else DEFAULT_TITLE
+		return {"title": title, "path": path, "noindex": True}
 
 	if not key:
 		if section not in STATIC_PAGES:

@@ -1,4 +1,5 @@
 <script setup>
+import { trackViewItemList } from '../analytics'
 import { productRoute } from '../utils/productRoute'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -139,6 +140,7 @@ async function loadBrandProducts() {
 
     loadedProducts.value = products
     hasMoreBrandProducts.value = products.length === BRAND_PRODUCT_PAGE_SIZE
+    trackViewItemList(products, `Brand: ${brand?.name || brandName.value}`)
     console.log('Brand details page state', {
       brandName: brandName.value,
       brand,

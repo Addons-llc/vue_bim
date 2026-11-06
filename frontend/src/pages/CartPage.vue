@@ -13,6 +13,7 @@ import { createRequestForQuotationFromCart } from '../api/rfqApi'
 import { customerAddresses } from '../data/addressStore'
 import { clearCurrentUser, currentUser, isAuthReady, setCurrentUser } from '../data/authStore'
 import { clearCart } from '../data/cartStore'
+import { trackBeginCheckout, trackViewCart } from '../analytics'
 import ItemSuggestions from '../components/product/ItemSuggestions.vue'
 import {
   cartProducts,
@@ -623,6 +624,7 @@ async function startStripeCheckout() {
   }
 
   isStartingCheckout.value = true
+  trackBeginCheckout(cartProducts.value, 'card')
 
   try {
     console.log('Pay now checkout payload', {
@@ -713,6 +715,7 @@ async function placeCashOnDeliveryOrder() {
   }
 
   isPlacingCodOrder.value = true
+  trackBeginCheckout(cartProducts.value, 'cash_on_delivery')
 
   try {
     console.log('Cash on delivery order payload', {
@@ -862,6 +865,7 @@ function handleWindowFocus() {
 }
 
 onMounted(() => {
+  trackViewCart(cartProducts.value)
   refreshCurrentSession()
   refreshDeliveryDistance()
   window.addEventListener('focus', handleWindowFocus)

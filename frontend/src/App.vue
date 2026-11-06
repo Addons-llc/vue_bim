@@ -1,13 +1,28 @@
 <script setup>
-import { onMounted } from 'vue'
+import { onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { getCurrentUser, hasPersistedPhoneAuthState, logout, reloadToLogin, restoreLoginSession } from './api/authApi'
 import { resumeCheckoutSession } from './api/paymentApi'
 import { clearCurrentUser, currentUser, setCurrentUser } from './data/authStore'
 import DefaultLayout from './layouts/DefaultLayout.vue'
+import ConsentBanner from './components/layout/ConsentBanner.vue'
+import { setAnalyticsUser, trackLogin } from './analytics'
 
 const route = useRoute()
 const router = useRouter()
+
+// GA4: link sessions to the signed-in shopper (hashed id only) and report sign-ins.
+watch(
+  () => currentUser.value?.name || currentUser.value?.email || '',
+  (userId, previousUserId) => {
+    setAnalyticsUser(userId)
+    // Only a sign-in on the login screens counts; a session restored on page load does not.
+    if (userId && previousUserId === '' && route.path.startsWith('/login')) {
+      trackLogin()
+    }
+  },
+  { immediate: true },
+)
 
 onMounted(async () => {
   try {
@@ -80,6 +95,7 @@ function navigateToHome() {
 </script>
 
 <template>
+  <ConsentBanner />
   <RouterView v-if="route.meta.layout === 'blank'" />
 
   <DefaultLayout

@@ -1,3 +1,4 @@
+import { trackAddToWishlist } from '../analytics'
 import { computed, ref } from 'vue'
 
 const WISHLIST_STORAGE_KEY = 'buyInMinutesWishlist'
@@ -60,6 +61,7 @@ export function toggleProductWishlist(product) {
     details: product.details,
   })
   saveWishlist(wishlistItems.value)
+  trackAddToWishlist(product)
 
   return true
 }

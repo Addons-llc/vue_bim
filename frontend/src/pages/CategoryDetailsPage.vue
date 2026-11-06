@@ -1,4 +1,5 @@
 <script setup>
+import { trackViewItemList } from '../analytics'
 import { productRoute } from '../utils/productRoute'
 import { computed, nextTick, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -125,6 +126,16 @@ function openProductDetails(product) {
 
   router.push(productRoute(product))
 }
+
+// GA4: one view_item_list per category/store once its first page of products arrives.
+let trackedListKey = ''
+watch(products, (list) => {
+  const listKey = `${route.name}:${selectedCategory.value}`
+  if (list.length && trackedListKey !== listKey) {
+    trackedListKey = listKey
+    trackViewItemList(list, `${detailLabel.value}: ${selectedCategoryTitle.value}`)
+  }
+})
 
 // Opened by group name (an old link): move to the readable slug URL.
 watch(selectedCategoryRecord, (category) => {

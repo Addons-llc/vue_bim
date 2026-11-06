@@ -1,3 +1,4 @@
+import { trackAddToCart, trackRemoveFromCart } from '../analytics'
 import { computed, ref } from 'vue'
 
 const CART_STORAGE_KEY = 'buyInMinutesCart'
@@ -107,6 +108,7 @@ export function addProductToCart(product) {
   }
 
   saveCart(cartItems.value)
+  trackAddToCart({ ...cartItem, category: product.category, brand: product.brand, currency: product.currency }, 1)
 
   return {
     success: true,
@@ -132,11 +134,23 @@ export function updateCartProductQuantity(productId, quantity) {
     return
   }
 
+  const change = quantity - existingItem.quantity
   existingItem.quantity = quantity
   saveCart(cartItems.value)
+
+  if (change > 0) {
+    trackAddToCart(existingItem, change)
+  } else if (change < 0) {
+    trackRemoveFromCart(existingItem, -change)
+  }
 }
 
 export function removeProductFromCart(productId) {
+  const removedItem = cartItems.value.find((item) => item.id === productId)
+  if (removedItem) {
+    trackRemoveFromCart(removedItem, removedItem.quantity)
+  }
+
   cartItems.value = cartItems.value.filter((item) => item.id !== productId)
   saveCart(cartItems.value)
 }

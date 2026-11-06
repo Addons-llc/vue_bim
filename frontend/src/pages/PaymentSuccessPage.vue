@@ -5,6 +5,7 @@ import { getSalesOrder } from '../api/orderApi'
 import { finalizeStripeCheckout } from '../api/paymentApi'
 import { setCurrentUser } from '../data/authStore'
 import { clearCart } from '../data/cartStore'
+import { trackPurchase } from '../analytics'
 
 const route = useRoute()
 const paymentMethod = computed(() => (route.query.method === 'cod' ? 'cod' : 'stripe'))
@@ -39,6 +40,25 @@ const orderedProducts = ref([])
 const orderedProductsError = ref('')
 const isLoadingOrderedProducts = ref(false)
 const LAST_COD_ORDER_ITEMS_STORAGE_KEY = 'buyInMinutesLastCodOrderItems'
+const salesOrderSummary = ref(null)
+
+// GA4 purchase, once per Sales Order (trackPurchase dedupes refreshes). The order record
+// supplies the real total; the item list is the fallback when it could not be loaded.
+function reportPurchase() {
+  const order = salesOrderSummary.value
+  const items = order?.items?.length ? order.items : orderedProducts.value
+
+  trackPurchase({
+    transactionId: order?.name || salesOrderName.value,
+    value: order?.grand_total,
+    currency: order?.currency,
+    paymentType: paymentMethod.value === 'cod' ? 'cash_on_delivery' : 'card',
+    items: items.map((item) => ({
+      ...item,
+      rate: item.rate ?? (item.qty ? Number(item.amount || 0) / Number(item.qty) : item.amount),
+    })),
+  })
+}
 
 function loadStoredCodOrderItems() {
   try {
@@ -63,6 +83,7 @@ async function loadOrderedProducts() {
 
   try {
     const response = await getSalesOrder(salesOrderName.value)
+    salesOrderSummary.value = response?.message || null
     const fetchedPurchaseOrders = response?.message?.purchase_orders || []
     console.log('Sales order fetch response', response)
     console.log('Purchase order response', fetchedPurchaseOrders)
@@ -101,6 +122,7 @@ onMounted(async () => {
   }
 
   await loadOrderedProducts()
+  reportPurchase()
   clearCart()
 })
 </script>

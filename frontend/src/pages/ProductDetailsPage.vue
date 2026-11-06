@@ -1,4 +1,5 @@
 <script setup>
+import { trackViewItem } from '../analytics'
 import { isProductKey, productRoute } from '../utils/productRoute'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -691,6 +692,7 @@ async function loadProduct() {
     activeImageIndex.value = 0
     isProductDescriptionExpanded.value = false
     hasProductDetailLoaded.value = true
+    trackViewItem(selectedSupplierProduct.value || product.value)
   } catch (error) {
     if (!cachedProduct) {
       product.value = null

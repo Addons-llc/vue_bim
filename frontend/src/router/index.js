@@ -1,4 +1,6 @@
+import { nextTick } from 'vue'
 import { createRouter, createWebHistory } from 'vue-router'
+import { trackPageView } from '../analytics'
 import { APP_BASE, migrateLegacyHashUrl } from './base'
 import { applyPageMeta, DEFAULT_DESCRIPTION, pageTitle } from '../composables/usePageMeta'
 import HomePage from '../pages/HomePage.vue'
@@ -41,7 +43,7 @@ const routes = [
     name: 'search',
     component: SearchPage,
     meta: {
-      seo: { noindex: true },
+      seo: { title: pageTitle('Search'), noindex: true },
       hideHeader: true,
     },
   },
@@ -58,13 +60,13 @@ const routes = [
   {
     path: '/cart',
     name: 'cart',
-    meta: { seo: { noindex: true } },
+    meta: { seo: { title: pageTitle('Your Cart'), noindex: true } },
     component: CartPage,
   },
   {
     path: '/wishlist',
     name: 'wishlist',
-    meta: { seo: { noindex: true } },
+    meta: { seo: { title: pageTitle('Wishlist'), noindex: true } },
     component: WishlistPage,
   },
   {
@@ -160,37 +162,37 @@ const routes = [
   {
     path: '/profile',
     name: 'profile',
-    meta: { seo: { noindex: true } },
+    meta: { seo: { title: pageTitle('My Profile'), noindex: true } },
     component: ProfilePage,
   },
   {
     path: '/addresses',
     name: 'addresses',
-    meta: { seo: { noindex: true } },
+    meta: { seo: { title: pageTitle('Saved Addresses'), noindex: true } },
     component: AddressesPage,
   },
   {
     path: '/orders',
     name: 'orders',
-    meta: { seo: { noindex: true } },
+    meta: { seo: { title: pageTitle('My Orders'), noindex: true } },
     component: OrdersPage,
   },
   {
     path: '/orders/:orderName',
     name: 'order-details',
-    meta: { seo: { noindex: true } },
+    meta: { seo: { title: pageTitle('Order Details'), noindex: true } },
     component: OrderDetailsPage,
   },
   {
     path: '/payment/success',
     name: 'payment-success',
-    meta: { seo: { noindex: true } },
+    meta: { seo: { title: pageTitle('Order Confirmed'), noindex: true } },
     component: PaymentSuccessPage,
   },
   {
     path: '/payment/cancel',
     name: 'payment-cancel',
-    meta: { seo: { noindex: true } },
+    meta: { seo: { title: pageTitle('Checkout Cancelled'), noindex: true } },
     component: PaymentCancelPage,
   },
   {
@@ -198,7 +200,7 @@ const routes = [
     name: 'login',
     component: LoginPage,
     meta: {
-      seo: { noindex: true },
+      seo: { title: pageTitle('Sign In'), noindex: true },
       layout: 'blank',
     },
   },
@@ -207,7 +209,7 @@ const routes = [
     name: 'login-otp',
     component: OtpPage,
     meta: {
-      seo: { noindex: true },
+      seo: { title: pageTitle('Verify Code'), noindex: true },
       layout: 'blank',
     },
   },
@@ -216,7 +218,7 @@ const routes = [
     name: 'verify-phone',
     component: LoginPage,
     meta: {
-      seo: { noindex: true },
+      seo: { title: pageTitle('Verify Phone'), noindex: true },
       layout: 'blank',
     },
   },
@@ -225,7 +227,7 @@ const routes = [
     name: 'complete-profile',
     component: ProfilePage,
     meta: {
-      seo: { noindex: true },
+      seo: { title: pageTitle('Complete Profile'), noindex: true },
       layout: 'blank',
     },
   },
@@ -274,4 +276,37 @@ router.afterEach((to, from, failure) => {
     path: to.path,
     noindex: Boolean(seo.noindex),
   })
+})
+
+// GA4 page views: gtag is configured with send_page_view: false, so every navigation,
+// including the first, is reported here once the new page has its title. Detail pages
+// (seo.dynamic) set the title after their record loads, so wait briefly for it.
+const PAGE_TITLE_WAIT_MS = 2000
+let pendingPageView = null
+
+router.afterEach((to, from, failure) => {
+  if (failure || (from.matched.length && to.fullPath === from.fullPath)) {
+    return
+  }
+
+  pendingPageView?.cancel()
+
+  if (!from.matched.length || !to.meta.seo?.dynamic) {
+    nextTick(trackPageView)
+    return
+  }
+
+  const titleBefore = document.title
+  const startedAt = Date.now()
+  let timer = null
+  const check = () => {
+    if (document.title !== titleBefore || Date.now() - startedAt >= PAGE_TITLE_WAIT_MS) {
+      pendingPageView = null
+      trackPageView()
+      return
+    }
+    timer = setTimeout(check, 100)
+  }
+  pendingPageView = { cancel: () => clearTimeout(timer) }
+  nextTick(check)
 })

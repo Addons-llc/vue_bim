@@ -1,4 +1,5 @@
 <script setup>
+import { trackSearch, trackViewItemList } from '../analytics'
 import { productRoute } from '../utils/productRoute'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -179,6 +180,22 @@ watch(activeSearch, (keyword) => {
   if (keyword !== searchText.value.trim()) {
     searchText.value = keyword
   }
+})
+
+// GA4: the URL updates while typing, so report a term only once it has settled.
+let analyticsSearchTimer = null
+let lastTrackedSearch = ''
+watch([activeSearch, isLoadingProducts], ([keyword, isLoading]) => {
+  clearTimeout(analyticsSearchTimer)
+  if (!keyword || isLoading || keyword === lastTrackedSearch) {
+    return
+  }
+
+  analyticsSearchTimer = setTimeout(() => {
+    lastTrackedSearch = keyword
+    trackSearch(keyword)
+    trackViewItemList(publishedProducts.value, `Search: ${keyword}`)
+  }, 1500)
 })
 
 watch(isListening, async (listening) => {
