@@ -53,6 +53,12 @@ export function getConsentChoice() {
 export function setConsentChoice(choice) {
   writeStorage(CONSENT_STORAGE_KEY, choice)
   gtag('consent', 'update', { analytics_storage: choice === 'granted' ? 'granted' : 'denied' })
+
+  // The landing page_view went out as a cookieless ping before the visitor chose, and
+  // those don't appear in Realtime or user counts. Resend it now that cookies are allowed.
+  if (choice === 'granted') {
+    trackPageView()
+  }
 }
 
 // --- Page views & users ------------------------------------------------------
