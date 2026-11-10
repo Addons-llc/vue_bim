@@ -5,7 +5,7 @@
 const TERMS_DETAILS = {
   subscriptionCancelCutoff: '[Insert Timeframe, e.g., 24 hours]',
   nonPerishableReturnDays: '[Insert Number]',
-  jurisdiction: '[Insert Emirate, e.g., Dubai, UAE]',
+  jurisdiction: 'Dubai, UAE',
   supportEmail: 'enquiry@addon-s.com',
   supportPhone: '+971 50 182 9977',
   address: 'Al Kitbi Building - No 4, Mezzanine Floor - Al Nahda St - Al Nahda First - Al Nahda - Dubai',
