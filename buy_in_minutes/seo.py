@@ -571,7 +571,7 @@ def _render_head(seo):
 # Sitemap
 # ---------------------------------------------------------------------------
 
-SITEMAP_STATIC_SECTIONS = ("", "categories", "brands", "stores", "essentials")
+SITEMAP_STATIC_SECTIONS = ("", "categories", "brands", "stores", "essentials", "terms-and-conditions")
 SITEMAP_LIMIT = 45000  # Google's cap is 50,000 URLs per sitemap file.
 
 

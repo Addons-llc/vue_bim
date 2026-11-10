@@ -1,0 +1,55 @@
+/* Terms & Conditions page (pages/TermsPage.vue). */
+.terms-page {
+  width: min(820px, calc(100% - 32px));
+  margin: 0 auto;
+  padding: 32px 0 56px;
+  color: #1f2937;
+  font-size: 15px;
+  line-height: 1.7;
+}
+
+.terms-head {
+  margin-bottom: 28px;
+  border-bottom: 1px solid var(--line-soft);
+  padding-bottom: 20px;
+}
+
+.terms-head h1 {
+  margin: 0;
+  color: var(--text-strong);
+  font-size: clamp(24px, 4vw, 32px);
+  line-height: 1.2;
+}
+
+.terms-page section + section {
+  margin-top: 28px;
+}
+
+.terms-page h2 {
+  margin: 0 0 10px;
+  color: var(--text-strong);
+  font-size: 18px;
+  line-height: 1.35;
+}
+
+.terms-page p {
+  margin: 0 0 10px;
+}
+
+.terms-page ul {
+  margin: 0 0 10px;
+  padding-left: 22px;
+}
+
+.terms-page li + li {
+  margin-top: 6px;
+}
+
+.terms-page strong {
+  color: var(--text-strong);
+}
+
+.terms-page a {
+  color: #00a878;
+  font-weight: 700;
+}

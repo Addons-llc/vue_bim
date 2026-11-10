@@ -66,6 +66,7 @@ const appBase = import.meta.env.BASE_URL
           <a href="/orders">Track order</a>
           <a href="/contact">Contact</a>
           <a href="/help">Help</a>
+          <RouterLink :to="{ name: 'terms-and-conditions' }">Terms &amp; Conditions</RouterLink>
         </div>
       </nav>
     </div>

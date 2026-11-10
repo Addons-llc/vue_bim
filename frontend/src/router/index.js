@@ -25,6 +25,7 @@ const ProfilePage = () => import('../pages/ProfilePage.vue')
 const SearchPage = () => import('../pages/SearchPage.vue')
 const StoresPage = () => import('../pages/StoresPage.vue')
 const SupplierDetailsPage = () => import('../pages/SupplierDetailsPage.vue')
+const TermsPage = () => import('../pages/TermsPage.vue')
 const WishlistPage = () => import('../pages/WishlistPage.vue')
 
 const routes = [
@@ -129,11 +130,7 @@ const routes = [
     path: '/terms-and-conditions',
     name: 'terms-and-conditions',
     meta: { seo: { title: pageTitle('Terms & Conditions'), description: 'Terms of use for the Buy In Minutes store.' } },
-    component: ComingSoonPage,
-    props: {
-      title: 'Terms & Conditions',
-      message: 'Our Terms & Conditions are being prepared.',
-    },
+    component: TermsPage,
   },
   {
     path: '/categories',
