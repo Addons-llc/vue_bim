@@ -13,9 +13,9 @@ import { ESSENTIALS_ITEM_GROUPS, ESSENTIALS_TITLE } from '../data/essentials'
 import { saveSelectedProduct } from '../data/productSelectionStore'
 import { saveSelectedSupplier } from '../data/supplierSelectionStore'
 import { openCategoryOrProduct } from '../utils/categoryNavigation'
-import bannerImageOne from '../assets/images/banner_1.webp'
-import bannerImageTwo from '../assets/images/banner_2.webp'
-import bannerImageThree from '../assets/images/banner_3.webp'
+import sadyaBanner120 from '../assets/images/bucket_sadhya120.jpg'
+import sadyaBanner200 from '../assets/images/sadya-banner-200aed-1600x450.jpg'
+import sadyaBanner400 from '../assets/images/sadya-banner-400aed-1600x450.jpg'
 import shortcutBrandsBg from '../assets/images/shortcut-brands.webp'
 import shortcutCategoriesBg from '../assets/images/shortcut-categories.webp'
 import shortcutStoresBg from '../assets/images/shortcut-stores.webp'
@@ -64,16 +64,16 @@ let heroSlideTimer = null
 
 const heroSlides = [
   {
-    title: 'Fresh market delivery',
-    image: bannerImageOne,
+    title: 'Sadya bucket, 120 AED, serves 3',
+    image: sadyaBanner120,
   },
   {
-    title: 'Daily essentials',
-    image: bannerImageTwo,
+    title: 'Sadya bucket, 200 AED, serves 5',
+    image: sadyaBanner200,
   },
   {
-    title: 'Fresh cuts',
-    image: bannerImageThree,
+    title: 'Sadya bucket, 400 AED',
+    image: sadyaBanner400,
   },
 ]
 
@@ -113,7 +113,7 @@ const homeShortcuts = [
   {
     key: 'brands',
     image: shortcutBrandsBg,
-    label: 'Featured Brands',
+    label: 'Brands',
     to: brandsTabRoute,
   },
   {
@@ -286,6 +286,10 @@ function stopHeroAutoplay() {
 function startHeroAutoplay() {
   stopHeroAutoplay()
 
+  if (heroSlides.length < 2) {
+    return
+  }
+
   heroSlideTimer = window.setInterval(() => {
     activeHeroSlide.value = (activeHeroSlide.value + 1) % heroSlides.length
   }, 3800)
@@ -330,21 +334,6 @@ onUnmounted(() => {
     </button>
   </nav>
 
-  <nav class="home-shortcuts" aria-label="Browse">
-    <RouterLink
-      v-for="shortcut in homeShortcuts"
-      :key="shortcut.key"
-      class="home-shortcut-card"
-      :class="`is-${shortcut.key}`"
-      :to="shortcut.to"
-    >
-      <img class="home-shortcut-art" :src="shortcut.image" alt="" aria-hidden="true" decoding="async" />
-      <span class="home-shortcut-text">
-        <strong>{{ shortcut.label }}</strong>
-      </span>
-    </RouterLink>
-  </nav>
-
   <section class="dashboard-hero">
     <div
       class="hero-slider"
@@ -368,7 +357,7 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <div class="hero-slide-dots" aria-label="Banner slides">
+    <div v-if="heroSlides.length > 1" class="hero-slide-dots" aria-label="Banner slides">
       <button
         v-for="(slide, index) in heroSlides"
         :key="slide.title"
@@ -381,6 +370,21 @@ onUnmounted(() => {
       />
     </div>
   </section>
+
+  <nav class="home-shortcuts" aria-label="Browse">
+    <RouterLink
+      v-for="shortcut in homeShortcuts"
+      :key="shortcut.key"
+      class="home-shortcut-card"
+      :class="`is-${shortcut.key}`"
+      :to="shortcut.to"
+    >
+      <img class="home-shortcut-art" :src="shortcut.image" alt="" aria-hidden="true" decoding="async" />
+      <span class="home-shortcut-text">
+        <strong>{{ shortcut.label }}</strong>
+      </span>
+    </RouterLink>
+  </nav>
 
   <ProductBundleSection
     :title="ESSENTIALS_TITLE"
@@ -412,7 +416,7 @@ onUnmounted(() => {
   >
     <div class="product-category-heading">
       <h2 :id="`home-${rail.id}-title`">{{ rail.title }}</h2>
-      <RouterLink class="section-link home-explore-link" :to="rail.viewAllTo">Explore</RouterLink>
+      <RouterLink class="section-link home-explore-link" :to="rail.viewAllTo">See all</RouterLink>
     </div>
 
     <div class="product-rail-wrap">

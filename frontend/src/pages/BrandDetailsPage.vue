@@ -13,11 +13,10 @@ const route = useRoute()
 const router = useRouter()
 const brandName = computed(() => String(route.params.brandName || 'Brand'))
 const brandRecord = ref(null)
-const BRAND_PRODUCT_PAGE_SIZE = 48
+// Load the whole catalogue at once so every item group section is complete.
+const BRAND_PRODUCT_PAGE_SIZE = 1000
 const loadedProducts = ref([])
 const isLoadingBrandProducts = ref(false)
-const isLoadingMoreBrandProducts = ref(false)
-const hasMoreBrandProducts = ref(false)
 const failedBrandBannerImages = ref([])
 const activeBrandBannerSlide = ref(0)
 let brandBannerSlideTimer = null
@@ -65,18 +64,48 @@ const brandProducts = computed(() =>
       return leftPopularRank - rightPopularRank
     }),
 )
+const brandProductGroups = computed(() => {
+  const groups = new Map()
+
+  brandProducts.value.forEach((product) => {
+    const groupName = product.category || 'Other'
+
+    if (!groups.has(groupName)) {
+      groups.set(groupName, [])
+    }
+
+    groups.get(groupName).push(product)
+  })
+
+  return [...groups.entries()]
+    .map(([name, products]) => ({
+      name,
+      products,
+      // Item group image first; otherwise the group's first product photo.
+      image: products.find((product) => product.categoryImage)?.categoryImage
+        || products.find((product) => product.image)?.image
+        || '',
+    }))
+    .sort((leftGroup, rightGroup) => {
+      if (leftGroup.name === 'Other') return 1
+      if (rightGroup.name === 'Other') return -1
+
+      return rightGroup.products.length - leftGroup.products.length
+        || leftGroup.name.localeCompare(rightGroup.name)
+    })
+})
+function openProductGroup(group) {
+  router.push({
+    name: 'brand-category',
+    params: { brandName: brandName.value, categoryName: group.name },
+  })
+}
+
 const brandMainDescription = computed(() =>
   brandDescription.value || 'Browse published products available from this brand.',
 )
 const isBrandDescriptionExpanded = ref(false)
-const shouldTruncateBrandDescription = computed(() => brandMainDescription.value.length > 300)
-const visibleBrandDescription = computed(() => {
-  if (isBrandDescriptionExpanded.value || !shouldTruncateBrandDescription.value) {
-    return brandMainDescription.value
-  }
-
-  return `${brandMainDescription.value.slice(0, 300).trim()}...`
-})
+const shouldTruncateBrandDescription = computed(() => brandMainDescription.value.length > 140)
 const dummyBrandRating = {
   score: '4.7',
   reviewCount: 128,
@@ -139,7 +168,6 @@ async function loadBrandProducts() {
     }
 
     loadedProducts.value = products
-    hasMoreBrandProducts.value = products.length === BRAND_PRODUCT_PAGE_SIZE
     trackViewItemList(products, `Brand: ${brand?.name || brandName.value}`)
     console.log('Brand details page state', {
       brandName: brandName.value,
@@ -153,37 +181,8 @@ async function loadBrandProducts() {
   } catch {
     brandRecord.value = null
     loadedProducts.value = []
-    hasMoreBrandProducts.value = false
   } finally {
     isLoadingBrandProducts.value = false
-  }
-}
-
-async function loadMoreBrandProducts() {
-  if (isLoadingMoreBrandProducts.value || !hasMoreBrandProducts.value) {
-    return
-  }
-
-  const requestedBrandName = brandName.value
-  isLoadingMoreBrandProducts.value = true
-
-  try {
-    const products = await getProducts({
-      limit_page_length: BRAND_PRODUCT_PAGE_SIZE,
-      limit_start: loadedProducts.value.length,
-      brand: requestedBrandName,
-    })
-
-    if (requestedBrandName !== brandName.value) {
-      return
-    }
-
-    loadedProducts.value = [...loadedProducts.value, ...products]
-    hasMoreBrandProducts.value = products.length === BRAND_PRODUCT_PAGE_SIZE
-  } catch {
-    hasMoreBrandProducts.value = false
-  } finally {
-    isLoadingMoreBrandProducts.value = false
   }
 }
 
@@ -198,7 +197,6 @@ onUnmounted(() => {
 watch(brandName, () => {
   brandRecord.value = null
   loadedProducts.value = []
-  hasMoreBrandProducts.value = false
   failedBrandBannerImages.value = []
   activeBrandBannerSlide.value = 0
   isBrandDescriptionExpanded.value = false
@@ -235,30 +233,9 @@ usePageMeta(() =>
 </script>
 
 <template>
-  <section class="supplier-detail-page brand-detail-page">
-    <aside class="supplier-profile-panel">
-      <div class="supplier-profile-header">
-        <span class="supplier-profile-logo">
-          <img
-            v-if="brandDetails.image"
-            :src="brandDetails.image"
-            :alt="`${brandDisplayName} logo`"
-          />
-          <span v-else>{{ brandInitials }}</span>
-        </span>
-        <h1>{{ brandDisplayName }}</h1>
-      </div>
-
-      <section class="supplier-profile-info" aria-label="Brand information">
-        <div class="supplier-profile-info-row">
-          <span>Brand</span>
-          <p>{{ brandDetails.brand }}</p>
-        </div>
-      </section>
-    </aside>
-
-    <main class="supplier-store-main">
-      <div class="supplier-store-banner">
+  <section class="brand-page">
+    <header class="brand-hero">
+      <div class="brand-hero-banner">
         <div
           v-if="brandBannerImages.length"
           class="brand-banner-slider"
@@ -267,7 +244,7 @@ usePageMeta(() =>
           <img
             v-for="(bannerImage, index) in brandBannerImages"
             :key="bannerImage"
-            class="supplier-store-banner-image brand-banner-slide"
+            class="brand-banner-slide"
             :src="bannerImage"
             :alt="`${brandDisplayName} banner ${index + 1}`"
             :loading="index === 0 ? 'eager' : 'lazy'"
@@ -275,67 +252,98 @@ usePageMeta(() =>
             @error="hideBrokenBrandBanner(bannerImage)"
           />
         </div>
-        <span class="supplier-banner-logo">
-          <img
-            v-if="brandDetails.image"
-            :src="brandDetails.image"
-            :alt="`${brandDisplayName} logo`"
+        <div v-if="brandBannerImages.length > 1" class="brand-banner-dots" aria-hidden="true">
+          <span
+            v-for="(bannerImage, index) in brandBannerImages"
+            :key="bannerImage"
+            :class="{ 'is-active': index === activeBrandBannerSlide }"
           />
-          <span v-else>{{ brandInitials }}</span>
-        </span>
-        <strong>{{ brandDisplayName }}</strong>
+        </div>
       </div>
 
-      <section class="supplier-store-overview">
-        <div class="supplier-store-description" aria-label="Brand description">
-          <h2>About {{ brandDisplayName }}</h2>
-          <p>{{ visibleBrandDescription }}</p>
-          <button
-            v-if="shouldTruncateBrandDescription"
-            class="supplier-description-toggle"
-            type="button"
-            @click="toggleBrandDescription"
-          >
-            {{ isBrandDescriptionExpanded ? 'Read less' : 'Read more' }}
-          </button>
-        </div>
+      <span class="brand-hero-logo">
+        <img
+          v-if="brandDetails.image"
+          :src="brandDetails.image"
+          :alt="`${brandDisplayName} logo`"
+        />
+        <span v-else>{{ brandInitials }}</span>
+      </span>
+    </header>
 
-        <div class="supplier-ratings-panel" aria-label="Brand ratings">
-          <div class="supplier-ratings-header">
-            <div class="supplier-rating-score">
-              <strong>{{ dummyBrandRating.score }}</strong>
-              <span>★★★★★</span>
-              <small>{{ dummyBrandRating.reviewCount }} reviews</small>
-            </div>
-          </div>
-        </div>
-      </section>
+    <section class="brand-intro">
+      <div class="brand-intro-heading">
+        <h1>{{ brandDisplayName }}</h1>
+        <p v-if="!isLoadingBrandProducts" class="brand-intro-count">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M6 7h12l-1 13H7L6 7z" />
+            <path d="M9 7a3 3 0 0 1 6 0" />
+          </svg>
+          {{ brandProducts.length }} {{ brandProducts.length === 1 ? 'product' : 'products' }}
+        </p>
+      </div>
 
-      <section class="supplier-products-panel">
-        <h2>Products by {{ brandDisplayName }}</h2>
+      <div class="brand-rating-card" aria-label="Brand rating">
+        <span class="brand-rating-badge">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M12 2.5l2.9 6 6.6.8-4.9 4.6 1.3 6.6L12 17.3l-5.9 3.2 1.3-6.6-4.9-4.6 6.6-.8z" />
+          </svg>
+          {{ dummyBrandRating.score }}
+        </span>
+        <div class="brand-rating-meta">
+          <span
+            class="brand-rating-stars"
+            role="img"
+            :aria-label="`Rated ${dummyBrandRating.score} out of 5`"
+            :style="{ '--rating-fill': `${(Number(dummyBrandRating.score) / 5) * 100}%` }"
+          >★★★★★</span>
+          <small>{{ dummyBrandRating.reviewCount }} reviews</small>
+        </div>
+      </div>
+    </section>
+
+    <section class="brand-about" aria-label="About the brand">
+      <h2>About the brand</h2>
+      <p :class="{ 'is-collapsed': shouldTruncateBrandDescription && !isBrandDescriptionExpanded }">
+        {{ brandMainDescription }}
+      </p>
+      <button
+        v-if="shouldTruncateBrandDescription"
+        class="brand-about-toggle"
+        type="button"
+        @click="toggleBrandDescription"
+      >
+        {{ isBrandDescriptionExpanded ? 'Show less' : 'Show more' }}
+      </button>
+    </section>
+
+    <main class="brand-page-main">
+      <section class="supplier-products-panel brand-products-panel">
+        <h2>Categories</h2>
         <p v-if="isLoadingBrandProducts" class="dashboard-message">
           Loading products...
         </p>
-        <div v-if="brandProducts.length" class="supplier-products-grid">
-          <ProductCard
-            v-for="product in brandProducts"
-            :key="product.id"
-            :product="product"
-            compact
-            @select="openProductDetails"
-          />
-        </div>
-        <p v-else class="dashboard-message">No published products found for this brand.</p>
-        <div v-if="hasMoreBrandProducts" class="product-load-more">
+        <div v-if="brandProducts.length" class="brand-group-tiles">
           <button
-            class="product-load-more-button"
+            v-for="group in brandProductGroups"
+            :key="group.name"
+            class="brand-group-tile"
             type="button"
-            :disabled="isLoadingMoreBrandProducts"
-            @click="loadMoreBrandProducts"
+            @click="openProductGroup(group)"
           >
-            {{ isLoadingMoreBrandProducts ? 'Loading more...' : 'Load more products' }}
+            <img v-if="group.image" :src="group.image" :alt="''" loading="lazy" decoding="async" />
+            <span class="brand-group-tile-arrow" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7" /></svg>
+            </span>
+            <span class="brand-group-tile-label">
+              <strong>{{ group.name }}</strong>
+              <small>{{ group.products.length }} {{ group.products.length === 1 ? 'product' : 'products' }}</small>
+            </span>
           </button>
         </div>
+        <p v-else-if="!isLoadingBrandProducts" class="dashboard-message">
+          No published products found for this brand.
+        </p>
       </section>
     </main>
   </section>

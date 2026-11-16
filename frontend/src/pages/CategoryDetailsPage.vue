@@ -1,3 +1,9 @@
+<script>
+// History position of the page that opened the category/store view (e.g. Home via "See all").
+// Module-level so it survives switching categories and coming back from a product page.
+let originHistoryPosition = null
+</script>
+
 <script setup>
 import { trackViewItemList } from '../analytics'
 import { productRoute } from '../utils/productRoute'
@@ -44,6 +50,32 @@ const backRoute = computed(() =>
 const detailRouteName = computed(() =>
   isStoreDetailsPage.value ? 'store-details' : 'category-details',
 )
+
+// Entered from another page (not by switching categories or returning from a product):
+// remember that page so Back returns to it instead of always going to the Categories tab.
+{
+  const { back, position } = window.history.state || {}
+  const backRouteName = back ? router.resolve(back).name : ''
+  if (!back) {
+    originHistoryPosition = null
+  } else if (!['category-details', 'store-details'].includes(backRouteName)) {
+    originHistoryPosition = Number.isInteger(position) ? position - 1 : null
+  }
+}
+
+function goBack() {
+  const currentPosition = window.history.state?.position
+  if (
+    Number.isInteger(originHistoryPosition)
+    && Number.isInteger(currentPosition)
+    && originHistoryPosition < currentPosition
+  ) {
+    router.go(originHistoryPosition - currentPosition)
+    return
+  }
+
+  router.push(backRoute.value)
+}
 
 const {
   activeCategory,
@@ -164,8 +196,8 @@ usePageMeta(() => ({
       <button
         class="category-detail-back"
         type="button"
-        :aria-label="`Back to ${isStoreDetailsPage ? 'stores' : 'categories'}`"
-        @click="router.push(backRoute)"
+        aria-label="Back"
+        @click="goBack"
       >
         <svg
           aria-hidden="true"

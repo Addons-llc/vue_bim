@@ -1,0 +1,179 @@
+{
+  "actions": [],
+  "allow_rename": 0,
+  "creation": "2026-11-13 00:00:00.000000",
+  "doctype": "DocType",
+  "editable_grid": 1,
+  "engine": "InnoDB",
+  "field_order": [
+    "lead",
+    "proposed_name",
+    "whatsapp_number",
+    "column_break_status",
+    "status",
+    "supplier",
+    "details_section",
+    "restaurant_name",
+    "logo",
+    "column_break_details",
+    "latitude",
+    "longitude",
+    "address",
+    "conversation_section",
+    "messages",
+    "invitation_sid",
+    "error"
+  ],
+  "fields": [
+    {
+      "fieldname": "lead",
+      "fieldtype": "Link",
+      "label": "Lead",
+      "options": "Lead",
+      "reqd": 1,
+      "in_list_view": 1,
+      "in_standard_filter": 1,
+      "search_index": 1
+    },
+    {
+      "fieldname": "proposed_name",
+      "fieldtype": "Data",
+      "label": "Name on Lead",
+      "read_only": 1
+    },
+    {
+      "fieldname": "whatsapp_number",
+      "fieldtype": "Data",
+      "label": "WhatsApp Number",
+      "read_only": 1,
+      "in_list_view": 1,
+      "search_index": 1
+    },
+    {
+      "fieldname": "column_break_status",
+      "fieldtype": "Column Break"
+    },
+    {
+      "default": "Invited",
+      "fieldname": "status",
+      "fieldtype": "Select",
+      "label": "Status",
+      "options": "Invited\nConfirming Name\nAwaiting Logo\nAwaiting Location\nCompleted\nDeclined\nFailed",
+      "in_list_view": 1,
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "supplier",
+      "fieldtype": "Link",
+      "label": "Supplier",
+      "options": "Supplier",
+      "read_only": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "details_section",
+      "fieldtype": "Section Break",
+      "label": "Restaurant"
+    },
+    {
+      "fieldname": "restaurant_name",
+      "fieldtype": "Data",
+      "label": "Restaurant Name"
+    },
+    {
+      "fieldname": "logo",
+      "fieldtype": "Attach Image",
+      "label": "Logo"
+    },
+    {
+      "fieldname": "column_break_details",
+      "fieldtype": "Column Break"
+    },
+    {
+      "fieldname": "latitude",
+      "fieldtype": "Float",
+      "label": "Latitude",
+      "precision": "9"
+    },
+    {
+      "fieldname": "longitude",
+      "fieldtype": "Float",
+      "label": "Longitude",
+      "precision": "9"
+    },
+    {
+      "fieldname": "address",
+      "fieldtype": "Small Text",
+      "label": "Address"
+    },
+    {
+      "fieldname": "conversation_section",
+      "fieldtype": "Section Break",
+      "label": "WhatsApp Conversation"
+    },
+    {
+      "fieldname": "messages",
+      "fieldtype": "Table",
+      "label": "Messages",
+      "options": "BIM Onboarding Message",
+      "read_only": 1
+    },
+    {
+      "fieldname": "invitation_sid",
+      "fieldtype": "Data",
+      "label": "Invitation Twilio SID",
+      "read_only": 1
+    },
+    {
+      "fieldname": "error",
+      "fieldtype": "Small Text",
+      "label": "Error",
+      "read_only": 1
+    }
+  ],
+  "grid_page_length": 50,
+  "index_web_pages_for_search": 0,
+  "links": [],
+  "modified": "2026-11-13 12:00:00.000000",
+  "modified_by": "Administrator",
+  "module": "Buy In Minutes",
+  "name": "BIM Restaurant Onboarding",
+  "owner": "Administrator",
+  "permissions": [
+    {
+      "create": 1,
+      "delete": 1,
+      "email": 1,
+      "export": 1,
+      "print": 1,
+      "read": 1,
+      "report": 1,
+      "role": "System Manager",
+      "share": 1,
+      "write": 1
+    },
+    {
+      "read": 1,
+      "write": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1,
+      "email": 1,
+      "role": "Sales Manager"
+    },
+    {
+      "read": 1,
+      "report": 1,
+      "print": 1,
+      "role": "Sales User"
+    }
+  ],
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "states": [],
+  "autoname": "format:BIM-ONB-{#####}",
+  "image_field": "logo",
+  "title_field": "proposed_name",
+  "show_title_field_in_link": 0,
+  "track_changes": 1
+}

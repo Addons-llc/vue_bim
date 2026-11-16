@@ -1,0 +1,235 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "creation": "2026-11-13 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "enabled",
+  "invite_new_leads",
+  "twilio_note",
+  "invitation_section",
+  "invitation_content_sid",
+  "invitation_message",
+  "confirm_button_text",
+  "decline_button_text",
+  "replies_section",
+  "ask_name_message",
+  "ask_new_name_message",
+  "ask_logo_message",
+  "ask_location_message",
+  "completed_message",
+  "column_break_replies",
+  "declined_message",
+  "invalid_choice_message",
+  "invalid_logo_message",
+  "invalid_location_message",
+  "supplier_section",
+  "supplier_group",
+  "column_break_supplier",
+  "default_country_code",
+  "location_section",
+  "google_maps_api_key",
+  "webhook_section",
+  "webhook_url",
+  "previous_webhook_url"
+ ],
+ "fields": [
+  {
+   "default": "1",
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "label": "Enabled"
+  },
+  {
+   "default": "1",
+   "description": "Every new Lead with a phone number gets the invitation automatically once the template is approved. Leads added by Data Import are not invited; use Invite on WhatsApp in the Lead list for them.",
+   "fieldname": "invite_new_leads",
+   "fieldtype": "Check",
+   "label": "Invite New Leads Automatically"
+  },
+  {
+   "fieldname": "twilio_note",
+   "fieldtype": "HTML",
+   "label": "Twilio",
+   "options": "<p class=\"text-muted\">Messages are sent from the number, Account SID and Auth Token in <a href=\"/app/twilio-whatsapp-settings\">Twilio WhatsApp Settings</a>. Use the WhatsApp buttons above to create the invitation template and connect restaurant replies.</p>"
+  },
+  {
+   "fieldname": "invitation_section",
+   "fieldtype": "Section Break",
+   "label": "Invitation"
+  },
+  {
+   "description": "Approved Twilio Content Template SID (starts with HX) of the invitation, filled in by Create Invitation Template.",
+   "fieldname": "invitation_content_sid",
+   "fieldtype": "Data",
+   "label": "Invitation Content SID"
+  },
+  {
+   "default": "Hi {{ lead_name }},\n\nWould you like to list your restaurant on Buy In Minutes? Please confirm below.",
+   "fieldname": "invitation_message",
+   "fieldtype": "Text",
+   "label": "Invitation Message",
+   "description": "The first message, sent as a WhatsApp template with the two buttons below. Placeholders: {{ lead_name }}, {{ first_name }}, {{ company_name }}. WhatsApp rejects a template that starts or ends with a placeholder. Changing it needs a new template."
+  },
+  {
+   "default": "Add Restaurant",
+   "description": "Up to 20 characters.",
+   "fieldname": "confirm_button_text",
+   "fieldtype": "Data",
+   "label": "Confirm Button"
+  },
+  {
+   "default": "No, Thanks",
+   "description": "Up to 20 characters.",
+   "fieldname": "decline_button_text",
+   "fieldtype": "Data",
+   "label": "Decline Button"
+  },
+  {
+   "fieldname": "replies_section",
+   "fieldtype": "Section Break",
+   "label": "Onboarding Questions",
+   "description": "Sent as normal WhatsApp messages once the restaurant has replied, so they can be changed at any time. Placeholder: {{ restaurant_name }}."
+  },
+  {
+   "default": "Great! Is *{{ restaurant_name }}* the name of your restaurant? Reply *YES* to confirm, or send the correct name.",
+   "fieldname": "ask_name_message",
+   "fieldtype": "Small Text",
+   "label": "Confirm Name"
+  },
+  {
+   "default": "Great! What is the name of your restaurant?",
+   "fieldname": "ask_new_name_message",
+   "fieldtype": "Small Text",
+   "label": "Ask Name (Lead has no name)"
+  },
+  {
+   "default": "Thank you! Please send your restaurant's logo as an image.",
+   "fieldname": "ask_logo_message",
+   "fieldtype": "Small Text",
+   "label": "Ask Logo"
+  },
+  {
+   "default": "Got it! Now please share your restaurant's location: tap 📎 → *Location* and send the location of your restaurant.",
+   "fieldname": "ask_location_message",
+   "fieldtype": "Small Text",
+   "label": "Ask Location"
+  },
+  {
+   "default": "Thank you! *{{ restaurant_name }}* has been added to Buy In Minutes. Our team will contact you to set up your menu.",
+   "fieldname": "completed_message",
+   "fieldtype": "Small Text",
+   "label": "Completed"
+  },
+  {
+   "fieldname": "column_break_replies",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "No problem, thank you for your time. You are welcome to contact us anytime if you change your mind.",
+   "fieldname": "declined_message",
+   "fieldtype": "Small Text",
+   "label": "Declined"
+  },
+  {
+   "default": "Please tap *{{ confirm_button_text }}* or *{{ decline_button_text }}*.",
+   "fieldname": "invalid_choice_message",
+   "fieldtype": "Small Text",
+   "label": "Not Yes or No"
+  },
+  {
+   "default": "Please send your logo as an image (JPG or PNG).",
+   "fieldname": "invalid_logo_message",
+   "fieldtype": "Small Text",
+   "label": "Not an Image"
+  },
+  {
+   "default": "Please share the location with 📎 → *Location*, so customers can find your restaurant.",
+   "fieldname": "invalid_location_message",
+   "fieldtype": "Small Text",
+   "label": "Not a Location"
+  },
+  {
+   "fieldname": "supplier_section",
+   "fieldtype": "Section Break",
+   "label": "Supplier"
+  },
+  {
+   "description": "Supplier Group of the Supplier created when a restaurant completes onboarding.",
+   "fieldname": "supplier_group",
+   "fieldtype": "Link",
+   "label": "Supplier Group",
+   "options": "Supplier Group"
+  },
+  {
+   "fieldname": "column_break_supplier",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "+971",
+   "description": "Added to local numbers such as 0501234567.",
+   "fieldname": "default_country_code",
+   "fieldtype": "Data",
+   "label": "Default Country Code"
+  },
+  {
+   "fieldname": "location_section",
+   "fieldtype": "Section Break",
+   "label": "Location"
+  },
+  {
+   "fieldname": "google_maps_api_key",
+   "fieldtype": "Password",
+   "label": "Google Maps API Key",
+   "description": "Turns the location pin a restaurant sends into an address, using Google's Geocoding API. The key must allow server requests (no website restriction). Left empty, only the coordinates and any place name WhatsApp sends are saved."
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "webhook_section",
+   "fieldtype": "Section Break",
+   "label": "Restaurant Replies"
+  },
+  {
+   "description": "Twilio sends the WhatsApp number's incoming messages here (set by Connect Restaurant Replies).",
+   "fieldname": "webhook_url",
+   "fieldtype": "Data",
+   "label": "Webhook URL",
+   "read_only": 1
+  },
+  {
+   "description": "Messages that are not part of a restaurant onboarding are passed on to this address unchanged.",
+   "fieldname": "previous_webhook_url",
+   "fieldtype": "Data",
+   "label": "Previous Webhook URL",
+   "read_only": 1
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-11-16 10:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Buy In Minutes",
+ "name": "BIM Restaurant Onboarding Settings",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "issingle": 1
+}

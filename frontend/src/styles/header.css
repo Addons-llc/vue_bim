@@ -125,6 +125,16 @@
   box-shadow: 0 0 0 3px rgba(0, 168, 120, 0.14);
 }
 
+.app-header.is-home-page .location-button,
+.app-header.is-home-page .location-button:hover,
+.app-header.is-home-page .location-button[aria-expanded="true"] {
+  border-color: transparent;
+  padding-right: 0;
+  padding-left: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
 .location-copy {
   display: grid;
   gap: 3px;

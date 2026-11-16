@@ -271,7 +271,7 @@ watch(
           :disabled="isOutOfStock"
           @click.stop="handleAddToCart"
         >
-          {{ isOutOfStock ? 'SOLD OUT' : 'ADD TO CART' }}
+          {{ isOutOfStock ? 'OUT OF STOCK' : 'ADD TO CART' }}
         </button>
       </div>
     </div>

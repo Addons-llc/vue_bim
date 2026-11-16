@@ -30,12 +30,16 @@ onBeforeUnmount(() => {
 <template>
   <header
     class="app-header"
-    :class="{ 'is-categories-page': isCategoriesRoute, 'is-scrolled': isScrolled }"
+    :class="{
+      'is-categories-page': isCategoriesRoute,
+      'is-home-page': route.name === 'home',
+      'is-scrolled': isScrolled,
+    }"
   >
     <div class="header-inner">
       <AppBrandLink />
       <HeaderLocationPicker />
-      <HeaderSearchForm />
+      <HeaderSearchForm v-if="route.name !== 'brands'" />
       <HeaderActions
         @login="emit('login')"
         @logout="emit('logout')"

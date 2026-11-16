@@ -9,6 +9,7 @@ import HomePage from '../pages/HomePage.vue'
 const AddressesPage = () => import('../pages/AddressesPage.vue')
 const BrandsPage = () => import('../pages/BrandsPage.vue')
 const BrandDetailsPage = () => import('../pages/BrandDetailsPage.vue')
+const BrandCategoryPage = () => import('../pages/BrandCategoryPage.vue')
 const CartPage = () => import('../pages/CartPage.vue')
 const CategoryDetailsPage = () => import('../pages/CategoryDetailsPage.vue')
 const CategoriesPage = () => import('../pages/CategoriesPage.vue')
@@ -81,6 +82,12 @@ const routes = [
     name: 'brand-details',
     meta: { seo: { dynamic: true } },
     component: BrandDetailsPage,
+  },
+  {
+    path: '/brands/:brandName/:categoryName',
+    name: 'brand-category',
+    meta: { seo: { dynamic: true } },
+    component: BrandCategoryPage,
   },
   {
     path: '/stores',

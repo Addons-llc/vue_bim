@@ -20,7 +20,7 @@ const props = defineProps({
   },
   viewAllLabel: {
     type: String,
-    default: 'View all',
+    default: 'See all',
   },
   showViewAllButton: {
     type: Boolean,
@@ -50,7 +50,7 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
-  // Show only the tiles that fully fit in one row (no horizontal scroll); "View all" leads to the rest.
+  // Show only the tiles that fully fit in one row (no horizontal scroll); "See all" leads to the rest.
   fitToRow: {
     type: Boolean,
     default: false,

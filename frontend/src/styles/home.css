@@ -153,7 +153,7 @@
 }
 
 .home-shortcuts {
-  order: 0;
+  order: 1;
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 14px;
@@ -290,7 +290,7 @@
 .dashboard-hero {
   position: relative;
   order: 1;
-  aspect-ratio: 16 / 9;
+  aspect-ratio: 1600 / 450;
   min-height: 0;
   overflow: hidden;
   border-radius: 22px;
@@ -324,8 +324,8 @@
   padding: 0;
 }
 
-/* Hero -> first section reads as part of the browse block, so keep it tighter. */
-.page-shell:has(> .dashboard-hero) > .dashboard-hero + * {
+/* Hero + shortcuts -> first section reads as part of the browse block, so keep it tighter. */
+.page-shell:has(> .dashboard-hero) > .home-shortcuts + * {
   margin-top: calc(var(--home-section-gap) / 2 - var(--home-gap) + 4px);
 }
 
@@ -364,16 +364,10 @@
   object-position: center;
 }
 
-/* Desktop: a shorter banner with the artwork stretched to fill it, so nothing is cropped. */
-@media (min-width: 861px) {
-  .dashboard-hero {
-    height: clamp(320px, 32vw, 460px);
-    aspect-ratio: auto;
-  }
-
-  .hero-slide-image {
-    object-fit: fill;
-  }
+/* The banner spans the full content width, lined up with the sections below, and
+   keeps the artwork's 1600x450 shape so the image fills it without stretching. */
+.hero-slide-image {
+  object-fit: cover;
 }
 
 .hero-slide.is-active {
@@ -643,7 +637,7 @@
   box-shadow: 0 16px 24px rgba(15, 42, 95, 0.18);
 }
 
-/* "Explore" links on the home page: a soft pill, each section in its own colour. */
+/* "See all" links on the home page: plain text, each section in its own colour. */
 .home-rail-section .category-view-all-link,
 .section-link.home-explore-link {
   --explore-bg: #e6f7f1;
@@ -652,26 +646,23 @@
   display: inline-flex;
   align-items: center;
   flex: 0 0 auto;
-  min-height: 32px;
-  border: 1px solid color-mix(in srgb, var(--explore-ink) 22%, transparent);
-  border-radius: 999px;
-  padding: 0 14px;
-  background: var(--explore-bg);
+  border: 0;
+  padding: 0;
+  background: transparent;
   color: var(--explore-ink);
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 800;
   text-decoration: none;
-  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
 
 .home-rail-section .category-view-all-link:hover,
 .home-rail-section .category-view-all-link:focus-visible,
 .section-link.home-explore-link:hover,
 .section-link.home-explore-link:focus-visible {
-  border-color: var(--explore-ink);
-  background: var(--explore-ink);
-  color: #ffffff;
+  background: transparent;
+  color: var(--explore-ink);
   outline: 0;
+  text-decoration: underline;
   transform: none;
 }
 
@@ -698,9 +689,7 @@
 @media (max-width: 520px) {
   .home-rail-section .category-view-all-link,
   .section-link.home-explore-link {
-    min-height: 28px;
-    padding: 0 12px;
-    font-size: 12px;
+    font-size: 13px;
   }
 }
 

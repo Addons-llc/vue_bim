@@ -607,7 +607,65 @@ def _get_sitemap_paths():
 		for store in api._get_supplier_stores(limit_page_length=SITEMAP_LIMIT, published=1):
 			add("stores", store.get("store_code") or store.get("name"))
 
+	for row in _published_suppliers({row.name for row in items}):
+		add("suppliers", row.name, row.modified)
+
 	return paths[:SITEMAP_LIMIT]
+
+
+def _published_suppliers(item_names):
+	"""Enabled suppliers that sell at least one published product (/suppliers/<name> pages).
+
+	Collects suppliers the same places api._apply_supplier_details looks: supplier fields
+	on the Item, the Item Supplier table and Item Default."""
+	if not item_names:
+		return []
+
+	item_names = list(item_names)
+	candidates = set()
+
+	item_meta = frappe.get_meta("Item")
+	for fieldname in api.ITEM_SUPPLIER_FIELDS:
+		if item_meta.has_field(fieldname):
+			candidates.update(
+				frappe.get_all(
+					"Item",
+					filters={"name": ["in", item_names], fieldname: ["is", "set"]},
+					pluck=fieldname,
+					distinct=True,
+				)
+			)
+
+	for child_doctype, fieldname in (("Item Supplier", "supplier"), ("Item Default", "default_supplier")):
+		if frappe.db.exists("DocType", child_doctype):
+			candidates.update(
+				frappe.get_all(
+					child_doctype,
+					filters={"parenttype": "Item", "parent": ["in", item_names], fieldname: ["is", "set"]},
+					pluck=fieldname,
+					distinct=True,
+					ignore_permissions=True,
+				)
+			)
+
+	candidates.discard(None)
+	if not candidates:
+		return []
+
+	# Item text fields may hold the display name rather than the Supplier ID.
+	fields = ["name", "modified"]
+	suppliers = {
+		row.name: row
+		for filters in ({"name": ["in", list(candidates)]}, {"supplier_name": ["in", list(candidates)]})
+		for row in frappe.get_all(
+			"Supplier",
+			filters={**filters, "disabled": 0},
+			fields=fields,
+			ignore_permissions=True,
+			limit_page_length=SITEMAP_LIMIT,
+		)
+	}
+	return sorted(suppliers.values(), key=lambda row: row.name)
 
 
 def _published_items():

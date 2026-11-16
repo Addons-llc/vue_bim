@@ -23,14 +23,14 @@ const props = defineProps({
     type: String,
     default: 'weekly-kits',
   },
-  // Optional route for an "Explore" link beside the title.
+  // Optional route for a "See all" link beside the title.
   viewAllTo: {
     type: [String, Object],
     default: null,
   },
   viewAllLabel: {
     type: String,
-    default: 'Explore',
+    default: 'See all',
   },
   // Show only the cards that fully fit in one row (no horizontal scroll). The
   // default slot receives `extraLimit`: how many of its cards it may render.
@@ -251,7 +251,7 @@ function showPlaceholderImage(event) {
               :aria-label="bundle.inStock === false ? `${bundle.name} is out of stock` : `Add ${bundle.name} to cart`"
               @click="addBundleToCart(bundle)"
             >
-              {{ bundle.inStock === false ? 'SOLD OUT' : 'ADD TO CART' }}
+              {{ bundle.inStock === false ? 'OUT OF STOCK' : 'ADD TO CART' }}
             </button>
           </div>
         </div>

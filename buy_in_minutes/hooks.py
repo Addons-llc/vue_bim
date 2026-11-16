@@ -43,8 +43,13 @@ app_license = "mit"
 # page_js = {"page" : "public/js/file.js"}
 
 # include js in doctype views
-# doctype_js = {"doctype" : "public/js/doctype.js"}
-# doctype_list_js = {"doctype" : "public/js/doctype_list.js"}
+# "Invite on WhatsApp" on the Lead list and form (restaurant_onboarding.py)
+doctype_js = {
+	"Lead": "public/js/lead.js",
+	# "View on Map" from the Supplier's Latitude / Longitude
+	"Supplier": "public/js/supplier.js",
+}
+doctype_list_js = {"Lead": "public/js/lead_list.js"}
 # doctype_tree_js = {"doctype" : "public/js/doctype_tree.js"}
 # doctype_calendar_js = {"doctype" : "public/js/doctype_calendar.js"}
 
@@ -93,6 +98,8 @@ website_route_rules = [
 after_migrate = [
 	"buy_in_minutes.indexes.ensure_catalog_indexes",
 	"buy_in_minutes.catalog_cache.clear_catalog_cache",
+	# Supplier Latitude / Longitude / Address, filled by the WhatsApp restaurant onboarding
+	"buy_in_minutes.restaurant_onboarding.setup_supplier_location_fields",
 ]
 
 # Uninstallation
@@ -164,6 +171,10 @@ _catalog_cache_events = {
 doc_events = {
 	"Sales Order": {
 		"on_submit": "buy_in_minutes.payment.on_sales_order_submit",
+	},
+	# New Leads are invited on WhatsApp to add their restaurant (restaurant_onboarding.py)
+	"Lead": {
+		"after_insert": "buy_in_minutes.restaurant_onboarding.invite_new_lead",
 	},
 	**{
 		doctype: {

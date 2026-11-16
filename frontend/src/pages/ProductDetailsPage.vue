@@ -17,7 +17,7 @@ import {
 import { getSelectedProduct, saveSelectedProduct } from '../data/productSelectionStore'
 import { saveSelectedSupplier } from '../data/supplierSelectionStore'
 import { getProductById, getProductVariants, getProducts } from '../api/productApi'
-import { getProductReviews } from '../api/reviewApi'
+import { getBrand } from '../api/brandApi'
 import ProductCard from '../components/product/ProductCard.vue'
 
 const route = useRoute()
@@ -40,14 +40,11 @@ const selectedSupplierDeliveryTimeLabel = ref('')
 const isCheckingDeliverability = ref(false)
 const relatedProducts = ref([])
 const isLoadingRelatedProducts = ref(false)
-const productReviews = ref([])
 
 const MAX_DELIVERABLE_DISTANCE_KM = 20
 
 // URL key: the product's slug, or its item code for older links.
 const productId = computed(() => String(route.params.productId || ''))
-// Item code of the loaded product; reviews and other records are keyed by it.
-const productItemCode = computed(() => product.value?.id || productId.value)
 const isRfqOnly = computed(() => product.value?.customRfqOnly === true)
 const productQuantity = computed(() => {
   if (!product.value) {
@@ -162,33 +159,14 @@ const brandName = computed(() =>
   || (sourceListing.value?.type === 'brand' ? sourceListing.value.name : '')
   || '',
 )
-const averageReviewRating = computed(() => {
-  const ratings = productReviews.value
-    .map((review) => Number(review.rating || 0))
-    .filter((rating) => Number.isFinite(rating) && rating > 0)
-
-  if (!ratings.length) {
-    return Number(product.value?.rating || 0)
-  }
-
-  return ratings.reduce((total, rating) => total + rating, 0) / ratings.length
-})
-const ratingStars = computed(() => {
-  const rating = Math.round(Number(averageReviewRating.value || 0))
-
-  return '★'.repeat(Math.min(rating, 5)) || '★★★★★'
-})
-const averageReviewRatingLabel = computed(() => {
-  const rating = Number(averageReviewRating.value || 0)
-
-  if (!Number.isFinite(rating) || rating <= 0) {
-    return '0.0'
-  }
-
-  return rating.toFixed(1)
-})
 const productDescription = computed(() => product.value?.description || '')
 const isProductDescriptionLong = computed(() => productDescription.value.length > 120)
+// "About the brand": loaded separately because the product payload only carries the brand name.
+const brandInfo = ref(null)
+const isBrandDescriptionExpanded = ref(false)
+const brandDescription = computed(() => brandInfo.value?.description || '')
+const isBrandDescriptionLong = computed(() => brandDescription.value.length > 120)
+let brandInfoRequestId = 0
 const hasProductVariants = computed(() => productVariants.value.length > 0)
 const showVariantDropdowns = computed(() =>
   hasProductVariants.value && product.value?.variantBasedOn === 'Item Attribute',
@@ -370,6 +348,13 @@ const activeProductImage = computed(() =>
     || '',
 )
 
+// A dropdown only when there is a real choice; a single supplier is shown as plain text.
+const supplierDetail = computed(() => (
+  supplierOptions.value.length > 1
+    ? { label: 'Choose Supplier', type: 'supplier', value: supplierIdentifier.value }
+    : { label: 'Supplier', value: supplierName.value }
+))
+
 const productDetails = computed(() => {
   if (!product.value) {
     return []
@@ -390,7 +375,9 @@ const productDetails = computed(() => {
       details.push({ label: 'Supplier website', value: productSupplierWebsite.value })
     }
 
-    details.push({ label: 'Choose Supplier', type: 'supplier', value: supplierIdentifier.value })
+    if (supplierDetail.value.value) {
+      details.push(supplierDetail.value)
+    }
     details.push({ label: 'Delivery time', value: productDeliveryTimeLabel.value })
 
     return details
@@ -407,7 +394,7 @@ const productDetails = computed(() => {
     selectedProductSizeLabel.value
       ? { label: 'Size', value: selectedProductSizeLabel.value }
       : null,
-    { label: 'Choose Supplier', type: 'supplier', value: supplierIdentifier.value },
+    supplierDetail.value,
     { label: 'Delivery time', value: productDeliveryTimeLabel.value },
     { label: 'Category', value: product.value.category },
   ].filter((detail) => detail?.value)
@@ -415,13 +402,8 @@ const productDetails = computed(() => {
 const relatedProductSuggestions = computed(() =>
   relatedProducts.value.filter((relatedProduct) => relatedProduct.id !== product.value?.id).slice(0, 8),
 )
-const reviewCountLabel = computed(() => `${productReviews.value.length} Ratings`)
 let supplierOptionDistanceRequestId = 0
 let selectedSupplierDeliveryTimeRequestId = 0
-
-async function loadProductReviews(targetProductId, targetSupplier = '') {
-  productReviews.value = await getProductReviews(targetProductId, targetSupplier)
-}
 
 function getSupplierOptionProduct(supplierOption) {
   if (!product.value || !supplierOption) {
@@ -476,7 +458,6 @@ async function refreshSupplierOptionDistances() {
 
     if (nearestSupplier?.name && nearestSupplier.name !== selectedSupplierName.value) {
       selectedSupplierName.value = nearestSupplier.name
-      await loadProductReviews(productItemCode.value, supplierIdentifier.value)
     }
   }
 }
@@ -649,10 +630,6 @@ async function loadProduct() {
   supplierOptionDistances.value = {}
   selectedSupplierDeliveryTimeLabel.value = ''
   productVariants.value = []
-  await loadProductReviews(
-    cachedProduct?.id || productId.value,
-    cachedProduct?.supplier || cachedProduct?.supplierDetails?.name || '',
-  )
   isLoading.value = !cachedProduct
   loadError.value = ''
 
@@ -675,10 +652,6 @@ async function loadProduct() {
     }
 
     selectedSupplierName.value = product.value?.supplier || product.value?.supplierDetails?.name || ''
-    await loadProductReviews(
-      productItemCode.value,
-      supplierIdentifier.value,
-    )
     const redirectedToVariant = await loadVariantsForProduct(product.value)
     if (redirectedToVariant) {
       return
@@ -779,7 +752,6 @@ function selectProductSize(size) {
 async function selectProductSupplier(supplierName) {
   hasManuallySelectedSupplier.value = true
   selectedSupplierName.value = supplierName
-  await loadProductReviews(productItemCode.value, supplierIdentifier.value)
   await Promise.all([
     refreshSupplierDistance(),
     refreshSelectedSupplierDeliveryTime(),
@@ -833,6 +805,25 @@ async function requestQuotationForProduct() {
 }
 
 watch(productId, loadProduct, { immediate: true })
+
+watch(brandName, async (name) => {
+  const requestId = ++brandInfoRequestId
+  brandInfo.value = null
+  isBrandDescriptionExpanded.value = false
+
+  if (!name) {
+    return
+  }
+
+  try {
+    const brand = await getBrand(name)
+    if (requestId === brandInfoRequestId) {
+      brandInfo.value = brand
+    }
+  } catch {
+    // Brand details are optional on this page; the product still renders without them.
+  }
+}, { immediate: true })
 
 watch(
   () => product.value?.id || '',
@@ -957,12 +948,6 @@ usePageMeta(() =>
         -->
         <h1 :id="`product-detail-title-${product.id}`">{{ product.name }}</h1>
 
-        <div class="product-detail-rating-row">
-          <span>{{ averageReviewRatingLabel }}</span>
-          <span class="product-detail-stars">{{ ratingStars }}</span>
-          <span v-if="productReviews.length">{{ reviewCountLabel }}</span>
-        </div>
-
         <div class="product-detail-price-row">
           <span class="product-detail-price">
             <span class="product-detail-currency">AED</span>
@@ -990,6 +975,7 @@ usePageMeta(() =>
         </section>
 
         <p
+          v-if="productDescription"
           class="product-detail-description"
           :class="{ 'is-collapsed': !isProductDescriptionExpanded && isProductDescriptionLong }"
         >
@@ -1062,6 +1048,27 @@ usePageMeta(() =>
           <p v-if="isLoadingVariants" class="product-variant-status">Loading options...</p>
         </section>
 
+        <section
+          v-if="brandDescription"
+          class="product-detail-section product-brand-about"
+          aria-labelledby="product-brand-about-title"
+        >
+          <h3 id="product-brand-about-title">About the brand</h3>
+          <p
+            class="product-detail-description"
+            :class="{ 'is-collapsed': !isBrandDescriptionExpanded && isBrandDescriptionLong }"
+          >
+            {{ brandDescription }}
+          </p>
+          <button
+            v-if="isBrandDescriptionLong"
+            class="product-description-toggle"
+            type="button"
+            @click="isBrandDescriptionExpanded = !isBrandDescriptionExpanded"
+          >
+            {{ isBrandDescriptionExpanded ? 'Show less' : 'Show more' }}
+          </button>
+        </section>
       </div>
 
       <aside class="product-detail-purchase" aria-label="Purchase options">
@@ -1082,21 +1089,12 @@ usePageMeta(() =>
           <div>
             <span>Sold by</span>
             <strong>{{ supplierName }}</strong>
-            <p>Not enough ratings to show</p>
           </div>
         </RouterLink>
 
         <div class="product-detail-trust-list">
           <span>↩ Easy and hassle free returns</span>
           <span>♢ Secure payments</span>
-          <RouterLink
-            v-if="productReviews.length && hasSupplier"
-            class="product-detail-trust-reviews"
-            :to="{ name: 'supplier-details', params: { supplierName: supplierIdentifier } }"
-            @click="rememberSupplierSelection"
-          >
-            Customer Reviews: {{ reviewCountLabel }}
-          </RouterLink>
         </div>
 
         <div class="product-detail-footer">
