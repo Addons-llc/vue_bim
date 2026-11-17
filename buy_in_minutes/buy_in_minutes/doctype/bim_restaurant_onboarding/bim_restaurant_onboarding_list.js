@@ -3,6 +3,7 @@ const ONBOARDING_COLORS = {
 	"Confirming Name": "orange",
 	"Awaiting Logo": "orange",
 	"Awaiting Location": "orange",
+	"Selecting Items": "orange",
 	Completed: "green",
 	Declined: "gray",
 	Failed: "red",

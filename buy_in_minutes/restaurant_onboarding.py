@@ -9,6 +9,7 @@
 The sender and Twilio account come from Twilio WhatsApp Settings; the wording from BIM Restaurant Onboarding Settings.
 """
 
+import json
 import re
 from html import escape
 from urllib.parse import urlparse
@@ -26,11 +27,12 @@ INVITED = "Invited"
 CONFIRMING_NAME = "Confirming Name"
 AWAITING_LOGO = "Awaiting Logo"
 AWAITING_LOCATION = "Awaiting Location"
+SELECTING_ITEMS = "Selecting Items"
 COMPLETED = "Completed"
 DECLINED = "Declined"
 FAILED = "Failed"
 # Onboardings still waiting for the restaurant's reply
-OPEN_STATUSES = (INVITED, CONFIRMING_NAME, AWAITING_LOGO, AWAITING_LOCATION)
+OPEN_STATUSES = (INVITED, CONFIRMING_NAME, AWAITING_LOGO, AWAITING_LOCATION, SELECTING_ITEMS)
 
 # Ids of the invitation template's buttons, sent back by Twilio as ButtonPayload
 CONFIRM_PAYLOAD = "bim_onboarding:yes"
@@ -59,6 +61,13 @@ PLUS_CODE_PATTERN = re.compile(r"^[23456789CFGHJMPQRVWX]{4,8}\+[23456789CFGHJMPQ
 ADDRESS_BUILDING_TYPES = {"premise", "subpremise"}
 ADDRESS_STREET_TYPES = {"street_address", "route"}
 ADDRESS_AREA_TYPES = {"neighborhood", "sublocality", "sublocality_level_1", "locality"}
+
+# The item list form (a WhatsApp Flow); WhatsApp shows at most 20 options of up to 30 characters
+MAX_ITEM_OPTIONS = 20
+ITEM_TITLE_LIMIT = 30
+FLOW_TEXT_LIMIT = 30
+ITEM_OPTION_PREFIX = "bim_item_"
+ITEM_OPTION_PATTERN = re.compile(rf"\b{ITEM_OPTION_PREFIX}\d+\b")
 SAMPLE_CONTEXT = {"lead_name": "Spice Garden", "first_name": "Ahmed", "company_name": "Spice Garden"}
 
 # Shown on the website from these Supplier fields (api.SUPPLIER_DETAIL_FIELDS)
@@ -469,6 +478,22 @@ def next_step(doc, params, settings) -> str:
 		# A dropped pin comes without an address, so it is looked up from the coordinates
 		address = params.get("Address") or reverse_geocode(doc.latitude, doc.longitude, settings)
 		doc.address = ", ".join(part for part in (params.get("Label"), address) if part)
+		# The item list is its own WhatsApp message (a form), so nothing else is replied
+		if settings.items_content_sid and send_item_list(doc, settings):
+			doc.status = SELECTING_ITEMS
+			return ""
+		doc.status = COMPLETED
+		return render(settings.completed_message, doc, settings)
+
+	if doc.status == SELECTING_ITEMS:
+		submission = params.get("InteractiveData") or params.get("FlowData")
+		if not submission:
+			return render(settings.invalid_items_message, doc, settings)
+		items = get_selected_items(doc, submission)
+		if not items:
+			# Submitted with nothing ticked: the form is sent again
+			return "" if send_item_list(doc, settings) else render(settings.invalid_items_message, doc, settings)
+		doc.set("items", [{"item_code": item} for item in items])
 		doc.status = COMPLETED
 		return render(settings.completed_message, doc, settings)
 
@@ -505,7 +530,65 @@ def describe_incoming(params) -> str:
 		parts.append(_("[{0} attached]").format(params.get("MediaContentType0") or _("file")))
 	if params.get("Latitude"):
 		parts.append(_("[Location {0}, {1}]").format(params.get("Latitude"), params.get("Longitude")))
+	submission = params.get("InteractiveData") or params.get("FlowData")
+	if submission:
+		parts.append(_("[Form submitted: {0}]").format(submission[:500]))
 	return " ".join(part for part in parts if part) or _("[empty message]")
+
+
+def get_item_list(settings) -> list[dict]:
+	"""The items the restaurant can choose from, as WhatsApp allows at most 20 options."""
+	if not settings.items_item_group:
+		return []
+	return frappe.get_all(
+		"Item",
+		filters={"item_group": settings.items_item_group, "disabled": 0, "is_sales_item": 1, "has_variants": 0},
+		fields=["name", "item_name"],
+		order_by="item_name asc",
+		limit=MAX_ITEM_OPTIONS,
+	)
+
+
+def get_item_choices(items: list[dict]) -> list[dict]:
+	return [
+		{"id": f"{ITEM_OPTION_PREFIX}{index}", "title": (item.item_name or item.name)[:ITEM_TITLE_LIMIT]}
+		for index, item in enumerate(items, start=1)
+	]
+
+
+def send_item_list(doc, settings) -> bool:
+	"""Send the WhatsApp form with the items to tick; False when there is nothing to send or it failed."""
+	items = get_item_list(settings)
+	if not items:
+		return False
+	choices = get_item_choices(items)
+	twilio = get_twilio()
+	try:
+		response = get_twilio_client(twilio).messages.create(
+			from_=twilio.from_number,
+			to=doc.whatsapp_number,
+			content_sid=settings.items_content_sid,
+			# The whole option list is the template's one variable
+			content_variables=json.dumps({"1": json.dumps(choices)}),
+		)
+	except Exception as e:
+		frappe.log_error(title=f"Restaurant item list failed: {doc.name}")
+		doc.error = _("The item list could not be sent: {0}").format(str(getattr(e, "msg", None) or e)[:900])
+		return False
+
+	# Which Item each option id stands for, as the submission only returns the ids
+	doc.item_options = json.dumps({choice["id"]: item.name for choice, item in zip(choices, items)})
+	titles = ", ".join(choice["title"] for choice in choices)
+	add_message(doc, "Outgoing", f"{settings.items_message}\n[{settings.items_button_text}: {titles}]", response.sid)
+	return True
+
+
+def get_selected_items(doc, submission: str) -> list[str]:
+	"""The Items whose option ids are in the form submission, in the order they were listed."""
+	options = frappe.parse_json(doc.item_options or "{}") or {}
+	# The ids are unique, so they are found in the submission whatever its JSON shape
+	found = set(ITEM_OPTION_PATTERN.findall(submission or ""))
+	return [item for option_id, item in options.items() if option_id in found]
 
 
 def reverse_geocode(latitude: float, longitude: float, settings) -> str:
@@ -706,10 +789,78 @@ def create_invitation_template():
 	return {"sid": content["sid"], "body": body}
 
 
-@frappe.whitelist()
-def get_invitation_template_status():
+@frappe.whitelist(methods=["POST"])
+def create_items_template():
+	"""Create the item list form (a WhatsApp Flow with tick boxes and Continue), submit it for approval and save its SID."""
 	frappe.only_for("System Manager")
-	content_sid = frappe.db.get_single_value(SETTINGS, "invitation_content_sid")
+	settings = get_settings()
+	twilio = get_twilio()
+	message = (settings.items_message or "").strip()
+	button = (settings.items_button_text or "").strip()
+	title = (settings.items_page_title or "").strip()
+	continue_text = (settings.items_continue_text or "").strip()
+	if not message:
+		frappe.throw(_("Please set the Items Message first."))
+	if "{{" in message or "{%" in message:
+		frappe.throw(_("The Items Message can't use placeholders."))
+	if not button or len(button) > BUTTON_TITLE_LIMIT:
+		frappe.throw(_("The Select Items Button must be 1 to {0} characters.").format(BUTTON_TITLE_LIMIT))
+	if not title or len(title) > FLOW_TEXT_LIMIT or not continue_text or len(continue_text) > FLOW_TEXT_LIMIT:
+		frappe.throw(_("The Form Title and Continue Button must be 1 to {0} characters.").format(FLOW_TEXT_LIMIT))
+	# WhatsApp reviews the template with a sample list
+	sample = get_item_choices(get_item_list(settings)) or [{"id": f"{ITEM_OPTION_PREFIX}1", "title": "Samoosa"}]
+
+	name = f"bim_restaurant_items_{frappe.generate_hash(length=6)}"
+	content = twilio_request(
+		twilio,
+		"POST",
+		CONTENT_API_URL,
+		{
+			"friendly_name": name,
+			"language": "en",
+			"variables": {"1": json.dumps(sample)},
+			"types": {
+				"twilio/flows": {
+					"body": message,
+					"button_text": button,
+					"type": "OTHER",
+					"pages": [
+						{
+							"id": "items",
+							"next_page_id": None,
+							"title": title,
+							"layout": [
+								{"type": "MULTI_SELECT", "label": "Items", "text": "Tick the items you sell", "options": "{{1}}"},
+								{"type": "FOOTER", "label": continue_text},
+							],
+						}
+					],
+				}
+			},
+		},
+	)
+	# Part of an onboarding the restaurant agreed to, so Utility rather than Marketing
+	twilio_request(
+		twilio,
+		"POST",
+		f"{CONTENT_API_URL}/{content['sid']}/ApprovalRequests/whatsapp",
+		{"name": name, "category": "UTILITY"},
+	)
+	frappe.db.set_single_value(SETTINGS, "items_content_sid", content["sid"])
+	return {"sid": content["sid"], "body": message}
+
+
+@frappe.whitelist()
+def get_items_template_status():
+	return get_invitation_template_status(field="items_content_sid")
+
+
+@frappe.whitelist()
+def get_invitation_template_status(field: str = "invitation_content_sid"):
+	frappe.only_for("System Manager")
+	if field not in ("invitation_content_sid", "items_content_sid"):
+		frappe.throw(_("Unknown template"))
+	content_sid = frappe.db.get_single_value(SETTINGS, field)
 	if not content_sid:
 		return {"status": "not created"}
 	approval = twilio_request(get_twilio(), "GET", f"{CONTENT_API_URL}/{content_sid}/ApprovalRequests")

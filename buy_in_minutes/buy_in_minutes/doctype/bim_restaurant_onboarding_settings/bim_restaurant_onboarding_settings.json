@@ -25,6 +25,15 @@
   "invalid_choice_message",
   "invalid_logo_message",
   "invalid_location_message",
+  "items_section",
+  "items_item_group",
+  "items_message",
+  "items_button_text",
+  "column_break_items",
+  "items_page_title",
+  "items_continue_text",
+  "items_content_sid",
+  "invalid_items_message",
   "supplier_section",
   "supplier_group",
   "column_break_supplier",
@@ -152,6 +161,65 @@
    "label": "Not a Location"
   },
   {
+   "fieldname": "items_section",
+   "fieldtype": "Section Break",
+   "label": "Items",
+   "description": "After the location, the restaurant gets a WhatsApp form listing these items to tick, then taps Continue. Leave the Items Content SID empty to skip this step."
+  },
+  {
+   "default": "Snacks",
+   "fieldname": "items_item_group",
+   "fieldtype": "Link",
+   "label": "Item Group",
+   "options": "Item Group",
+   "description": "Enabled sales items of this group are listed, up to 20 (a WhatsApp limit)."
+  },
+  {
+   "default": "Got it! Now choose the items you would like to sell on Buy In Minutes. Tap *Select Items*, tick the items and press *Continue*.",
+   "fieldname": "items_message",
+   "fieldtype": "Text",
+   "label": "Items Message",
+   "description": "Sent with the Select Items button. No placeholders. Changing it, or the texts below, needs a new template."
+  },
+  {
+   "default": "Select Items",
+   "fieldname": "items_button_text",
+   "fieldtype": "Data",
+   "label": "Select Items Button",
+   "description": "Up to 20 characters."
+  },
+  {
+   "fieldname": "column_break_items",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "Select Items",
+   "fieldname": "items_page_title",
+   "fieldtype": "Data",
+   "label": "Form Title",
+   "description": "Up to 30 characters."
+  },
+  {
+   "default": "Continue",
+   "fieldname": "items_continue_text",
+   "fieldtype": "Data",
+   "label": "Continue Button",
+   "description": "Up to 30 characters."
+  },
+  {
+   "fieldname": "items_content_sid",
+   "fieldtype": "Data",
+   "label": "Items Content SID",
+   "description": "Approved Twilio Content Template SID (starts with HX) of the item list, filled in by Create Items Template."
+  },
+  {
+   "default": "Please tap *Select Items* above, tick the items you sell and press *Continue*.",
+   "fieldname": "invalid_items_message",
+   "fieldtype": "Small Text",
+   "label": "No Items Selected",
+   "description": "Sent when the restaurant writes instead of using the form."
+  },
+  {
    "fieldname": "supplier_section",
    "fieldtype": "Section Break",
    "label": "Supplier"
@@ -209,7 +277,7 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-11-16 10:00:00.000000",
+ "modified": "2026-11-16 11:00:00.000000",
  "modified_by": "Administrator",
  "module": "Buy In Minutes",
  "name": "BIM Restaurant Onboarding Settings",

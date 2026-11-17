@@ -4,7 +4,9 @@ frappe.ui.form.on("BIM Restaurant Onboarding Settings", {
 	refresh(frm) {
 		const group = __("WhatsApp");
 		frm.add_custom_button(__("Create Invitation Template"), () => create_invitation_template(frm), group);
-		frm.add_custom_button(__("Check Template Status"), () => check_template_status(), group);
+		frm.add_custom_button(__("Check Template Status"), () => check_template_status("get_invitation_template_status", __("Invitation Template")), group);
+		frm.add_custom_button(__("Create Items Template"), () => create_items_template(frm), group);
+		frm.add_custom_button(__("Check Items Template Status"), () => check_template_status("get_items_template_status", __("Items Template")), group);
 		frm.add_custom_button(__("Invite Existing Leads"), () => invite_existing_leads(), group);
 		frm.add_custom_button(__("Connect Restaurant Replies"), () => connect_replies(frm), group);
 		if (frm.doc.previous_webhook_url) {
@@ -61,14 +63,35 @@ function invite_existing_leads() {
 	);
 }
 
-function check_template_status() {
+function create_items_template(frm) {
+	if (!saved_first(frm)) return;
+	frappe.confirm(
+		__("Submit the item list form (Items Message, Select Items button, tick boxes and Continue) to WhatsApp for approval?"),
+		() =>
+			frappe.call({
+				method: `${ONBOARDING}.create_items_template`,
+				freeze: true,
+				freeze_message: __("Creating template..."),
+				callback: ({ message }) => {
+					frappe.msgprint({
+						title: __("Submitted for WhatsApp Approval"),
+						indicator: "green",
+						message: __("Template {0}<br><br>Use Check Items Template Status to see when it is approved.", [message.sid]),
+					});
+					frm.reload_doc();
+				},
+			})
+	);
+}
+
+function check_template_status(method, title) {
 	frappe.call({
-		method: `${ONBOARDING}.get_invitation_template_status`,
+		method: `${ONBOARDING}.${method}`,
 		freeze: true,
 		callback: ({ message }) => {
 			const reason = message.rejection_reason ? `<br>${frappe.utils.escape_html(message.rejection_reason)}` : "";
 			frappe.msgprint({
-				title: __("Invitation Template"),
+				title,
 				indicator: message.status === "approved" ? "green" : message.status === "rejected" ? "red" : "orange",
 				message: `${frappe.utils.escape_html(message.sid || "")} ${frappe.utils.escape_html(message.status)}${reason}`,
 			});

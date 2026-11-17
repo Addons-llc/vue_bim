@@ -19,6 +19,9 @@
     "latitude",
     "longitude",
     "address",
+    "items_section",
+    "items",
+    "item_options",
     "conversation_section",
     "messages",
     "invitation_sid",
@@ -58,7 +61,7 @@
       "fieldname": "status",
       "fieldtype": "Select",
       "label": "Status",
-      "options": "Invited\nConfirming Name\nAwaiting Logo\nAwaiting Location\nCompleted\nDeclined\nFailed",
+      "options": "Invited\nConfirming Name\nAwaiting Logo\nAwaiting Location\nSelecting Items\nCompleted\nDeclined\nFailed",
       "in_list_view": 1,
       "in_standard_filter": 1
     },
@@ -107,6 +110,26 @@
       "label": "Address"
     },
     {
+      "fieldname": "items_section",
+      "fieldtype": "Section Break",
+      "label": "Items"
+    },
+    {
+      "fieldname": "items",
+      "fieldtype": "Table",
+      "label": "Items",
+      "options": "BIM Onboarding Item",
+      "description": "The items the restaurant selected on WhatsApp."
+    },
+    {
+      "fieldname": "item_options",
+      "fieldtype": "JSON",
+      "label": "Item Options Sent",
+      "hidden": 1,
+      "read_only": 1,
+      "description": "The option ids sent in the WhatsApp item list, with their Item."
+    },
+    {
       "fieldname": "conversation_section",
       "fieldtype": "Section Break",
       "label": "WhatsApp Conversation"
@@ -134,7 +157,7 @@
   "grid_page_length": 50,
   "index_web_pages_for_search": 0,
   "links": [],
-  "modified": "2026-11-13 12:00:00.000000",
+  "modified": "2026-11-16 11:00:00.000000",
   "modified_by": "Administrator",
   "module": "Buy In Minutes",
   "name": "BIM Restaurant Onboarding",
