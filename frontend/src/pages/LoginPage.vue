@@ -87,6 +87,12 @@ async function handleGoogleSignIn() {
       throw new Error(result?.message || 'Unable to sign in with Google.')
     }
 
+    if (result.signup_token) {
+      // New Google sign-up: no account yet, it's created once the phone is verified.
+      await router.push({ name: 'verify-phone' })
+      return
+    }
+
     successMessage.value = 'Signed in successfully.'
     setCurrentUser(result.user || null)
 

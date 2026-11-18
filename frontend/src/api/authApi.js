@@ -5,6 +5,17 @@ import { appUrl } from '../router/base'
 
 export const AUTH_TOKEN_STORAGE_KEY = 'authToken'
 export const AUTH_FLOW_TOKEN_STORAGE_KEY = 'authFlowToken'
+// A new Google sign-up has no account until its phone is OTP-verified; this
+// short-lived token stands in for it until then.
+const GOOGLE_SIGNUP_TOKEN_STORAGE_KEY = 'googleSignupToken'
+
+export function getGoogleSignupToken() {
+  return sessionStorage.getItem(GOOGLE_SIGNUP_TOKEN_STORAGE_KEY) || ''
+}
+
+export function clearGoogleSignupToken() {
+  sessionStorage.removeItem(GOOGLE_SIGNUP_TOKEN_STORAGE_KEY)
+}
 
 function storeAuthToken(response) {
   const token = response?.message?.session_token || response?.message?.token || ''
@@ -56,23 +67,35 @@ export async function verifyPhoneOtp(phoneNumber, otp, authFlowToken = '') {
   return response
 }
 
-// Attaches a phone number to the signed-in account (e.g. after Google sign-in).
+// Attaches a phone number to the signed-in account, or, during a new Google
+// sign-up, to the account that verifying the OTP will create.
 export function requestLinkPhoneOtp(phoneNumber) {
+  const signupToken = getGoogleSignupToken()
+
   return apiRequest('/method/buy_in_minutes.auth.request_link_phone_otp', {
     method: 'POST',
-    body: JSON.stringify({ phone_number: phoneNumber }),
+    body: JSON.stringify({
+      phone_number: phoneNumber,
+      ...(signupToken ? { signup_token: signupToken } : {}),
+    }),
   })
 }
 
 export async function verifyLinkPhoneOtp(phoneNumber, otp, authFlowToken) {
   const response = await apiRequest('/method/buy_in_minutes.auth.verify_link_phone_otp', {
     method: 'POST',
-    body: JSON.stringify({ phone_number: phoneNumber, otp, auth_flow_token: authFlowToken }),
+    body: JSON.stringify({
+      phone_number: phoneNumber,
+      otp,
+      auth_flow_token: authFlowToken,
+      ...(getGoogleSignupToken() ? { signup_token: getGoogleSignupToken() } : {}),
+    }),
   })
 
   if (response?.message?.success) {
     storeAuthToken(response)
     clearStoredCsrfToken()
+    clearGoogleSignupToken()
   }
 
   return response
@@ -161,10 +184,15 @@ export function getCurrentUser() {
 export async function googleLogin(accessToken) {
   const response = await apiRequest('/method/buy_in_minutes.auth.google_login', {
     method: 'POST',
-    body: JSON.stringify({ access_token: accessToken }),
+    body: JSON.stringify({ access_token: accessToken, defer_signup: 1 }),
   })
 
-  if (response?.message?.success) {
+  const result = response?.message
+  if (result?.success && result.signup_token) {
+    // New email: not signed in yet, the phone step creates the account.
+    sessionStorage.setItem(GOOGLE_SIGNUP_TOKEN_STORAGE_KEY, result.signup_token)
+  } else if (result?.success) {
+    clearGoogleSignupToken()
     storeAuthToken(response)
     clearStoredCsrfToken()
   }
@@ -180,6 +208,7 @@ function clearLocalCredentials() {
   localStorage.removeItem(AUTH_FLOW_TOKEN_STORAGE_KEY)
   sessionStorage.removeItem(CHECKOUT_RESUME_TOKEN_STORAGE_KEY)
   sessionStorage.removeItem('buyInMinutesLastCodOrderItems')
+  clearGoogleSignupToken()
   clearStoredCsrfToken()
   clearCurrentUser()
 }

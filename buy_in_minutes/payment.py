@@ -22,6 +22,7 @@ DELIVERY_FEE = 6
 DELIVERY_FEE_ITEM_CODE = "delivery-fee"
 FREE_DELIVERY_MINIMUM = 60
 SELLING_PRICE_LIST = "Selling Price"
+BASIC_KIT_NAME = "Weekly Basic Kit"
 STRIPE_SETTINGS_DOCTYPE = "Stripe Settings"
 CHECKOUT_RESUME_TOKEN_TTL_SECONDS = 3 * 60 * 60
 # Stripe metadata: at most 50 keys, values capped at 500 characters.
@@ -1134,9 +1135,47 @@ def _apply_user_contact_to_sales_order(sales_order, customer, user_name):
 	_set_doc_value_if_field_exists(sales_order, "contact_email", user.email)
 
 
+def _included_kit_codes(normalized_items):
+	"""Item codes of the Weekly Basic Kit when the cart also holds a week kit.
+
+	Kits are Product Bundles sold as a combo: the Weekly Basic Kit plus one week
+	kit (Kerala Regular Kit, Avial & Curry Kit, ...). The week kit's selling
+	price covers the whole combo, so the basic kit has no price of its own and
+	goes on the order at 0. Alone, it still has no valid price.
+	"""
+	codes = list({item["item_code"] for item in normalized_items})
+	bundle_codes = set(
+		frappe.get_all(
+			"Product Bundle",
+			filters={"new_item_code": ["in", codes], "disabled": 0},
+			pluck="new_item_code",
+		)
+	)
+	if not bundle_codes:
+		return set()
+
+	names = dict(
+		frappe.get_all(
+			"Item",
+			filters={"name": ["in", list(bundle_codes)]},
+			fields=["name", "item_name"],
+			as_list=True,
+		)
+	)
+	basic_codes = {
+		code
+		for code in bundle_codes
+		if (names.get(code) or "").strip().lower() == BASIC_KIT_NAME.lower()
+	}
+	has_week_kit = bool(bundle_codes - basic_codes)
+	return basic_codes if has_week_kit else set()
+
+
 def _get_checkout_items(cart_items, delivery_fee=None, include_delivery_fee_item=True):
 	checkout_items = []
-	for cart_item in _normalize_cart_items(cart_items):
+	normalized_items = _normalize_cart_items(cart_items)
+	included_kit_codes = _included_kit_codes(normalized_items)
+	for cart_item in normalized_items:
 		item = frappe.db.get_value(
 			"Item",
 			{"name": cart_item["item_code"], "disabled": 0},
@@ -1150,9 +1189,12 @@ def _get_checkout_items(cart_items, delivery_fee=None, include_delivery_fee_item
 		if cart_item.get("supplier_quotation"):
 			if rate <= 0:
 				frappe.throw(_("Item {0} does not have a valid quoted price.").format(item.item_name or item.name))
+		elif item.name in included_kit_codes:
+			# Priced into the week kit it's paired with.
+			rate = 0
 		else:
 			rate = _get_item_selling_price(item.name, item.standard_rate)
-		if rate <= 0:
+		if rate <= 0 and item.name not in included_kit_codes:
 			frappe.throw(_("Item {0} does not have a valid price.").format(item.item_name or item.name))
 
 		checkout_items.append(

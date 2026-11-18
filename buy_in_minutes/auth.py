@@ -1010,15 +1010,18 @@ def _read_google_signup_token(signup_token):
 
 @frappe.whitelist(allow_guest=True, methods=["POST"])
 def google_login(id_token=None, access_token=None, defer_signup=None):
-	"""Signs in with Google. With `defer_signup`, a new email gets no account
-	yet: the response carries a `signup_token`, and the Website User is created
-	by verify_link_phone_otp once a phone number has been OTP-verified."""
+	"""Signs in with Google. A new email gets no account yet: the response
+	carries a `signup_token`, and the Website User is created by
+	verify_link_phone_otp once a phone number has been OTP-verified.
+
+	`defer_signup` is accepted for older clients but no longer optional: an
+	account is never created without a verified phone number."""
 	claims = _verify_google_credential(id_token, access_token)
 	email = validate_email_address(claims["email"].strip().lower(), throw=True)
 
 	user_name = frappe.db.get_value("User", {"email": email}, "name")
 	is_new_user = not user_name
-	if is_new_user and frappe.utils.sbool(defer_signup):
+	if is_new_user:
 		full_name = (claims.get("name") or "").strip() or email.split("@")[0]
 		return {
 			"success": True,
@@ -1037,31 +1040,25 @@ def google_login(id_token=None, access_token=None, defer_signup=None):
 			"message": _("Verify your phone number to finish signing up."),
 		}
 
-	if is_new_user:
-		user = _create_google_website_user(email, claims.get("name"))
-	else:
-		user = frappe.get_doc("User", user_name)
-		# Google sign-in is for customers only; staff accounts keep their
-		# own login so a Google account can't open the desk.
-		if user.user_type != "Website User":
-			return _error(_("This email belongs to a staff account. Please sign in with your password."), 403)
+	user = frappe.get_doc("User", user_name)
+	# Google sign-in is for customers only; staff accounts keep their
+	# own login so a Google account can't open the desk.
+	if user.user_type != "Website User":
+		return _error(_("This email belongs to a staff account. Please sign in with your password."), 403)
 
-		if not user.enabled:
-			return _error(_("This account is disabled."), 403)
+	if not user.enabled:
+		return _error(_("This account is disabled."), 403)
 
 	_login_user(user.name)
 	response = {
 		**_get_login_response_payload(user),
-		"is_new_user": is_new_user,
-		"website_user_created": is_new_user,
-		"website_user_exists": not is_new_user,
+		"is_new_user": False,
+		"website_user_created": False,
+		"website_user_exists": True,
 		"needs_phone": not user.mobile_no,
 	}
 
-	frappe.logger("buy_in_minutes.auth").info(
-		f"google_login response for {email}: "
-		f"{frappe.as_json({'is_new_user': is_new_user, 'user_name': user.name}, indent=None)}"
-	)
+	frappe.logger("buy_in_minutes.auth").info(f"google_login for existing user {user.name}")
 	return response
 
 
@@ -1114,7 +1111,7 @@ def _get_session_website_user(session_token=None):
 	return user
 
 
-@frappe.whitelist(methods=["POST"])
+@frappe.whitelist(allow_guest=True, methods=["POST"])
 def request_link_phone_otp(phone_number=None, phoneNumber=None, session_token=None, signup_token=None):
 	"""Sends an OTP to attach a phone number to the signed-in account, e.g.
 	after a Google sign-in, instead of signing in or up by phone. With a
@@ -1172,7 +1169,7 @@ def request_link_phone_otp(phone_number=None, phoneNumber=None, session_token=No
 	return response
 
 
-@frappe.whitelist(methods=["POST"])
+@frappe.whitelist(allow_guest=True, methods=["POST"])
 def verify_link_phone_otp(
 	phone_number=None, otp=None, phoneNumber=None, auth_flow_token=None, session_token=None, signup_token=None
 ):
