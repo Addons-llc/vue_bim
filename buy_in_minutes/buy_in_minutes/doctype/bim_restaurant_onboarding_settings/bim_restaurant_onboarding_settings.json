@@ -14,6 +14,11 @@
   "invitation_message",
   "confirm_button_text",
   "decline_button_text",
+  "join_section",
+  "join_keyword",
+  "join_welcome_message",
+  "column_break_join",
+  "already_joined_message",
   "replies_section",
   "ask_name_message",
   "ask_new_name_message",
@@ -33,7 +38,9 @@
   "items_page_title",
   "items_continue_text",
   "items_content_sid",
+  "items_pending_content_sid",
   "invalid_items_message",
+  "items_selected_message",
   "supplier_section",
   "supplier_group",
   "column_break_supplier",
@@ -95,6 +102,37 @@
    "fieldname": "decline_button_text",
    "fieldtype": "Data",
    "label": "Decline Button"
+  },
+  {
+   "fieldname": "join_section",
+   "fieldtype": "Section Break",
+   "label": "Join Link",
+   "description": "Restaurants that open the join link and send the Join Keyword start onboarding themselves. They wrote first, so no invitation template is sent and every reply is a free in-chat message. Use the WhatsApp > Get Join Link button for the link to put on your website, a QR code or a flyer."
+  },
+  {
+   "default": "Join Buy In Minutes",
+   "fieldname": "join_keyword",
+   "fieldtype": "Data",
+   "label": "Join Keyword",
+   "description": "Typed in for the restaurant by the join link. Matched ignoring case and punctuation."
+  },
+  {
+   "default": "Welcome to Buy In Minutes! What is the name of your restaurant?",
+   "fieldname": "join_welcome_message",
+   "fieldtype": "Small Text",
+   "label": "Welcome Message",
+   "description": "The first reply when the number is not a Lead with a name. When it is, Ask Name is sent instead."
+  },
+  {
+   "fieldname": "column_break_join",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "*{{ restaurant_name }}* is already registered on Buy In Minutes. Our team will contact you soon.",
+   "fieldname": "already_joined_message",
+   "fieldtype": "Small Text",
+   "label": "Already Joined Message",
+   "description": "Sent when a number that has completed onboarding sends the Join Keyword again."
   },
   {
    "fieldname": "replies_section",
@@ -164,7 +202,7 @@
    "fieldname": "items_section",
    "fieldtype": "Section Break",
    "label": "Items",
-   "description": "After the location, the restaurant gets a WhatsApp form listing these items to tick, then taps Continue. Leave the Items Content SID empty to skip this step."
+   "description": "After the location, the restaurant gets the Items Message with a Select Items button. It opens a list with a tick box per item and Submit, and the chosen items are repeated in the chat. If the form can't be sent, a numbered list is sent in the chat instead. Leave the Item Group empty to skip this step."
   },
   {
    "default": "Snacks",
@@ -175,11 +213,11 @@
    "description": "Enabled sales items of this group are listed, up to 20 (a WhatsApp limit)."
   },
   {
-   "default": "Got it! Now choose the items you would like to sell on Buy In Minutes. Tap *Select Items*, tick the items and press *Continue*.",
+   "default": "Which of these items would you like to sell at your restaurant?\n\nSelect all that apply below.",
    "fieldname": "items_message",
    "fieldtype": "Text",
    "label": "Items Message",
-   "description": "Sent with the Select Items button. No placeholders. Changing it, or the texts below, needs a new template."
+   "description": "Sent with the Select Items button. No placeholders. Changing it, or the texts below, needs a new template (Create Items Template)."
   },
   {
    "default": "Select Items",
@@ -197,27 +235,41 @@
    "fieldname": "items_page_title",
    "fieldtype": "Data",
    "label": "Form Title",
-   "description": "Up to 30 characters."
+   "description": "Shown at the top of the list. Up to 30 characters."
   },
   {
-   "default": "Continue",
+   "default": "Submit",
    "fieldname": "items_continue_text",
    "fieldtype": "Data",
-   "label": "Continue Button",
+   "label": "Submit Button",
    "description": "Up to 30 characters."
   },
   {
    "fieldname": "items_content_sid",
    "fieldtype": "Data",
    "label": "Items Content SID",
-   "description": "Approved Twilio Content Template SID (starts with HX) of the item list, filled in by Create Items Template."
+   "description": "The approved form that is sent. Filled by Create Items Template once WhatsApp approves it (Check Items Template Status)."
   },
   {
-   "default": "Please tap *Select Items* above, tick the items you sell and press *Continue*.",
+   "fieldname": "items_pending_content_sid",
+   "fieldtype": "Data",
+   "label": "Pending Items Content SID",
+   "read_only": 1,
+   "description": "A new form waiting for WhatsApp approval. The one above keeps being sent until then."
+  },
+  {
+   "default": "Please tick at least one item and tap *Submit*.",
    "fieldname": "invalid_items_message",
    "fieldtype": "Small Text",
    "label": "No Items Selected",
-   "description": "Sent when the restaurant writes instead of using the form."
+   "description": "Sent when nothing was ticked and the form can't be sent again, together with the numbered list."
+  },
+  {
+   "default": "You selected:\n{{ items }}",
+   "fieldname": "items_selected_message",
+   "fieldtype": "Small Text",
+   "label": "Items Selected Message",
+   "description": "Sent after the form, before the Completed message, so the restaurant sees what it chose. {{ items }} is the list of chosen items. Leave empty to skip it. No template needed."
   },
   {
    "fieldname": "supplier_section",
@@ -277,7 +329,7 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-11-16 11:00:00.000000",
+ "modified": "2026-11-19 14:00:00.000000",
  "modified_by": "Administrator",
  "module": "Buy In Minutes",
  "name": "BIM Restaurant Onboarding Settings",

@@ -60,6 +60,36 @@ export const cartTotal = computed(() =>
   cartItems.value.reduce((total, item) => total + item.price * item.quantity, 0),
 )
 
+// Kits are sold as a combo: the Weekly Basic Kit plus a week kit (Kerala Regular
+// Kit, Avial & Curry Kit, ...). A week kit can't be ordered without the basic kit;
+// checkout enforces the same rule server-side (payment._included_kit_codes).
+export const BASIC_KIT_NAME = 'Weekly Basic Kit'
+export const BASIC_KIT_REQUIRED_MESSAGE = `Add the ${BASIC_KIT_NAME} to your cart first to order other kits.`
+
+function isBasicKit(item) {
+  return String(item?.name || '').trim().toLowerCase() === BASIC_KIT_NAME.toLowerCase()
+}
+
+function isWeekKit(item) {
+  return isTruthyFlag(item?.isBundle) && !isBasicKit(item)
+}
+
+export const hasWeekKitWithoutBasicKit = computed(() =>
+  cartItems.value.some(isWeekKit) && !cartItems.value.some(isBasicKit),
+)
+
+// Short message shown by CartNotice (e.g. when an add to cart is refused).
+export const cartNotice = ref({ message: '', id: 0 })
+let cartNoticeTimer = null
+
+export function showCartNotice(message) {
+  clearTimeout(cartNoticeTimer)
+  cartNotice.value = { message, id: cartNotice.value.id + 1 }
+  cartNoticeTimer = setTimeout(() => {
+    cartNotice.value = { ...cartNotice.value, message: '' }
+  }, 4000)
+}
+
 export function addProductToCart(product) {
   const selectedSize = String(product.selectedSize || product.size || '').trim()
   const existingItem = cartItems.value.find((item) => item.id === product.id)
@@ -67,6 +97,17 @@ export function addProductToCart(product) {
     product.customDeliverySlots ?? product.custom_delivery_slots,
   )
   let cartItem
+
+  if (isWeekKit(product) && !cartItems.value.some(isBasicKit)) {
+    showCartNotice(BASIC_KIT_REQUIRED_MESSAGE)
+
+    return {
+      success: false,
+      message: BASIC_KIT_REQUIRED_MESSAGE,
+      cart_item_count: cartItemCount.value,
+      cart_total: cartTotal.value,
+    }
+  }
 
   if (existingItem) {
     existingItem.quantity += 1
@@ -79,6 +120,7 @@ export function addProductToCart(product) {
     existingItem.customDeliveryFee = toNumber(
       existingItem.customDeliveryFee ?? product.customDeliveryFee ?? product.custom_delivery_fee,
     )
+    existingItem.isBundle = isTruthyFlag(existingItem.isBundle) || isTruthyFlag(product.isBundle)
     cartItem = existingItem
   } else {
     cartItem = {
@@ -101,6 +143,7 @@ export function addProductToCart(product) {
       customOutOfStock: isTruthyFlag(product.customOutOfStock ?? product.custom_out_of_stock),
       inStock: !isTruthyFlag(product.customOutOfStock ?? product.custom_out_of_stock),
       size: selectedSize,
+      isBundle: isTruthyFlag(product.isBundle),
       customDeliverySlots: productRequiresDeliverySlot,
       quantity: 1,
     }
@@ -153,6 +196,10 @@ export function removeProductFromCart(productId) {
 
   cartItems.value = cartItems.value.filter((item) => item.id !== productId)
   saveCart(cartItems.value)
+
+  if (isBasicKit(removedItem) && hasWeekKitWithoutBasicKit.value) {
+    showCartNotice(`Other kits in your cart need the ${BASIC_KIT_NAME}.`)
+  }
 }
 
 export function clearCart() {

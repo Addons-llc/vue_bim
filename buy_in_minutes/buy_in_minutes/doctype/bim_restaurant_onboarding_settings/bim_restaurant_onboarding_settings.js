@@ -6,7 +6,8 @@ frappe.ui.form.on("BIM Restaurant Onboarding Settings", {
 		frm.add_custom_button(__("Create Invitation Template"), () => create_invitation_template(frm), group);
 		frm.add_custom_button(__("Check Template Status"), () => check_template_status("get_invitation_template_status", __("Invitation Template")), group);
 		frm.add_custom_button(__("Create Items Template"), () => create_items_template(frm), group);
-		frm.add_custom_button(__("Check Items Template Status"), () => check_template_status("get_items_template_status", __("Items Template")), group);
+		frm.add_custom_button(__("Check Items Template Status"), () => check_items_template_status(frm), group);
+		frm.add_custom_button(__("Get Join Link"), () => show_join_link(frm), group);
 		frm.add_custom_button(__("Invite Existing Leads"), () => invite_existing_leads(), group);
 		frm.add_custom_button(__("Connect Restaurant Replies"), () => connect_replies(frm), group);
 		if (frm.doc.previous_webhook_url) {
@@ -63,10 +64,30 @@ function invite_existing_leads() {
 	);
 }
 
+function check_template_status(method, title) {
+	frappe.call({
+		method: `${ONBOARDING}.${method}`,
+		freeze: true,
+		callback: ({ message }) => show_template_status(title, message),
+	});
+}
+
+function show_template_status(title, message) {
+	const reason = message.rejection_reason ? `<br>${frappe.utils.escape_html(message.rejection_reason)}` : "";
+	// Meta decides the category from the wording; Marketing is charged even inside an open chat
+	const category = message.category ? `<br>${__("Category")}: <b>${frappe.utils.escape_html(message.category)}</b>` : "";
+	const switched = message.switched ? `<br><br>${__("Approved, so this form is now sent to restaurants.")}` : "";
+	frappe.msgprint({
+		title,
+		indicator: message.status === "approved" ? "green" : message.status === "rejected" ? "red" : "orange",
+		message: `${frappe.utils.escape_html(message.sid || "")} ${frappe.utils.escape_html(message.status)}${category}${reason}${switched}`,
+	});
+}
+
 function create_items_template(frm) {
 	if (!saved_first(frm)) return;
 	frappe.confirm(
-		__("Submit the item list form (Items Message, Select Items button, tick boxes and Continue) to WhatsApp for approval?"),
+		__("Submit the item form (Items Message, Select Items button, a tick box per item and Submit) to WhatsApp for approval? The current form keeps being sent until the new one is approved."),
 		() =>
 			frappe.call({
 				method: `${ONBOARDING}.create_items_template`,
@@ -76,7 +97,9 @@ function create_items_template(frm) {
 					frappe.msgprint({
 						title: __("Submitted for WhatsApp Approval"),
 						indicator: "green",
-						message: __("Template {0}<br><br>Use Check Items Template Status to see when it is approved.", [message.sid]),
+						message: __("Template {0}<br><br>Use Check Items Template Status to see when it is approved; it is used from then on.", [
+							message.sid,
+						]),
 					});
 					frm.reload_doc();
 				},
@@ -84,16 +107,36 @@ function create_items_template(frm) {
 	);
 }
 
-function check_template_status(method, title) {
+function check_items_template_status(frm) {
 	frappe.call({
-		method: `${ONBOARDING}.${method}`,
+		method: `${ONBOARDING}.get_items_template_status`,
 		freeze: true,
 		callback: ({ message }) => {
-			const reason = message.rejection_reason ? `<br>${frappe.utils.escape_html(message.rejection_reason)}` : "";
-			frappe.msgprint({
-				title,
-				indicator: message.status === "approved" ? "green" : message.status === "rejected" ? "red" : "orange",
-				message: `${frappe.utils.escape_html(message.sid || "")} ${frappe.utils.escape_html(message.status)}${reason}`,
+			show_template_status(__("Items Template"), message);
+			if (message.switched) frm.reload_doc();
+		},
+	});
+}
+
+function show_join_link(frm) {
+	if (!saved_first(frm)) return;
+	frappe.call({
+		method: `${ONBOARDING}.get_join_link`,
+		callback: ({ message: link }) => {
+			const safe = frappe.utils.escape_html(link);
+			const dialog = frappe.msgprint({
+				title: __("Join Link"),
+				message: __(
+					"Restaurants that open this link get the Join Keyword typed in for them and only have to tap send. Put it on your website, in a QR code or on a flyer.<br><br><a href='{0}' target='_blank' rel='noopener'>{0}</a>",
+					[safe]
+				),
+				primary_action: {
+					label: __("Copy Link"),
+					action: () => {
+						frappe.utils.copy_to_clipboard(link);
+						dialog.hide();
+					},
+				},
 			});
 		},
 	});

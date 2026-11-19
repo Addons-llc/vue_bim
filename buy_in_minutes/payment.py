@@ -1141,7 +1141,8 @@ def _included_kit_codes(normalized_items):
 	Kits are Product Bundles sold as a combo: the Weekly Basic Kit plus one week
 	kit (Kerala Regular Kit, Avial & Curry Kit, ...). The week kit's selling
 	price covers the whole combo, so the basic kit has no price of its own and
-	goes on the order at 0. Alone, it still has no valid price.
+	goes on the order at 0. Alone, it still has no valid price. A week kit can't
+	be ordered without the basic kit.
 	"""
 	codes = list({item["item_code"] for item in normalized_items})
 	bundle_codes = set(
@@ -1167,8 +1168,15 @@ def _included_kit_codes(normalized_items):
 		for code in bundle_codes
 		if (names.get(code) or "").strip().lower() == BASIC_KIT_NAME.lower()
 	}
-	has_week_kit = bool(bundle_codes - basic_codes)
-	return basic_codes if has_week_kit else set()
+	week_kit_codes = bundle_codes - basic_codes
+	if week_kit_codes and not basic_codes:
+		frappe.throw(
+			_("Add the {0} to your cart to order {1}.").format(
+				BASIC_KIT_NAME,
+				", ".join(sorted(names.get(code) or code for code in week_kit_codes)),
+			)
+		)
+	return basic_codes if week_kit_codes else set()
 
 
 def _get_checkout_items(cart_items, delivery_fee=None, include_delivery_fee_item=True):

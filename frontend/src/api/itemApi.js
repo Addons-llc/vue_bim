@@ -400,6 +400,7 @@ export async function mapItemToProduct(item) {
     stockQuantity,
     inStock: !outOfStock,
     isPublished: isPublishedItem(item),
+    isBundle: isTruthyFlag(item.is_product_bundle),
     hasVariants: isTruthyFlag(item.has_variants ?? item.hasVariants),
     variantBasedOn: item.variant_based_on || item.variantBasedOn || '',
     variantOf: item.variant_of || item.variantOf || '',

@@ -1768,10 +1768,27 @@ def _get_items(
 	_apply_item_attachments(items)
 	_apply_item_variant_metadata(items)
 	_apply_supplier_details(items)
+	_apply_product_bundle_flags(items)
 	# Serve the web-sized WebP copies of product photos where they exist.
 	apply_web_images(items)
 
 	return items
+
+
+def _apply_product_bundle_flags(items):
+	"""Mark kits (Items that are an enabled Product Bundle) so the cart can apply kit rules."""
+	if not items:
+		return
+
+	bundle_codes = set(
+		frappe.get_all(
+			"Product Bundle",
+			filters={"new_item_code": ["in", [item.name for item in items]], "disabled": 0},
+			pluck="new_item_code",
+		)
+	)
+	for item in items:
+		item.is_product_bundle = 1 if item.name in bundle_codes else 0
 
 
 def _get_product_bundle_components(bundle_names):

@@ -1104,22 +1104,21 @@
 
   .product-card.is-compact .add-cart-button,
   .bundle-card .bundle-card-footer .add-cart-button {
-    min-width: 66px;
-    min-height: 28px;
+    min-width: 72px;
+    min-height: 30px;
     padding: 0 6px;
     font-size: 9px;
   }
 
   .product-card.is-compact .product-quantity-control,
   .bundle-card .bundle-card-footer .product-quantity-control {
-    min-width: 66px;
-    min-height: 28px;
+    min-width: 76px;
+    min-height: 30px;
   }
 
   .product-card.is-compact .product-quantity-control button,
   .bundle-card .bundle-card-footer .product-quantity-control button {
-    width: 23px;
-    height: 28px;
+    width: 28px;
   }
 
   .product-card.is-compact .product-quantity-control span,

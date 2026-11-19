@@ -1,6 +1,8 @@
 """Invite restaurants (Leads) on WhatsApp to join Buy In Minutes, and onboard them in the chat.
 
 1. Send Invitation (Lead list or form) sends the approved invitation template with Yes / No buttons.
+   Or the restaurant writes first: the join link (wa.me with the Join Keyword typed in) starts the
+   onboarding without any invitation, so no Marketing template is paid for.
 2. Twilio posts every reply on the WhatsApp number to whatsapp_webhook. Replies from a restaurant being
    onboarded move it through the steps below; any other message is passed on to the number's previous
    webhook unchanged, so other apps using the same number keep working.
@@ -62,12 +64,16 @@ ADDRESS_BUILDING_TYPES = {"premise", "subpremise"}
 ADDRESS_STREET_TYPES = {"street_address", "route"}
 ADDRESS_AREA_TYPES = {"neighborhood", "sublocality", "sublocality_level_1", "locality"}
 
-# The item list form (a WhatsApp Flow); WhatsApp shows at most 20 options of up to 30 characters
+# The item list is a WhatsApp form (a Flow) with a tick box per item and Submit. WhatsApp shows at
+# most 20 options of up to 30 characters. When the form can't be sent, a numbered list in the chat is
+# sent instead, answered with the numbers, names or "all".
 MAX_ITEM_OPTIONS = 20
 ITEM_TITLE_LIMIT = 30
 FLOW_TEXT_LIMIT = 30
+# The form's option ids are this prefix and the item's number in the list
 ITEM_OPTION_PREFIX = "bim_item_"
-ITEM_OPTION_PATTERN = re.compile(rf"\b{ITEM_OPTION_PREFIX}\d+\b")
+ITEM_OPTION_PATTERN = re.compile(rf"\b{ITEM_OPTION_PREFIX}(\d+)\b")
+ALL_WORDS = {"all", "all of them", "everything", "all items", "الكل"}
 SAMPLE_CONTEXT = {"lead_name": "Spice Garden", "first_name": "Ahmed", "company_name": "Spice Garden"}
 
 # Shown on the website from these Supplier fields (api.SUPPLIER_DETAIL_FIELDS)
@@ -422,11 +428,11 @@ def handle_incoming(params, settings) -> str | None:
 		"name",
 		order_by="creation desc",
 	)
+	sid = params.get("MessageSid") or params.get("SmsMessageSid")
 	if not name:
-		return None
+		return start_onboarding(params, settings, from_number, sid)
 
 	doc = frappe.get_doc(ONBOARDING, name, for_update=True)
-	sid = params.get("MessageSid") or params.get("SmsMessageSid")
 	# Twilio may send the same message again; it is answered once
 	if sid and any(row.twilio_sid == sid for row in doc.messages):
 		return ""
@@ -441,12 +447,83 @@ def handle_incoming(params, settings) -> str | None:
 	return reply
 
 
+def start_onboarding(params, settings, from_number: str, sid: str | None) -> str | None:
+	"""A restaurant that sent the join keyword itself (from the join link) is onboarded without an invitation.
+
+	It wrote first, so every reply is a free-form message in WhatsApp's customer service window and no
+	Marketing template is needed. Returns None when the message is not a join request.
+	"""
+	if not is_join_request(params.get("Body"), settings.join_keyword):
+		return None
+
+	completed = frappe.db.get_value(
+		ONBOARDING, {"whatsapp_number": from_number, "status": COMPLETED}, "restaurant_name", order_by="creation desc"
+	)
+	if completed:
+		# Joining twice would add the restaurant as a second Supplier
+		return frappe.render_template(settings.already_joined_message or "", {"restaurant_name": completed}).strip()
+
+	lead = find_lead(from_number, settings.default_country_code)
+	proposed_name = (lead.company_name or lead.lead_name or "") if lead else ""
+	doc = frappe.get_doc(
+		{
+			"doctype": ONBOARDING,
+			"lead": lead.name if lead else None,
+			"proposed_name": proposed_name,
+			"whatsapp_number": from_number,
+			# Writing the keyword is the restaurant's "yes", so the invitation step is skipped
+			"status": CONFIRMING_NAME,
+		}
+	)
+	add_message(doc, "Incoming", describe_incoming(params), sid)
+	reply = render(settings.ask_name_message if proposed_name else settings.join_welcome_message, doc, settings)
+	if reply:
+		add_message(doc, "Outgoing", reply)
+	doc.insert(ignore_permissions=True)
+	if lead:
+		lead.add_comment(
+			"Info",
+			_("Started joining Buy In Minutes on WhatsApp: {0}").format(frappe.utils.get_link_to_form(ONBOARDING, doc.name)),
+		)
+	return reply
+
+
+def normalize_text(text: str | None) -> str:
+	return " ".join(re.sub(r"[^\w\s]", " ", (text or "").lower()).split())
+
+
+def is_join_request(body: str | None, keyword: str | None) -> bool:
+	"""Whether the message contains the join keyword, ignoring case and punctuation."""
+	keyword = normalize_text(keyword)
+	return bool(keyword) and f" {keyword} " in f" {normalize_text(body)} "
+
+
+def find_lead(whatsapp_number: str, country_code: str | None):
+	"""The newest Lead whose phone number is this WhatsApp number, or None."""
+	meta = frappe.get_meta("Lead")
+	fields = [field for field in LEAD_NUMBER_FIELDS if meta.has_field(field)]
+	# Compared on the last 9 digits, as Lead numbers are stored with or without the country code
+	digits = whatsapp_number.removeprefix("whatsapp:").lstrip("+")[-9:]
+	if not fields or not digits:
+		return None
+	stripped = "REPLACE(REPLACE(REPLACE(REPLACE(`{0}`, ' ', ''), '-', ''), '(', ''), ')', '')"
+	conditions = " or ".join(f"{stripped.format(field)} like %(pattern)s" for field in fields)
+	names = frappe.db.sql_list(
+		f"select name from `tabLead` where {conditions} order by creation desc limit 20", {"pattern": f"%{digits}"}
+	)
+	for name in names:
+		lead = frappe.get_doc("Lead", name)
+		if get_lead_whatsapp_number(lead, country_code) == whatsapp_number:
+			return lead
+	return None
+
+
 def next_step(doc, params, settings) -> str:
 	text = (params.get("Body") or "").strip()
 	answer = get_yes_no(params, text)
 
 	if doc.status == INVITED:
-		if answer == "yes":
+		if answer == "yes" or is_join_request(text, settings.join_keyword):
 			doc.status = CONFIRMING_NAME
 			return render(settings.ask_name_message if doc.proposed_name else settings.ask_new_name_message, doc, settings)
 		if answer == "no":
@@ -478,26 +555,35 @@ def next_step(doc, params, settings) -> str:
 		# A dropped pin comes without an address, so it is looked up from the coordinates
 		address = params.get("Address") or reverse_geocode(doc.latitude, doc.longitude, settings)
 		doc.address = ", ".join(part for part in (params.get("Label"), address) if part)
-		# The item list is its own WhatsApp message (a form), so nothing else is replied
-		if settings.items_content_sid and send_item_list(doc, settings):
+		if get_item_options(doc, settings):
 			doc.status = SELECTING_ITEMS
-			return ""
+			return ask_for_items(doc, settings)
 		doc.status = COMPLETED
 		return render(settings.completed_message, doc, settings)
 
 	if doc.status == SELECTING_ITEMS:
 		submission = params.get("InteractiveData") or params.get("FlowData")
-		if not submission:
-			return render(settings.invalid_items_message, doc, settings)
-		items = get_selected_items(doc, submission)
+		items = get_submitted_items(doc, submission) if submission else get_selected_items(doc, text)
 		if not items:
-			# Submitted with nothing ticked: the form is sent again
-			return "" if send_item_list(doc, settings) else render(settings.invalid_items_message, doc, settings)
+			# Nothing ticked or recognised: the same list is sent again
+			return ask_for_items(doc, settings, invalid=True)
 		doc.set("items", [{"item_code": item} for item in items])
 		doc.status = COMPLETED
-		return render(settings.completed_message, doc, settings)
+		# WhatsApp shows the submitted form only as "Response sent", so the choice is repeated in the chat
+		return "\n\n".join(
+			part
+			for part in (selected_items_message(items, settings), render(settings.completed_message, doc, settings))
+			if part
+		)
 
 	return ""
+
+
+def selected_items_message(items: list[str], settings) -> str:
+	"""The Items Selected Message with {{ items }} as a bulleted list of the chosen items' names."""
+	names = get_item_names(items)
+	listing = "\n".join(f"• {names.get(item) or item}" for item in items)
+	return frappe.render_template(settings.items_selected_message or "", {"items": listing}).strip()
 
 
 def get_yes_no(params, text: str) -> str | None:
@@ -537,7 +623,7 @@ def describe_incoming(params) -> str:
 
 
 def get_item_list(settings) -> list[dict]:
-	"""The items the restaurant can choose from, as WhatsApp allows at most 20 options."""
+	"""The items the restaurant can choose from, kept short enough to read as one chat message."""
 	if not settings.items_item_group:
 		return []
 	return frappe.get_all(
@@ -549,19 +635,34 @@ def get_item_list(settings) -> list[dict]:
 	)
 
 
-def get_item_choices(items: list[dict]) -> list[dict]:
-	return [
-		{"id": f"{ITEM_OPTION_PREFIX}{index}", "title": (item.item_name or item.name)[:ITEM_TITLE_LIMIT]}
-		for index, item in enumerate(items, start=1)
+def get_item_options(doc, settings) -> dict[str, str]:
+	"""Which Item each list number stands for. Numbered once per onboarding, so a list sent again keeps its numbers."""
+	options = frappe.parse_json(doc.item_options or "{}") or {}
+	if not options:
+		options = {str(number): item.name for number, item in enumerate(get_item_list(settings), start=1)}
+	elif not all(key.isdigit() for key in options):
+		# Saved by an earlier version as form option ids ("bim_item_1"); the number is the id's end
+		options = {key.removeprefix(ITEM_OPTION_PREFIX): item for key, item in options.items()}
+	doc.item_options = json.dumps(options) if options else None
+	return options
+
+
+def ask_for_items(doc, settings, invalid: bool = False) -> str:
+	"""Send the tick box form and reply nothing, or reply with the numbered list when the form can't be sent."""
+	if settings.items_content_sid and send_item_form(doc, settings):
+		return ""
+	parts = [render(settings.invalid_items_message, doc, settings) if invalid else "", item_list_message(doc, settings)]
+	return "\n\n".join(part for part in parts if part)
+
+
+def send_item_form(doc, settings) -> bool:
+	"""Send the WhatsApp form with a tick box per item and Submit; False when it failed."""
+	options = get_item_options(doc, settings)
+	names = get_item_names(list(options.values()))
+	choices = [
+		{"id": f"{ITEM_OPTION_PREFIX}{number}", "title": (names.get(item) or item)[:ITEM_TITLE_LIMIT]}
+		for number, item in options.items()
 	]
-
-
-def send_item_list(doc, settings) -> bool:
-	"""Send the WhatsApp form with the items to tick; False when there is nothing to send or it failed."""
-	items = get_item_list(settings)
-	if not items:
-		return False
-	choices = get_item_choices(items)
 	twilio = get_twilio()
 	try:
 		response = get_twilio_client(twilio).messages.create(
@@ -572,23 +673,51 @@ def send_item_list(doc, settings) -> bool:
 			content_variables=json.dumps({"1": json.dumps(choices)}),
 		)
 	except Exception as e:
-		frappe.log_error(title=f"Restaurant item list failed: {doc.name}")
-		doc.error = _("The item list could not be sent: {0}").format(str(getattr(e, "msg", None) or e)[:900])
+		frappe.log_error(title=f"Restaurant item form failed: {doc.name}")
+		doc.error = _("The item form could not be sent, so the numbered list was sent: {0}").format(
+			str(getattr(e, "msg", None) or e)[:800]
+		)
 		return False
 
-	# Which Item each option id stands for, as the submission only returns the ids
-	doc.item_options = json.dumps({choice["id"]: item.name for choice, item in zip(choices, items)})
 	titles = ", ".join(choice["title"] for choice in choices)
 	add_message(doc, "Outgoing", f"{settings.items_message}\n[{settings.items_button_text}: {titles}]", response.sid)
 	return True
 
 
-def get_selected_items(doc, submission: str) -> list[str]:
-	"""The Items whose option ids are in the form submission, in the order they were listed."""
+def item_list_message(doc, settings) -> str:
+	"""The Items Message with a numbered list to answer in the chat, used when the form can't be sent."""
+	options = get_item_options(doc, settings)
+	names = get_item_names(list(options.values()))
+	listing = "\n".join(f"{number}. {names.get(item) or item}" for number, item in options.items())
+	hint = _("Reply with the numbers of the items, for example *1, 3*, or *all*.")
+	return "\n\n".join(part for part in ((settings.items_message or "").strip(), listing, hint) if part)
+
+
+def get_submitted_items(doc, submission: str) -> list[str]:
+	"""The Items ticked in the form, in the order they were listed."""
 	options = frappe.parse_json(doc.item_options or "{}") or {}
 	# The ids are unique, so they are found in the submission whatever its JSON shape
-	found = set(ITEM_OPTION_PATTERN.findall(submission or ""))
-	return [item for option_id, item in options.items() if option_id in found]
+	numbers = set(ITEM_OPTION_PATTERN.findall(submission or ""))
+	return [item for number, item in options.items() if number in numbers]
+
+
+def get_item_names(items: list[str]) -> dict[str, str]:
+	return dict(frappe.get_all("Item", filters={"name": ("in", items)}, fields=["name", "item_name"], as_list=True))
+
+
+def get_selected_items(doc, reply: str) -> list[str]:
+	"""The Items picked in the reply, by number ("1, 3"), by name or with "all", in the order they were listed."""
+	options = frappe.parse_json(doc.item_options or "{}") or {}
+	text = normalize_text(reply)
+	if text in ALL_WORDS:
+		return list(options.values())
+	numbers = set(re.findall(r"\d+", text))
+	names = get_item_names(list(options.values()))
+	return [
+		item
+		for number, item in options.items()
+		if number in numbers or f" {normalize_text(names.get(item) or item)} " in f" {text} "
+	]
 
 
 def reverse_geocode(latitude: float, longitude: float, settings) -> str:
@@ -693,8 +822,10 @@ def create_supplier(doc, settings):
 				"custom_google_address": doc.address,
 				"custom_latitude": doc.latitude,
 				"custom_longitude": doc.longitude,
-				"supplier_details": _("Joined on WhatsApp ({0}) from Lead {1}").format(
-					doc.whatsapp_number.removeprefix("whatsapp:"), doc.lead
+				"supplier_details": (
+					_("Joined on WhatsApp ({0}) from Lead {1}").format(doc.whatsapp_number.removeprefix("whatsapp:"), doc.lead)
+					if doc.lead
+					else _("Joined on WhatsApp ({0})").format(doc.whatsapp_number.removeprefix("whatsapp:"))
 				),
 			}
 		)
@@ -708,6 +839,8 @@ def create_supplier(doc, settings):
 		return
 
 	frappe.db.set_value(ONBOARDING, doc.name, {"supplier": supplier.name, "error": None})
+	if not doc.lead:
+		return
 	frappe.get_doc("Lead", doc.lead).add_comment(
 		"Info",
 		_("Joined Buy In Minutes on WhatsApp as Supplier {0}").format(frappe.utils.get_link_to_form("Supplier", supplier.name)),
@@ -791,24 +924,27 @@ def create_invitation_template():
 
 @frappe.whitelist(methods=["POST"])
 def create_items_template():
-	"""Create the item list form (a WhatsApp Flow with tick boxes and Continue), submit it for approval and save its SID."""
+	"""Create the item form (a WhatsApp Flow with a tick box per item and Submit), submit it for approval and save its SID."""
 	frappe.only_for("System Manager")
 	settings = get_settings()
 	twilio = get_twilio()
 	message = (settings.items_message or "").strip()
 	button = (settings.items_button_text or "").strip()
 	title = (settings.items_page_title or "").strip()
-	continue_text = (settings.items_continue_text or "").strip()
+	submit_text = (settings.items_continue_text or "").strip()
 	if not message:
 		frappe.throw(_("Please set the Items Message first."))
 	if "{{" in message or "{%" in message:
 		frappe.throw(_("The Items Message can't use placeholders."))
 	if not button or len(button) > BUTTON_TITLE_LIMIT:
 		frappe.throw(_("The Select Items Button must be 1 to {0} characters.").format(BUTTON_TITLE_LIMIT))
-	if not title or len(title) > FLOW_TEXT_LIMIT or not continue_text or len(continue_text) > FLOW_TEXT_LIMIT:
-		frappe.throw(_("The Form Title and Continue Button must be 1 to {0} characters.").format(FLOW_TEXT_LIMIT))
+	if not title or len(title) > FLOW_TEXT_LIMIT or not submit_text or len(submit_text) > FLOW_TEXT_LIMIT:
+		frappe.throw(_("The Form Title and Submit Button must be 1 to {0} characters.").format(FLOW_TEXT_LIMIT))
 	# WhatsApp reviews the template with a sample list
-	sample = get_item_choices(get_item_list(settings)) or [{"id": f"{ITEM_OPTION_PREFIX}1", "title": "Samoosa"}]
+	names = [item.item_name or item.name for item in get_item_list(settings)] or ["Samoosa"]
+	sample = [
+		{"id": f"{ITEM_OPTION_PREFIX}{number}", "title": name[:ITEM_TITLE_LIMIT]} for number, name in enumerate(names, start=1)
+	]
 
 	name = f"bim_restaurant_items_{frappe.generate_hash(length=6)}"
 	content = twilio_request(
@@ -830,8 +966,16 @@ def create_items_template():
 							"next_page_id": None,
 							"title": title,
 							"layout": [
-								{"type": "MULTI_SELECT", "label": "Items", "text": "Tick the items you sell", "options": "{{1}}"},
-								{"type": "FOOTER", "label": continue_text},
+								# Twilio's reference says MULTI_SELECT, but its API only accepts MULTIPLE_SELECT.
+								# Required, so WhatsApp keeps Submit disabled until at least one item is ticked.
+								{
+									"type": "MULTIPLE_SELECT",
+									"label": "Items",
+									"text": "Select all that apply",
+									"options": "{{1}}",
+									"required": True,
+								},
+								{"type": "FOOTER", "label": submit_text},
 							],
 						}
 					],
@@ -839,28 +983,37 @@ def create_items_template():
 			},
 		},
 	)
-	# Part of an onboarding the restaurant agreed to, so Utility rather than Marketing
+	# Part of an onboarding the restaurant asked for, so Utility; Meta may still make it Marketing
 	twilio_request(
 		twilio,
 		"POST",
 		f"{CONTENT_API_URL}/{content['sid']}/ApprovalRequests/whatsapp",
 		{"name": name, "category": "UTILITY"},
 	)
-	frappe.db.set_single_value(SETTINGS, "items_content_sid", content["sid"])
+	# Saved apart, so the approved form keeps being sent until this one is approved
+	frappe.db.set_single_value(SETTINGS, "items_pending_content_sid", content["sid"])
 	return {"sid": content["sid"], "body": message}
 
 
 @frappe.whitelist()
 def get_items_template_status():
-	return get_invitation_template_status(field="items_content_sid")
+	"""The pending item form's status when there is one, switching to it once WhatsApp approves it."""
+	frappe.only_for("System Manager")
+	pending = frappe.db.get_single_value(SETTINGS, "items_pending_content_sid")
+	status = get_template_status(pending or frappe.db.get_single_value(SETTINGS, "items_content_sid"))
+	if pending and status["status"] == "approved":
+		frappe.db.set_single_value(SETTINGS, {"items_content_sid": pending, "items_pending_content_sid": None})
+		status["switched"] = True
+	return status
 
 
 @frappe.whitelist()
-def get_invitation_template_status(field: str = "invitation_content_sid"):
+def get_invitation_template_status():
 	frappe.only_for("System Manager")
-	if field not in ("invitation_content_sid", "items_content_sid"):
-		frappe.throw(_("Unknown template"))
-	content_sid = frappe.db.get_single_value(SETTINGS, field)
+	return get_template_status(frappe.db.get_single_value(SETTINGS, "invitation_content_sid"))
+
+
+def get_template_status(content_sid: str | None) -> dict:
 	if not content_sid:
 		return {"status": "not created"}
 	approval = twilio_request(get_twilio(), "GET", f"{CONTENT_API_URL}/{content_sid}/ApprovalRequests")
@@ -868,8 +1021,23 @@ def get_invitation_template_status(field: str = "invitation_content_sid"):
 	return {
 		"sid": content_sid,
 		"status": whatsapp.get("status") or "not submitted",
+		# Meta sets the category from the wording, whatever was asked for
+		"category": whatsapp.get("category"),
 		"rejection_reason": whatsapp.get("rejection_reason"),
 	}
+
+
+@frappe.whitelist()
+def get_join_link():
+	"""The wa.me link that opens a chat with the join keyword typed in, for the website, a QR code or a flyer."""
+	from urllib.parse import quote
+
+	frappe.only_for("System Manager")
+	keyword = (frappe.db.get_single_value(SETTINGS, "join_keyword") or "").strip()
+	if not keyword:
+		frappe.throw(_("Please set the Join Keyword first."))
+	number = get_twilio().from_number.removeprefix("whatsapp:").lstrip("+")
+	return f"https://wa.me/{number}?text={quote(keyword)}"
 
 
 @frappe.whitelist(methods=["POST"])

@@ -16,7 +16,9 @@ import { clearCart } from '../data/cartStore'
 import { trackBeginCheckout, trackViewCart } from '../analytics'
 import ItemSuggestions from '../components/product/ItemSuggestions.vue'
 import {
+  BASIC_KIT_REQUIRED_MESSAGE,
   cartProducts,
+  hasWeekKitWithoutBasicKit,
   updateCartProductQuantity,
 } from '../data/cartStore'
 
@@ -611,6 +613,11 @@ async function startStripeCheckout() {
     return
   }
 
+  if (hasWeekKitWithoutBasicKit.value) {
+    checkoutError.value = BASIC_KIT_REQUIRED_MESSAGE
+    return
+  }
+
   const deliveryRadiusError = getDeliveryRadiusError()
   if (deliveryRadiusError) {
     checkoutError.value = deliveryRadiusError
@@ -699,6 +706,11 @@ async function placeCashOnDeliveryOrder() {
 
   if (requiresDeliverySlot.value && !selectedDeliverySlot.value) {
     checkoutError.value = 'Please choose a delivery slot before placing the order.'
+    return
+  }
+
+  if (hasWeekKitWithoutBasicKit.value) {
+    checkoutError.value = BASIC_KIT_REQUIRED_MESSAGE
     return
   }
 

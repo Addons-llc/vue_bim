@@ -193,7 +193,7 @@ function skipSignIn() {
           </div>
 
           <button class="signin-submit" type="submit" :disabled="isSubmitting">
-            <span>{{ isSubmitting ? 'Sending OTP...' : 'Continue' }}</span>
+            <span>{{ isSubmitting ? 'Sending OTP...' : 'Request OTP' }}</span>
             <svg
               v-if="!isSubmitting"
               aria-hidden="true"
