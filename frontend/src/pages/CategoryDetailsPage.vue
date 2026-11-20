@@ -224,7 +224,7 @@ usePageMeta(() => ({
       <aside
         v-if="!isStoreDetailsPage && sidebarCategoryItems.length"
         class="category-detail-sidebar"
-        aria-label="Available item groups"
+        aria-label="More categories"
       >
         <button
           v-for="category in sidebarCategoryItems"

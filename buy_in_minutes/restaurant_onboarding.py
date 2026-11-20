@@ -8,7 +8,7 @@
    webhook unchanged, so other apps using the same number keep working.
 3. Once the name, logo and location are in, a Supplier is created with them.
 
-The sender and Twilio account come from Twilio WhatsApp Settings; the wording from BIM Restaurant Onboarding Settings.
+The sender and Twilio account come from BIM Twilio WhatsApp Settings; the wording from BIM Restaurant Onboarding Settings.
 """
 
 import json
@@ -21,7 +21,7 @@ from frappe import _
 from frappe.utils import cint, now_datetime
 from werkzeug.wrappers import Response
 
-TWILIO_SETTINGS = "Twilio WhatsApp Settings"
+TWILIO_SETTINGS = "BIM Twilio WhatsApp Settings"
 SETTINGS = "BIM Restaurant Onboarding Settings"
 ONBOARDING = "BIM Restaurant Onboarding"
 
@@ -118,9 +118,9 @@ def get_twilio() -> frappe._dict:
 	auth_token = twilio.get_password("auth_token", raise_exception=False) or ""
 	from_number = to_whatsapp_address(twilio.from_whatsapp_number)
 	if not twilio.enabled:
-		frappe.throw(_("Turn on Twilio WhatsApp Settings to send WhatsApp messages."))
+		frappe.throw(_("Turn on BIM Twilio WhatsApp Settings to send WhatsApp messages."))
 	if not account_sid.startswith("AC") or not auth_token or not from_number:
-		frappe.throw(_("Please set the Account SID (starts with AC), Auth Token and From WhatsApp Number in Twilio WhatsApp Settings."))
+		frappe.throw(_("Please set the Account SID (starts with AC), Auth Token and From WhatsApp Number in BIM Twilio WhatsApp Settings."))
 	return frappe._dict(account_sid=account_sid, auth_token=auth_token, from_number=from_number)
 
 

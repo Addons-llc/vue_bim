@@ -69,7 +69,7 @@
    "fieldname": "twilio_note",
    "fieldtype": "HTML",
    "label": "Twilio",
-   "options": "<p class=\"text-muted\">Messages are sent from the number, Account SID and Auth Token in <a href=\"/app/twilio-whatsapp-settings\">Twilio WhatsApp Settings</a>. Use the WhatsApp buttons above to create the invitation template and connect restaurant replies.</p>"
+   "options": "<p class=\"text-muted\">Messages are sent from the number, Account SID and Auth Token in <a href=\"/app/bim-twilio-whatsapp-settings\">BIM Twilio WhatsApp Settings</a>. Use the WhatsApp buttons above to create the invitation template and connect restaurant replies.</p>"
   },
   {
    "fieldname": "invitation_section",

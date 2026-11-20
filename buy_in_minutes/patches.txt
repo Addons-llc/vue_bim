@@ -7,3 +7,4 @@
 buy_in_minutes.patches.add_sales_order_delivery_slot_field
 buy_in_minutes.patches.add_item_slug_field
 buy_in_minutes.patches.add_category_brand_slug_fields
+buy_in_minutes.patches.copy_twilio_whatsapp_settings

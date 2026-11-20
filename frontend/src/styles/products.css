@@ -562,6 +562,32 @@
   transition: color 0.15s ease, transform 0.1s ease;
 }
 
+/* Draw − and + as bars instead of text glyphs: "−", "-" and "+" sit at different
+   heights in the font, so on small screens they drift off the count's centre line. */
+.product-quantity-control button {
+  position: relative;
+  font-size: 0 !important;
+}
+
+.product-quantity-control button:first-child::before,
+.product-quantity-control button:last-child::before,
+.product-quantity-control button:last-child::after {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 12px;
+  height: 2px;
+  border-radius: 2px;
+  background: currentColor;
+  content: '';
+  transform: translate(-50%, -50%);
+}
+
+.product-quantity-control button:last-child::after {
+  width: 2px;
+  height: 12px;
+}
+
 .product-quantity-control button:hover:not(:disabled) {
   color: #0f5f0c;
 }

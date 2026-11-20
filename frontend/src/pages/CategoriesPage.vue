@@ -214,7 +214,7 @@ onMounted(loadCategories)
     <CategoryRail
       v-if="activeTab === 'categories' && childCategories.length"
       section-id="category-children"
-      title="Available Item Groups"
+      title="Discover More Delights"
       :categories="childCategories"
       item-type="category"
       @select="openSelectedItem"
